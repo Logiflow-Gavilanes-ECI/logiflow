@@ -1,0 +1,12 @@
+{
+  "eventType": "TRAFFIC_JAM",
+  "severity": "HIGH",
+  "location": {
+    "lat": 4.6889,
+    "lng": -74.0669,
+    "description": "Autopista Norte - Calle 100, Bogotá"
+  },
+  "affectedVehicles": ["V001", "V003", "V005"],
+  "timestamp": "2026-03-02T10:00:00Z",
+  "detourRecommended": true
+}
