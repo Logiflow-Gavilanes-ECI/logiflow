@@ -1,0 +1,62 @@
+syntax = "proto3";
+
+package optimizer;
+
+// ─────────────────────────────────────────────
+//  LogiFlow – Sprint 1 Minimal VRP Contract
+//  Owner: Cristian Santiago Pedraza (@cris-eci)
+//  Consumer: Sebastian (NestJS gRPC client)
+//
+//  ONE unary RPC only.
+//  VROOM-compatible structure (jobs + vehicles).
+//  Do NOT change field numbers once Sebastian integrates.
+// ─────────────────────────────────────────────
+
+service RouteOptimizer {
+  // Send a VRP problem, receive optimized routes.
+  // Re-used for both initial planning and dynamic reroutes.
+  rpc OptimizeRoutes (OptimizeRequest) returns (OptimizeResponse);
+}
+
+// ── REQUEST ──────────────────────────────────
+
+message OptimizeRequest {
+  repeated Vehicle vehicles = 1;
+  repeated Job     jobs     = 2;
+}
+
+message Vehicle {
+  int32  id        = 1;
+  double start_lat = 2;  // depot / current position
+  double start_lon = 3;
+  int32  capacity  = 4;  // units (e.g. packages)
+}
+
+message Job {
+  int32  id          = 1;
+  double location_lat = 2;
+  double location_lon = 3;
+  int32  amount       = 4;  // units this job requires
+}
+
+// ── RESPONSE ─────────────────────────────────
+
+message OptimizeResponse {
+  bool            success  = 1;
+  string          error    = 2;  // populated if success = false
+  repeated Route  routes   = 3;
+}
+
+message Route {
+  int32          vehicle_id = 1;
+  repeated Step  steps      = 2;
+  int32          total_distance_m  = 3;  // metres
+  int32          total_duration_s  = 4;  // seconds
+}
+
+message Step {
+  int32  job_id      = 1;
+  double lat         = 2;
+  double lon         = 3;
+  int32  arrival_s   = 4;  // seconds from route start
+}
