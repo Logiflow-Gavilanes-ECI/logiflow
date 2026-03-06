@@ -1,0 +1,211 @@
+{
+  "name": "Traffic Event Trigger \u2013 LogiFlow",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "a1b2c3d4-0001-0001-0001-000000000001",
+      "name": "Simulate Traffic Jam",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{\n  json: {\n    eventType: 'TRAFFIC_JAM',\n    severity: 'HIGH',\n    location: {\n      lat: 4.6889,\n      lng: -74.0669,\n      description: 'Autopista Norte - Calle 100, Bogotá'\n    },\n    affectedVehicles: ['V001', 'V003', 'V005'],\n    timestamp: new Date().toISOString(),\n    detourRecommended: true\n  }\n}];"
+      },
+      "id": "a1b2c3d4-0002-0002-0002-000000000002",
+      "name": "Build Traffic Event Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:3000/webhooks/traffic-event",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            { "name": "eventType",         "value": "={{ $json.eventType }}" },
+            { "name": "severity",          "value": "={{ $json.severity }}" },
+            { "name": "location",          "value": "={{ $json.location }}" },
+            { "name": "affectedVehicles",  "value": "={{ $json.affectedVehicles }}" },
+            { "name": "timestamp",         "value": "={{ $json.timestamp }}" },
+            { "name": "detourRecommended", "value": "={{ $json.detourRecommended }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0003-0003-0003-000000000003",
+      "name": "POST to Webhook",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cond-001",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "received",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0004-0004-0004-000000000004",
+      "name": "Check Webhook Response",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "s001",
+              "name": "message",
+              "value": "Route re-optimization triggered successfully",
+              "type": "string"
+            },
+            {
+              "id": "s002",
+              "name": "vehiclesAffected",
+              "value": "={{ $('POST to Webhook').item.json.vehiclesAffected }}",
+              "type": "number"
+            },
+            {
+              "id": "s003",
+              "name": "triggeredAt",
+              "value": "={{ $('POST to Webhook').item.json.receivedAt }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0005-0005-0005-000000000005",
+      "name": "Success \u2013 Route Re-optimization",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [1120, 200]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "e001",
+              "name": "message",
+              "value": "Webhook delivery failed",
+              "type": "string"
+            },
+            {
+              "id": "e002",
+              "name": "statusCode",
+              "value": "={{ $('POST to Webhook').item.json.statusCode ?? 500 }}",
+              "type": "number"
+            },
+            {
+              "id": "e003",
+              "name": "errorDetail",
+              "value": "={{ $('POST to Webhook').item.json.error ?? 'Unknown error' }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0006-0006-0006-000000000006",
+      "name": "Error \u2013 Webhook Delivery Failed",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [1120, 420]
+    }
+  ],
+  "connections": {
+    "Simulate Traffic Jam": {
+      "main": [
+        [
+          {
+            "node": "Build Traffic Event Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Traffic Event Payload": {
+      "main": [
+        [
+          {
+            "node": "POST to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "POST to Webhook": {
+      "main": [
+        [
+          {
+            "node": "Check Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Webhook Response": {
+      "main": [
+        [
+          {
+            "node": "Success \u2013 Route Re-optimization",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error \u2013 Webhook Delivery Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "logiflow-sprint1-v1",
+  "meta": {
+    "instanceId": "logiflow-n8n-ci",
+    "templateId": "logiflow-traffic-event-trigger"
+  },
+  "id": "logiflow-traffic-event-trigger",
+  "tags": [
+    {
+      "createdAt": "2026-03-02T00:00:00.000Z",
+      "updatedAt": "2026-03-02T00:00:00.000Z",
+      "id": "tag-logiflow",
+      "name": "logiflow"
+    }
+  ]
+}
