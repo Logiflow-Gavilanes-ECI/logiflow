@@ -37,8 +37,11 @@ The Optimizer service provides route optimization capabilities by acting as a br
 ```bash
 cd services/optimizer
 docker compose up --build
+
 ```
 
+> ⚠️ **First run:** OSRM will download and process the Colombia map (~200MB).
+> This takes 10–30 minutes. Subsequent runs use cached data and start in seconds.
 This starts:
 - **optimizer** - gRPC server on port `50051`
 - **vroom** - VROOM Express API on port `3000` (internal)

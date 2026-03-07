@@ -1,0 +1,18 @@
+FROM osrm/osrm:dev-unstable
+
+WORKDIR /data
+
+RUN apt-get update && apt-get install -y \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN if [ ! -f /data/colombia.osrm.partition ]; then \
+    curl -L https://download.geofabrik.de/south-america/colombia-latest.osm.pbf -o /data/colombia.osm.pbf && \
+    osrm-extract -p /opt/car.lua /data/colombia.osm.pbf && \
+    osrm-partition /data/colombia.osrm && \
+    osrm-customize /data/colombia.osrm; \
+    fi
+
+EXPOSE 5000
+
+CMD ["osrm-routed", "--algorithm", "mld", "--max-table-size", "10000", "/data/colombia.osrm"]

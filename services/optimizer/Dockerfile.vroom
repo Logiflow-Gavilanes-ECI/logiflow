@@ -1,0 +1,14 @@
+FROM node:20-alpine
+
+RUN apk add --no-cache git
+
+WORKDIR /app
+
+RUN git clone --depth 1 https://github.com/VROOM-Project/vroom-express.git .
+
+# wihtout the --ignore-scripts flag, the postinstall script will try to build the native module, which fails in alpine due to missing build tools
+RUN npm install --omit=dev --ignore-scripts
+
+EXPOSE 3000
+
+CMD ["node", "src/index.js"]
