@@ -38,30 +38,32 @@ message Vehicle {
 
 message Job {
   string id = 1;
-  repeated JobTask jobs = 2;
-  repeated int32 skills = 3;
-  int32 priority = 4;
-}
-
-message JobTask {
-  string id = 1;
-  string type = 2;
-  Coordinate location = 3;
-  int32 service = 4;
-  int32 amount = 5;
-  int32 time_window_start = 6;
-  int32 time_window_end = 7;
-  repeated string restrictions = 8;
-  repeated string skills = 9;
-  map<string, string> properties = 10;
+  Coordinate location = 2;
+  int32 service = 3;
+  int32 amount = 4;
+  int32 time_window_start = 5;
+  int32 time_window_end = 6;
+  repeated int32 skills = 7;
+  int32 priority = 8;
 }
 
 message Shipment {
   string id = 1;
-  JobTask pickup = 2;
-  JobTask delivery = 3;
+  Task pickup = 2;
+  Task delivery = 3;
   repeated int32 skills = 4;
   int32 priority = 5;
+}
+
+message Task {
+  string id = 1;
+  Coordinate location = 2;
+  int32 service = 3;
+  int32 amount = 4;
+  int32 time_window_start = 5;
+  int32 time_window_end = 6;
+  repeated string restrictions = 7;
+  repeated int32 skills = 8;
 }
 
 message Coordinate {
