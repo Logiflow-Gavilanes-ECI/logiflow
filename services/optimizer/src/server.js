@@ -35,18 +35,12 @@ function grpcToVroomRequest(req) {
   if (req.jobs && req.jobs.length > 0) {
     vroomReq.jobs = req.jobs.map((job) => ({
       id: parseInt(job.id, 10) || 0,
-      jobs: job.jobs.map((task) => ({
-        id: parseInt(task.id, 10) || 0,
-        type: task.type || 'service',
-        location: [task.location.lon, task.location.lat],
-        service: task.service || 0,
-        amount: task.amount || [0],
-        time_windows: task.timeWindowStart || task.timeWindowEnd
-          ? [[task.timeWindowStart || 0, task.timeWindowEnd || 4294967295]]
-          : [],
-        skills: task.skills || [],
-        priority: job.priority || 0,
-      })),
+      location: [job.location.lon, job.location.lat],
+      service: job.service || 0,
+      amount: job.amount ? [job.amount] : [0],
+      time_windows: job.timeWindowStart || job.timeWindowEnd
+        ? [[job.timeWindowStart || 0, job.timeWindowEnd || 4294967295]]
+        : [],
       skills: job.skills || [],
       priority: job.priority || 0,
     }));
@@ -59,19 +53,21 @@ function grpcToVroomRequest(req) {
         id: parseInt(shipment.pickup.id, 10) || 0,
         location: [shipment.pickup.location.lon, shipment.pickup.location.lat],
         service: shipment.pickup.service || 0,
-        amount: shipment.pickup.amount || [0],
+        amount: shipment.pickup.amount ? [shipment.pickup.amount] : [0],
         time_windows: shipment.pickup.timeWindowStart || shipment.pickup.timeWindowEnd
           ? [[shipment.pickup.timeWindowStart || 0, shipment.pickup.timeWindowEnd || 4294967295]]
           : [],
+        skills: shipment.pickup.skills || [],
       },
       delivery: {
         id: parseInt(shipment.delivery.id, 10) || 0,
         location: [shipment.delivery.location.lon, shipment.delivery.location.lat],
         service: shipment.delivery.service || 0,
-        amount: shipment.delivery.amount || [0],
+        amount: shipment.delivery.amount ? [shipment.delivery.amount] : [0],
         time_windows: shipment.delivery.timeWindowStart || shipment.delivery.timeWindowEnd
           ? [[shipment.delivery.timeWindowStart || 0, shipment.delivery.timeWindowEnd || 4294967295]]
           : [],
+        skills: shipment.delivery.skills || [],
       },
       skills: shipment.skills || [],
       priority: shipment.priority || 0,
@@ -89,6 +85,7 @@ function grpcToVroomRequest(req) {
       time_window: vehicle.timeWindowStart || vehicle.timeWindowEnd
         ? [vehicle.timeWindowStart || 0, vehicle.timeWindowEnd || 4294967295]
         : [0, 4294967295],
+      restrictions: vehicle.restrictions || [],
     }));
   }
 
