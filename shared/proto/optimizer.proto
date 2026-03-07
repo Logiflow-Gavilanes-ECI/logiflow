@@ -1,0 +1,125 @@
+syntax = "proto3";
+
+package logiflow;
+
+service RouteOptimizer {
+  rpc OptimizeRoutes (OptimizeRequest) returns (OptimizeResponse);
+}
+
+message OptimizeRequest {
+  repeated Vehicle vehicles = 1;
+  repeated Job jobs = 2;
+  repeated Shipment shipments = 3;
+  Matrix matrix = 4;
+  Options options = 5;
+}
+
+message OptimizeResponse {
+  int64 code = 1;
+  string error = 2;
+  repeated Route routes = 3;
+  repeated SolutionRoute unassigned = 4;
+  Matrix matrix = 5;
+  int64 routing_distance = 6;
+  int64 routing_duration = 7;
+}
+
+message Vehicle {
+  string id = 1;
+  Profile profile = 2;
+  Coordinate start = 3;
+  Coordinate end = 4;
+  int32 capacity = 5;
+  repeated int32 skills = 6;
+  int32 time_window_start = 7;
+  int32 time_window_end = 8;
+  repeated string restrictions = 9;
+}
+
+message Job {
+  string id = 1;
+  repeated JobTask jobs = 2;
+  repeated int32 skills = 3;
+  int32 priority = 4;
+}
+
+message JobTask {
+  string id = 1;
+  string type = 2;
+  Coordinate location = 3;
+  int32 service = 4;
+  int32 amount = 5;
+  int32 time_window_start = 6;
+  int32 time_window_end = 7;
+  repeated string restrictions = 8;
+  repeated string skills = 9;
+  map<string, string> properties = 10;
+}
+
+message Shipment {
+  string id = 1;
+  JobTask pickup = 2;
+  JobTask delivery = 3;
+  repeated int32 skills = 4;
+  int32 priority = 5;
+}
+
+message Coordinate {
+  double lat = 1;
+  double lon = 2;
+}
+
+message Matrix {
+  repeated int64 distances = 1;
+  repeated int64 durations = 2;
+  repeated Coordinate locations = 3;
+}
+
+message Options {
+  bool geometry = 1;
+  string metric = 2;
+  bool optimize = 3;
+  string algorithm = 4;
+  int32 max_jobs_per_route = 5;
+}
+
+message Route {
+  string vehicle_id = 1;
+  int32 cost = 2;
+  int64 distance = 3;
+  int64 duration = 4;
+  repeated RouteStep steps = 5;
+  int32 delivery = 6;
+  int32 pickup = 7;
+}
+
+message RouteStep {
+  string type = 1;
+  string id = 2;
+  Coordinate location = 3;
+  int32 service = 4;
+  int32 waiting_time = 5;
+  int32 arrival = 6;
+  int32 departure = 7;
+  int32 amount = 8;
+  repeated int32 skills = 9;
+}
+
+message SolutionRoute {
+  string id = 1;
+  string vehicle_id = 2;
+  repeated SolutionStep steps = 3;
+}
+
+message SolutionStep {
+  string type = 1;
+  string id = 2;
+  Coordinate location = 3;
+  int32 service = 4;
+}
+
+enum Profile {
+  CAR = 0;
+  BICYCLE = 1;
+  FOOT = 2;
+}

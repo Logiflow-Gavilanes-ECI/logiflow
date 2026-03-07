@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  optimizer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: logiflow-optimizer
+    ports:
+      - "50051:50051"
+    environment:
+      - VROOM_URL=http://vroom:3000
+      - GRPC_PORT=50051
+    depends_on:
+      vroom:
+        condition: service_started
+    networks:
+      - logiflow-network
+
+  vroom:
+    image: vroomproject/vroom-express:latest
+    container_name: logiflow-vroom
+    ports:
+      - "3000:3000"
+    environment:
+      - VROOM_ROUTER=osrm
+      - OSRM_HOST=osrm
+      - VROOM_PORT=3000
+    depends_on:
+      osrm:
+        condition: service_healthy
+    networks:
+      - logiflow-network
+
+  osrm:
+    image: osrm/osrm-backend:latest
+    container_name: logiflow-osrm
+    ports:
+      - "5000:5000"
+    volumes:
+      - osrm-data:/data
+    command: >
+      sh -c "if [ ! -f /data/colombia.osrm ]; then
+        wget -q https://download.geofabrik.de/south-america/colombia-latest.osm.pbf -O /data/colombia.osm.pbf &&
+        osrm-extract -p /opt/car.lua /data/colombia.osm.pbf &&
+        osrm-partition /data/colombia.osrm &&
+        osrm-customize /data/colombia.osrm;
+      fi &&
+      osrm-routed --algorithm mld --max-table-size 10000 /data/colombia.osrm"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:5000/route/v1/car/-74.0/4.0?overview=false"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 300s
+    networks:
+      - logiflow-network
+
+networks:
+  logiflow-network:
+    driver: bridge
+
+volumes:
+  osrm-data:
+    driver: local
