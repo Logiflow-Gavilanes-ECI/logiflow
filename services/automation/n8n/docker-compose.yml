@@ -8,7 +8,8 @@ services:
       - N8N_HOST=localhost
       - N8N_PORT=5678
       - N8N_PROTOCOL=http
-      - WEBHOOK_TARGET=http://host.docker.internal:3000/webhooks/traffic-event
+      - N8N_BLOCK_ENV_ACCESS_IN_NODE=false
+      - WEBHOOK_TARGET=https://trainable-noah-preachiest.ngrok-free.dev/api/v1/webhook
     volumes:
       - n8n_data:/home/node/.n8n
     extra_hosts:

@@ -3,7 +3,7 @@
 const express = require('express');
 
 const app = express();
-const PORT = 3000;
+const PORT = Number.parseInt(process.env.PORT || '3002', 10);
 const WEBHOOK_PATH = '/webhooks/traffic-event';
 const REQUIRED_FIELDS = ['eventType', 'affectedVehicles'];
 

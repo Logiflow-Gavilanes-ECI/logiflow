@@ -84,11 +84,11 @@ npm start
 Expected output:
 
 ```
-[LogiFlow] Mock webhook server running on http://localhost:3000
+[LogiFlow] Mock webhook server running on http://localhost:3002
 [LogiFlow] Listening for POST /webhooks/traffic-event
 ```
 
-> The server listens on **port 3000**. Keep this terminal open.
+> The server listens on **port 3002** by default to avoid conflicts with the gateway service on port 3000. Keep this terminal open.
 
 ---
 

@@ -55,10 +55,10 @@
           }
         },
         "url": {
-          "raw": "http://localhost:3000/webhooks/traffic-event",
+          "raw": "http://localhost:3002/webhooks/traffic-event",
           "protocol": "http",
           "host": ["localhost"],
-          "port": "3000",
+          "port": "3002",
           "path": ["webhooks", "traffic-event"]
         },
         "description": "Sends a valid traffic event payload. Expects HTTP 200 and a response body with status: 'received'."
@@ -111,10 +111,10 @@
           }
         },
         "url": {
-          "raw": "http://localhost:3000/webhooks/traffic-event",
+          "raw": "http://localhost:3002/webhooks/traffic-event",
           "protocol": "http",
           "host": ["localhost"],
-          "port": "3000",
+          "port": "3002",
           "path": ["webhooks", "traffic-event"]
         },
         "description": "Sends an empty body. Expects HTTP 400 with an error describing the missing required fields."
@@ -125,7 +125,7 @@
   "variable": [
     {
       "key": "base_url",
-      "value": "http://localhost:3000",
+      "value": "http://localhost:3002",
       "type": "string"
     }
   ]

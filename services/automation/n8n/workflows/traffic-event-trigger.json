@@ -11,7 +11,7 @@
     },
     {
       "parameters": {
-        "jsCode": "return [{\n  json: {\n    eventType: 'TRAFFIC_JAM',\n    severity: 'HIGH',\n    location: {\n      lat: 4.6889,\n      lng: -74.0669,\n      description: 'Autopista Norte - Calle 100, Bogotá'\n    },\n    affectedVehicles: ['V001', 'V003', 'V005'],\n    timestamp: new Date().toISOString(),\n    detourRecommended: true\n  }\n}];"
+        "jsCode": "return [{\n  json: {\n    eventType: 'traffic_jam',\n    vehicles: [\n      { id: 'v-001', lat: 4.711, lng: -74.0721, capacity: 12 },\n      { id: 'v-003', lat: 4.6889, lng: -74.0669, capacity: 10 }\n    ],\n    stops: [\n      { id: 's-101', lat: 4.705, lng: -74.068, demand: 2, priority: 1 },\n      { id: 's-102', lat: 4.69, lng: -74.06, demand: 3, priority: 2 }\n    ]\n  }\n}];"
       },
       "id": "a1b2c3d4-0002-0002-0002-000000000002",
       "name": "Build Traffic Event Payload",
@@ -22,17 +22,14 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "http://host.docker.internal:3000/webhooks/traffic-event",
+        "url": "={{ $env.WEBHOOK_TARGET }}",
         "sendBody": true,
         "contentType": "json",
         "bodyParameters": {
           "parameters": [
-            { "name": "eventType",         "value": "={{ $json.eventType }}" },
-            { "name": "severity",          "value": "={{ $json.severity }}" },
-            { "name": "location",          "value": "={{ $json.location }}" },
-            { "name": "affectedVehicles",  "value": "={{ $json.affectedVehicles }}" },
-            { "name": "timestamp",         "value": "={{ $json.timestamp }}" },
-            { "name": "detourRecommended", "value": "={{ $json.detourRecommended }}" }
+            { "name": "eventType", "value": "={{ $json.eventType }}" },
+            { "name": "vehicles",  "value": "={{ $json.vehicles }}" },
+            { "name": "stops",     "value": "={{ $json.stops }}" }
           ]
         },
         "options": {}
@@ -54,8 +51,8 @@
           "conditions": [
             {
               "id": "cond-001",
-              "leftValue": "={{ $json.status }}",
-              "rightValue": "received",
+              "leftValue": "={{ String($json.received) }}",
+              "rightValue": "true",
               "operator": {
                 "type": "string",
                 "operation": "equals"
@@ -85,13 +82,13 @@
             {
               "id": "s002",
               "name": "vehiclesAffected",
-              "value": "={{ $('POST to Webhook').item.json.vehiclesAffected }}",
+              "value": "={{ $('POST to Webhook').item.json.vehicleCount }}",
               "type": "number"
             },
             {
               "id": "s003",
               "name": "triggeredAt",
-              "value": "={{ $('POST to Webhook').item.json.receivedAt }}",
+              "value": "={{ $('POST to Webhook').item.json.timestamp }}",
               "type": "string"
             }
           ]
