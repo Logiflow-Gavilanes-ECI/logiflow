@@ -2,19 +2,24 @@
   "name": "Traffic Event Trigger \u2013 LogiFlow",
   "nodes": [
     {
-      "parameters": {},
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "logiflow/traffic-event",
+        "responseMode": "lastNode",
+        "options": {}
+      },
       "id": "a1b2c3d4-0001-0001-0001-000000000001",
-      "name": "Simulate Traffic Jam",
-      "type": "n8n-nodes-base.manualTrigger",
-      "typeVersion": 1,
+      "name": "Traffic Event Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
       "position": [240, 300]
     },
     {
       "parameters": {
-        "jsCode": "return [{\n  json: {\n    eventType: 'traffic_jam',\n    vehicles: [\n      { id: 'v-001', lat: 4.711, lng: -74.0721, capacity: 12 },\n      { id: 'v-003', lat: 4.6889, lng: -74.0669, capacity: 10 }\n    ],\n    stops: [\n      { id: 's-101', lat: 4.705, lng: -74.068, demand: 2, priority: 1 },\n      { id: 's-102', lat: 4.69, lng: -74.06, demand: 3, priority: 2 }\n    ]\n  }\n}];"
+        "jsCode": "const payload = $json.body ?? $json;\nreturn [{ json: payload }];"
       },
       "id": "a1b2c3d4-0002-0002-0002-000000000002",
-      "name": "Build Traffic Event Payload",
+      "name": "Normalize Incoming Payload",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [460, 300]
@@ -135,18 +140,18 @@
     }
   ],
   "connections": {
-    "Simulate Traffic Jam": {
+    "Traffic Event Webhook": {
       "main": [
         [
           {
-            "node": "Build Traffic Event Payload",
+            "node": "Normalize Incoming Payload",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Build Traffic Event Payload": {
+    "Normalize Incoming Payload": {
       "main": [
         [
           {
@@ -187,11 +192,11 @@
       ]
     }
   },
-  "active": false,
+  "active": true,
   "settings": {
     "executionOrder": "v1"
   },
-  "versionId": "logiflow-sprint1-v1",
+  "versionId": "logiflow-sprint2-webhook-v1",
   "meta": {
     "instanceId": "logiflow-n8n-ci",
     "templateId": "logiflow-traffic-event-trigger"

@@ -24,8 +24,8 @@
 
 | Responsibility | How |
 |---|---|
-| Simulate real-world traffic events | n8n workflow with Manual Trigger |
-| Deliver event payloads to the backend | HTTP POST to `/webhooks/traffic-event` |
+| Receive external traffic events | n8n workflow with Webhook Trigger |
+| Deliver event payloads to the backend | HTTP POST to configured `WEBHOOK_TARGET` |
 | Stand in for the real NestJS backend (Sprint 1) | Lightweight Express mock server |
 | Enforce code quality on every push | GitHub Actions → ESLint → Jest → SonarCloud |
 
@@ -114,27 +114,31 @@ n8n will be available at **http://localhost:5678**.
 
 ---
 
-### Step 5 — Run the Workflow & Observe Output
+### Step 5 — Trigger the Workflow via External POST
 
-1. Click **"Simulate Traffic Jam"** node → **Execute workflow**
-2. Watch the mock server terminal — you should see:
+1. Open the **"Traffic Event Webhook"** node and copy its **Production URL**
+2. Send a POST request to that URL with a valid payload:
 
-```json
-[2026-03-02T10:00:00.000Z] Traffic event received:
-{
-  "eventType": "TRAFFIC_JAM",
-  "severity": "HIGH",
-  "affectedVehicles": ["V001", "V003", "V005"],
-  ...
-}
+```bash
+curl -X POST "http://localhost:5678/webhook/logiflow/traffic-event" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "eventType": "traffic_jam",
+    "vehicles": [
+      { "id": "v-001", "lat": 4.7110, "lng": -74.0721, "capacity": 12 }
+    ],
+    "stops": [
+      { "id": "s-101", "lat": 4.7050, "lng": -74.0680, "demand": 2, "priority": 1 }
+    ]
+  }'
 ```
 
-3. The final **"Success – Route Re-optimization"** node will output:
+3. In n8n execution details, the final **"Success – Route Re-optimization"** node should output:
 
 ```json
 {
   "message": "Route re-optimization triggered successfully",
-  "vehiclesAffected": 3,
+  "vehiclesAffected": 1,
   "triggeredAt": "2026-03-02T10:00:00.000Z"
 }
 ```
