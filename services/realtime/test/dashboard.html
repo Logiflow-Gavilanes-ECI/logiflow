@@ -233,6 +233,41 @@
   </script>
 
   <script>
+     function connectSocket() {
+      const socket = io('http://localhost:3001');
+
+      socket.on('connect', () => {
+        document.getElementById('conn-label').textContent = 'Gateway conectado';
+        addLog('system', `Conectado al gateway (${socket.id})`);
+
+        socket.emit('join:fleet');
+      });
+
+      socket.on('joined', (data) => {
+        addLog('system', `Sala unida: ${data.room}`);
+      });
+
+      socket.on('disconnect', () => {
+        document.getElementById('conn-label').textContent = 'Sin conexión';
+        addLog('offline', 'Desconectado del gateway');
+      });
+    }
+
+    function addLog(type, message) {
+      const log  = document.getElementById('log');
+      const time = new Date().toLocaleTimeString('es-CO', { hour12: false });
+      const cssClass = {
+        system:   'log-system',
+        position: 'log-position',
+        route:    'log-route',
+        offline:  'log-offline',
+      }[type] || 'log-system';
+
+      log.innerHTML = `<div class="log-entry"><span class="log-time">${time}</span><span class="${cssClass}">${message}</span></div>` + log.innerHTML;
+    }
+  </script>
+
+  <script>
     const GOOGLE_MAPS_API_KEY = 'YOUR_GOOGLE_MAPS_API_KEY';
   </script>
 
@@ -254,7 +289,9 @@
           { featureType: 'poi',              stylers: [{ visibility: 'off' }] },
           { featureType: 'transit',          stylers: [{ visibility: 'off' }] },
         ]
-      });
+        });
+
+       connectSocket();
     }
   </script>
 
