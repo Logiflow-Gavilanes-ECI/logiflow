@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>LogiFlow — Centro de Control</title>
+
+
+  <script>
+    const GOOGLE_MAPS_API_KEY = 'AIzaSyA534BsLFUj0a48bgcyA5sZ20DyPCxtjLg';
+  </script>
+
+
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+
+
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --bg:        #080c14;
+      --panel:     #0d1420;
+      --border:    #1a2540;
+      --accent:    #00e5ff;
+      --accent2:   #ff6b35;
+      --online:    #00e676;
+      --offline:   #ff1744;
+      --warning:   #ffab00;
+      --text:      #e8edf5;
+      --muted:     #4a5568;
+      --font-mono: 'Space Mono', monospace;
+      --font-body: 'DM Sans', sans-serif;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-body);
+      height: 100vh;
+      display: grid;
+      grid-template-rows: 56px 1fr;
+      grid-template-columns: 320px 1fr;
+      overflow: hidden;
+    }
+
+    header {
+      grid-column: 1 / -1;
+      background: var(--panel);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      padding: 0 20px;
+      gap: 16px;
+    }
+
+    .logo {
+      font-family: var(--font-mono);
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--accent);
+      letter-spacing: 2px;
+      text-transform: uppercase;
+    }
+
+    .logo span { color: var(--accent2); }
+
+    .header-divider {
+      width: 1px;
+      height: 20px;
+      background: var(--border);
+    }
+
+    .header-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--muted);
+      font-family: var(--font-mono);
+    }
+
+    .pulse-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--online);
+      animation: pulse 2s infinite;
+    }
+
+    .pulse-dot.disconnected { background: var(--offline); animation: none; }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(0,230,118,0.4); }
+      50%       { opacity: 0.8; box-shadow: 0 0 0 6px rgba(0,230,118,0); }
+    }
+
+    .header-right {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .time-display {
+      font-family: var(--font-mono);
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    aside {
+      background: var(--panel);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .sidebar-section {
+      padding: 16px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .section-label {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: 2px;
+      color: var(--muted);
+      text-transform: uppercase;
+      margin-bottom: 12px;
+    }
+
+    #vehicle-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .vehicle-card {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
+      cursor: pointer;
+      transition: border-color 0.2s, transform 0.1s;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .vehicle-card::before {
+      content: '';
+      position: absolute;
+      left: 0; top: 0; bottom: 0;
+      width: 3px;
+      background: var(--online);
+      border-radius: 3px 0 0 3px;
+      transition: background 0.3s;
+    }
+
+    .vehicle-card.offline::before { background: var(--offline); }
+    .vehicle-card.offline { border-color: rgba(255,23,68,0.3); }
+
+    .vehicle-card:hover {
+      border-color: var(--accent);
+      transform: translateX(2px);
+    }
+
+    .vehicle-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .vehicle-id {
+      font-family: var(--font-mono);
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--accent);
+    }
+
+    .vehicle-badge {
+      font-size: 10px;
+      font-family: var(--font-mono);
+      padding: 2px 8px;
+      border-radius: 20px;
+      background: rgba(0,230,118,0.15);
+      color: var(--online);
+      border: 1px solid rgba(0,230,118,0.3);
+    }
+
+    .vehicle-badge.offline {
+      background: rgba(255,23,68,0.15);
+      color: var(--offline);
+      border-color: rgba(255,23,68,0.3);
+    }
+
+    .vehicle-stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4px;
+    }
+
+    .stat {
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .stat span {
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 11px;
+    }
+
+    .log-container {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px 16px;
+    }
+
+    .log-container::-webkit-scrollbar { width: 4px; }
+    .log-container::-webkit-scrollbar-track { background: transparent; }
+    .log-container::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    .log-entry {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      padding: 6px 0;
+      border-bottom: 1px solid rgba(26,37,64,0.5);
+      line-height: 1.5;
+      animation: fadeIn 0.3s ease;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateX(-8px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+
+    .log-time { color: var(--muted); margin-right: 6px; }
+    .log-position { color: var(--online); }
+    .log-route    { color: var(--accent2); }
+    .log-system   { color: var(--accent); }
+    .log-offline  { color: var(--offline); }
+
+    .stats-bar {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1px;
+      background: var(--border);
+    }
+
+    .stat-box {
+      background: var(--panel);
+      padding: 10px 14px;
+      text-align: center;
+    }
+
+    .stat-box-value {
+      font-family: var(--font-mono);
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--accent);
+    }
+
+    .stat-box-label {
+      font-size: 10px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-top: 2px;
+    }
+
+    #map {
+      width: 100%;
+      height: 100%;
+    }
+
+    .map-wrapper {
+      position: relative;
+      overflow: hidden;
+    }
+
+    #route-toast {
+      position: absolute;
+      bottom: 24px;
+      right: 24px;
+      background: var(--panel);
+      border: 1px solid var(--accent2);
+      border-radius: 10px;
+      padding: 14px 18px;
+      min-width: 260px;
+      display: none;
+      animation: slideUp 0.3s ease;
+      z-index: 10;
+    }
+
+    @keyframes slideUp {
+      from { opacity: 0; transform: translateY(16px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .toast-title {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--accent2);
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+
+    .toast-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+      margin-bottom: 4px;
+      color: var(--muted);
+    }
+
+    .toast-row span { color: var(--text); font-family: var(--font-mono); }
+
+    #offline-banner {
+      position: absolute;
+      top: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(255,23,68,0.9);
+      color: white;
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      display: none;
+      z-index: 10;
+      animation: shake 0.4s ease;
+    }
+
+    @keyframes shake {
+      0%, 100% { transform: translateX(-50%) translateX(0); }
+      25%       { transform: translateX(-50%) translateX(-6px); }
+      75%       { transform: translateX(-50%) translateX(6px); }
+    }
+  </style>
+</head>
+<body>
+
+
+  <header>
+    <div class="logo">Logi<span>Flow</span></div>
+    <div class="header-divider"></div>
+    <div class="header-status">
+      <div class="pulse-dot disconnected" id="conn-dot"></div>
+      <span id="conn-label">Conectando...</span>
+    </div>
+    <div class="header-right">
+      <div class="time-display" id="clock">--:--:--</div>
+    </div>
+  </header>
+
+
+  <aside>
+
+
+    <div class="stats-bar">
+      <div class="stat-box">
+        <div class="stat-box-value" id="stat-online">0</div>
+        <div class="stat-box-label">En línea</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-box-value" id="stat-offline" style="color: var(--offline)">0</div>
+        <div class="stat-box-label">Offline</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-box-value" id="stat-routes" style="color: var(--accent2)">0</div>
+        <div class="stat-box-label">Rutas hoy</div>
+      </div>
+    </div>
+
+
+    <div class="sidebar-section">
+      <div class="section-label">Vehículos</div>
+      <div id="vehicle-list">
+        <div style="font-size:12px; color: var(--muted); font-family: var(--font-mono);">
+          Esperando conexión...
+        </div>
+      </div>
+    </div>
+
+
+    <div class="sidebar-section" style="padding-bottom: 8px;">
+      <div class="section-label">Eventos en tiempo real</div>
+    </div>
+    <div class="log-container" id="log"></div>
+
+  </aside>
+
+
+  <div class="map-wrapper">
+    <div id="map"></div>
+
+
+    <div id="route-toast">
+      <div class="toast-title">🗺 Nueva ruta recibida</div>
+      <div class="toast-row">Vehículo <span id="t-vehicle">-</span></div>
+      <div class="toast-row">Paradas <span id="t-stops">-</span></div>
+      <div class="toast-row">Tiempo est. <span id="t-eta">-</span></div>
+      <div class="toast-row">Distancia <span id="t-dist">-</span></div>
+      <div class="toast-row">Evento <span id="t-event">-</span></div>
+    </div>
+
+    <div id="offline-banner" id="offline-banner">
+      ⚠ VEHÍCULO OFFLINE DETECTADO
+    </div>
+  </div>
+
+
+  <script>
+
+    let map;
+    let markers    = {};   
+    let polylines  = {};  
+    let routeCount = 0;
+    let offlineSet = new Set();
+
+
+    function initMap() {
+      map = new google.maps.Map(document.getElementById('map'), {
+        center: { lat: 4.7110, lng: -74.0721 }, 
+        zoom: 13,
+        styles: [
+          { elementType: 'geometry',        stylers: [{ color: '#0d1420' }] },
+          { elementType: 'labels.text.fill', stylers: [{ color: '#4a5568' }] },
+          { elementType: 'labels.text.stroke', stylers: [{ color: '#080c14' }] },
+          { featureType: 'road',            elementType: 'geometry',        stylers: [{ color: '#1a2540' }] },
+          { featureType: 'road',            elementType: 'geometry.stroke', stylers: [{ color: '#080c14' }] },
+          { featureType: 'road.highway',    elementType: 'geometry',        stylers: [{ color: '#1f3060' }] },
+          { featureType: 'water',           elementType: 'geometry',        stylers: [{ color: '#060a10' }] },
+          { featureType: 'poi',             stylers: [{ visibility: 'off' }] },
+          { featureType: 'transit',         stylers: [{ visibility: 'off' }] },
+        ]
+      });
+
+      connectSocket();
+    }
+
+
+    function connectSocket() {
+
+      const socket = io('http://localhost:3001');
+
+
+      socket.on('connect', () => {
+        setConnectionStatus(true);
+        addLog('system', `Conectado al gateway (${socket.id})`);
+
+
+        socket.emit('join:fleet');
+      });
+
+      socket.on('joined', (data) => {
+        addLog('system', `Sala unida: ${data.room}`);
+      });
+
+      socket.on('vehicle:position', (data) => {
+        const { vehicleId, lat, lng, speed } = data;
+
+        updateOrCreateMarker(vehicleId, lat, lng, false);
+        updateVehicleCard(vehicleId, lat, lng, speed, false);
+        addLog('position', `${vehicleId} → ${lat.toFixed(4)}, ${lng.toFixed(4)} · ${speed} km/h`);
+      });
+
+      socket.on('route:update', (data) => {
+        const { vehicleId, stops, polyline, estimatedTime, totalDistance, eventType } = data;
+
+
+        drawPolyline(vehicleId, polyline);
+
+
+        showRouteToast(vehicleId, stops, estimatedTime, totalDistance, eventType);
+
+        routeCount++;
+        document.getElementById('stat-routes').textContent = routeCount;
+
+        addLog('route', `Ruta para ${vehicleId} → ${stops.length} paradas, ${estimatedTime} min`);
+      });
+
+
+      socket.on('vehicle:offline', (data) => {
+        const { vehicleId } = data;
+        offlineSet.add(vehicleId);
+
+        updateOrCreateMarker(vehicleId, null, null, true);
+        updateVehicleCard(vehicleId, null, null, null, true);
+        updateStats();
+        showOfflineBanner(vehicleId);
+        addLog('offline', `⚠ ${vehicleId} SIN SEÑAL`);
+      });
+
+
+      socket.on('vehicle:online', (data) => {
+        const { vehicleId } = data;
+        offlineSet.delete(vehicleId);
+
+        updateOrCreateMarker(vehicleId, null, null, false);
+        updateVehicleCard(vehicleId, null, null, null, false);
+        updateStats();
+        addLog('system', `✓ ${vehicleId} reconectado`);
+      });
+
+
+      socket.on('disconnect', () => {
+        setConnectionStatus(false);
+        addLog('offline', 'Desconectado del gateway');
+      });
+    }
+
+
+    function updateOrCreateMarker(vehicleId, lat, lng, isOffline) {
+      const color = isOffline ? '#ff1744' : '#00e5ff';
+
+
+      const icon = {
+        path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
+        scale: 6,
+        fillColor: color,
+        fillOpacity: 1,
+        strokeColor: isOffline ? '#ff1744' : '#004d5a',
+        strokeWeight: 2,
+      };
+
+      if (markers[vehicleId]) {
+
+        if (lat !== null) markers[vehicleId].setPosition({ lat, lng });
+        markers[vehicleId].setIcon(icon);
+      } else {
+
+        if (lat === null) return; 
+        markers[vehicleId] = new google.maps.Marker({
+          position: { lat, lng },
+          map,
+          title: vehicleId,
+          icon,
+          label: {
+            text: vehicleId,
+            color: '#e8edf5',
+            fontSize: '10px',
+            fontFamily: 'Space Mono',
+          }
+        });
+
+
+        markers[vehicleId].addListener('click', () => {
+          map.panTo(markers[vehicleId].getPosition());
+        });
+      }
+    }
+
+
+    function drawPolyline(vehicleId, polylinePoints) {
+
+      if (polylines[vehicleId]) {
+        polylines[vehicleId].setMap(null);
+      }
+
+
+      if (!polylinePoints || polylinePoints.length === 0) return;
+
+      polylines[vehicleId] = new google.maps.Polyline({
+        path: polylinePoints,
+        geodesic: true,
+        strokeColor: '#ff6b35',
+        strokeOpacity: 0.9,
+        strokeWeight: 3,
+        map,
+      });
+    }
+
+
+    const vehicleData = {};
+
+    function updateVehicleCard(vehicleId, lat, lng, speed, isOffline) {
+
+      if (!vehicleData[vehicleId]) {
+        vehicleData[vehicleId] = { vehicleId, lat, lng, speed, isOffline };
+      } else {
+        if (lat !== null) { vehicleData[vehicleId].lat = lat; vehicleData[vehicleId].lng = lng; }
+        if (speed !== null) vehicleData[vehicleId].speed = speed;
+        vehicleData[vehicleId].isOffline = isOffline;
+      }
+
+
+      const list = document.getElementById('vehicle-list');
+      list.innerHTML = Object.values(vehicleData).map(v => `
+        <div class="vehicle-card ${v.isOffline ? 'offline' : ''}" onclick="focusVehicle('${v.vehicleId}')">
+          <div class="vehicle-card-header">
+            <div class="vehicle-id">${v.vehicleId}</div>
+            <div class="vehicle-badge ${v.isOffline ? 'offline' : ''}">${v.isOffline ? 'OFFLINE' : 'EN LÍNEA'}</div>
+          </div>
+          <div class="vehicle-stats">
+            <div class="stat">Lat <span>${v.lat ? v.lat.toFixed(4) : '--'}</span></div>
+            <div class="stat">Lng <span>${v.lng ? v.lng.toFixed(4) : '--'}</span></div>
+            <div class="stat">Vel <span>${v.speed ? v.speed + ' km/h' : '--'}</span></div>
+            <div class="stat">Estado <span style="color:${v.isOffline ? 'var(--offline)' : 'var(--online)'}">${v.isOffline ? '⚠' : '✓'}</span></div>
+          </div>
+        </div>
+      `).join('');
+
+      updateStats();
+    }
+
+    function focusVehicle(vehicleId) {
+      if (markers[vehicleId]) {
+        map.panTo(markers[vehicleId].getPosition());
+        map.setZoom(15);
+      }
+    }
+
+
+    function updateStats() {
+      const total   = Object.keys(vehicleData).length;
+      const offline = Object.values(vehicleData).filter(v => v.isOffline).length;
+      document.getElementById('stat-online').textContent  = total - offline;
+      document.getElementById('stat-offline').textContent = offline;
+    }
+
+
+    function showRouteToast(vehicleId, stops, eta, dist, eventType) {
+      document.getElementById('t-vehicle').textContent = vehicleId;
+      document.getElementById('t-stops').textContent   = stops.length;
+      document.getElementById('t-eta').textContent     = eta ? eta + ' min' : '--';
+      document.getElementById('t-dist').textContent    = dist ? (dist / 1000).toFixed(1) + ' km' : '--';
+      document.getElementById('t-event').textContent   = eventType || '--';
+
+      const toast = document.getElementById('route-toast');
+      toast.style.display = 'block';
+
+      setTimeout(() => { toast.style.display = 'none'; }, 6000);
+    }
+
+
+    function showOfflineBanner(vehicleId) {
+      const banner = document.getElementById('offline-banner');
+      banner.textContent = `⚠ ${vehicleId} SIN SEÑAL — Verificar vehículo`;
+      banner.style.display = 'block';
+      setTimeout(() => { banner.style.display = 'none'; }, 5000);
+    }
+
+    function addLog(type, message) {
+      const log  = document.getElementById('log');
+      const time = new Date().toLocaleTimeString('es-CO', { hour12: false });
+      const cssClass = {
+        system:   'log-system',
+        position: 'log-position',
+        route:    'log-route',
+        offline:  'log-offline',
+      }[type] || 'log-system';
+
+      log.innerHTML = `<div class="log-entry"><span class="log-time">${time}</span><span class="${cssClass}">${message}</span></div>` + log.innerHTML;
+
+
+      const entries = log.querySelectorAll('.log-entry');
+      if (entries.length > 80) entries[entries.length - 1].remove();
+    }
+
+    function updateClock() {
+      document.getElementById('clock').textContent =
+        new Date().toLocaleTimeString('es-CO', { hour12: false });
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
+
+    function setConnectionStatus(connected) {
+      const dot   = document.getElementById('conn-dot');
+      const label = document.getElementById('conn-label');
+      if (connected) {
+        dot.classList.remove('disconnected');
+        label.textContent = 'Gateway conectado';
+      } else {
+        dot.classList.add('disconnected');
+        label.textContent = 'Sin conexión';
+      }
+    }
+  </script>
+
+  <script
+    src="https://maps.googleapis.com/maps/api/js?key=AIzaSyA534BsLFUj0a48bgcyA5sZ20DyPCxtjLg&callback=initMap"
+    async defer>
+  </script>
+
+</body>
+</html>
