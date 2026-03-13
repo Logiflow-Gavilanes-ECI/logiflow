@@ -6,6 +6,8 @@ require('dotenv').config();
 
 const vehicleHeartbeats = {};
 
+const offlineVehicles = new Set();
+
 
 const OFFLINE_THRESHOLD_MS = 15000; 
 const CHECK_INTERVAL_MS    = 5000; 
@@ -87,8 +89,17 @@ async function main() {
     Object.entries(vehicleHeartbeats).forEach(([vehicleId, lastSeen]) => {
       const inactivoMs = now - lastSeen;
 
-      if (inactivoMs > OFFLINE_THRESHOLD_MS) {
-        console.log(`Vehículo ${vehicleId} sin señal por ${inactivoMs}ms`);
+      if (inactivoMs > OFFLINE_THRESHOLD_MS && !offlineVehicles.has(vehicleId)) {
+      
+        offlineVehicles.add(vehicleId);
+        io.to('fleet').emit('vehicle:offline', { vehicleId });
+        console.log(`vehicle:offline emitido → ${vehicleId}`);
+
+      } else if (inactivoMs <= OFFLINE_THRESHOLD_MS && offlineVehicles.has(vehicleId)) {
+       
+        offlineVehicles.delete(vehicleId);
+        io.to('fleet').emit('vehicle:online', { vehicleId });
+        console.log(`vehicle:online emitido → ${vehicleId}`);
       }
     });
   }, CHECK_INTERVAL_MS);
