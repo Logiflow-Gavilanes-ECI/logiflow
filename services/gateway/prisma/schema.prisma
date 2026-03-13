@@ -11,3 +11,22 @@ generator client {
 datasource db {
   provider = "postgresql"
 }
+
+model Vehicle {
+  id        String   @id @default(uuid())
+  lat       Float
+  lng       Float
+  capacity  Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Stop {
+  id        String   @id @default(uuid())
+  lat       Float
+  lng       Float
+  demand    Int
+  priority  Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
