@@ -286,6 +286,38 @@
 
   <div class="map-wrapper">
     <div id="map"></div>
+
+    <div id="route-toast" style="
+      display: none;
+      position: absolute;
+      bottom: 24px; right: 24px;
+      background: var(--panel);
+      border: 1px solid var(--accent2);
+      border-radius: 10px;
+      padding: 14px 18px;
+      min-width: 260px;
+      z-index: 10;
+    ">
+      <div style="font-family: var(--font-mono); font-size: 11px; color: var(--accent2);
+                  letter-spacing: 1px; text-transform: uppercase; margin-bottom: 8px;">
+        🗺 Nueva ruta recibida
+      </div>
+      <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:4px; color: var(--muted);">
+        Vehículo <span id="t-vehicle" style="color: var(--text); font-family: var(--font-mono);">-</span>
+      </div>
+      <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:4px; color: var(--muted);">
+        Paradas <span id="t-stops" style="color: var(--text); font-family: var(--font-mono);">-</span>
+      </div>
+      <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:4px; color: var(--muted);">
+        Tiempo est. <span id="t-eta" style="color: var(--text); font-family: var(--font-mono);">-</span>
+      </div>
+      <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:4px; color: var(--muted);">
+        Distancia <span id="t-dist" style="color: var(--text); font-family: var(--font-mono);">-</span>
+      </div>
+      <div style="display:flex; justify-content:space-between; font-size:12px; color: var(--muted);">
+        Evento <span id="t-event" style="color: var(--text); font-family: var(--font-mono);">-</span>
+      </div>
+    </div>
   </div>
 
   <script>
@@ -298,6 +330,8 @@
   </script>
 
   <script>
+    let routeCount = 0;
+
      function connectSocket() {
       const socket = io('http://localhost:3001');
 
@@ -322,6 +356,18 @@
         updateOrCreateMarker(vehicleId, lat, lng, false);
         updateVehicleCard(vehicleId, lat, lng, speed, false);
         addLog('position', `${vehicleId} → ${lat.toFixed(4)}, ${lng.toFixed(4)} · ${speed} km/h`);
+      });
+
+      socket.on('route:update', (data) => {
+        const { vehicleId, stops, polyline, estimatedTime, totalDistance, eventType } = data;
+
+        drawPolyline(vehicleId, polyline);
+        showRouteToast(vehicleId, stops, estimatedTime, totalDistance, eventType);
+
+        routeCount++;
+        document.getElementById('stat-routes').textContent = routeCount;
+
+        addLog('route', `Ruta para ${vehicleId} → ${stops.length} paradas, ${estimatedTime} min`);
       });
     }
 
@@ -415,6 +461,39 @@
       const offline = Object.values(vehicleData).filter(v => v.isOffline).length;
       document.getElementById('stat-online').textContent  = total - offline;
       document.getElementById('stat-offline').textContent = offline;
+    }
+  </script>
+
+  <script>
+    const polylines = {}; 
+
+    function drawPolyline(vehicleId, polylinePoints) {
+      if (polylines[vehicleId]) {
+        polylines[vehicleId].setMap(null);
+      }
+
+      if (!polylinePoints || polylinePoints.length === 0) return;
+
+      polylines[vehicleId] = new google.maps.Polyline({
+        path: polylinePoints,
+        geodesic: true,
+        strokeColor: '#ff6b35',
+        strokeOpacity: 0.9,
+        strokeWeight: 3,
+        map,
+      });
+    }
+
+    function showRouteToast(vehicleId, stops, eta, dist, eventType) {
+      document.getElementById('t-vehicle').textContent = vehicleId;
+      document.getElementById('t-stops').textContent   = stops.length;
+      document.getElementById('t-eta').textContent     = eta ? eta + ' min' : '--';
+      document.getElementById('t-dist').textContent    = dist ? (dist / 1000).toFixed(1) + ' km' : '--';
+      document.getElementById('t-event').textContent   = eventType || '--';
+
+      const toast = document.getElementById('route-toast');
+      toast.style.display = 'block';
+      setTimeout(() => { toast.style.display = 'none'; }, 6000);
     }
   </script>
 
