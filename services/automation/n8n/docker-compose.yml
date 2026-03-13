@@ -1,6 +1,8 @@
 services:
   n8n:
     image: n8nio/n8n:latest
+    env_file:
+      - .env
     ports:
       - "5678:5678"
     environment:
@@ -9,7 +11,8 @@ services:
       - N8N_PORT=5678
       - N8N_PROTOCOL=http
       - N8N_BLOCK_ENV_ACCESS_IN_NODE=false
-      - WEBHOOK_TARGET=https://trainable-noah-preachiest.ngrok-free.dev/api/v1/webhook
+      - WEBHOOK_TARGET=${WEBHOOK_TARGET}
+      - GOOGLE_MAPS_API_KEY=${GOOGLE_MAPS_API_KEY}
     volumes:
       - n8n_data:/home/node/.n8n
     extra_hosts:

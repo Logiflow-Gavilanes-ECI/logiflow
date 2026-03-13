@@ -94,6 +94,15 @@ Expected output:
 
 ### Step 3 — Start n8n via Docker
 
+Before starting n8n, configure environment variables for webhook forwarding and Google Maps:
+
+```bash
+cd n8n
+cp .env.example .env
+```
+
+Set `GOOGLE_MAPS_API_KEY` in `n8n/.env`.
+
 ```bash
 cd n8n
 docker compose up -d
@@ -133,13 +142,22 @@ curl -X POST "http://localhost:5678/webhook/logiflow/traffic-event" \
   }'
 ```
 
-3. In n8n execution details, the final **"Success – Route Re-optimization"** node should output:
+3. The workflow now enriches the event with Google Maps data before calling the backend:
+
+- `Geocode Incident` resolves a location description to coordinates
+- `Get Detour Alternatives` requests live route alternatives from Directions API
+- `Assess Detour` computes `detourRecommended` and alternative route count
+
+4. In n8n execution details, the final **"Success – Route Re-optimization"** node should output:
 
 ```json
 {
   "message": "Route re-optimization triggered successfully",
   "vehiclesAffected": 1,
-  "triggeredAt": "2026-03-02T10:00:00.000Z"
+  "triggeredAt": "2026-03-02T10:00:00.000Z",
+  "detourRecommended": true,
+  "alternativeRoutes": 1,
+  "incidentAddress": "Autopista Norte - Calle 100, Bogota, Colombia"
 }
 ```
 

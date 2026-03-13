@@ -26,6 +26,84 @@
     },
     {
       "parameters": {
+        "method": "GET",
+        "url": "https://maps.googleapis.com/maps/api/geocode/json",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "address",
+              "value": "={{ $json.locationDescription || $json.location?.description || 'Autopista Norte - Calle 100, Bogota, Colombia' }}"
+            },
+            {
+              "name": "key",
+              "value": "={{ $env.GOOGLE_MAPS_API_KEY }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0007-0007-0007-000000000007",
+      "name": "Geocode Incident",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [680, 300],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://maps.googleapis.com/maps/api/directions/json",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "origin",
+              "value": "={{ ($('Normalize Incoming Payload').item.json.vehicles?.[0]?.lat ?? 4.711) + ',' + ($('Normalize Incoming Payload').item.json.vehicles?.[0]?.lng ?? -74.0721) }}"
+            },
+            {
+              "name": "destination",
+              "value": "={{ ($('Normalize Incoming Payload').item.json.stops?.[0]?.lat ?? 4.705) + ',' + ($('Normalize Incoming Payload').item.json.stops?.[0]?.lng ?? -74.068) }}"
+            },
+            {
+              "name": "alternatives",
+              "value": "true"
+            },
+            {
+              "name": "departure_time",
+              "value": "now"
+            },
+            {
+              "name": "traffic_model",
+              "value": "best_guess"
+            },
+            {
+              "name": "key",
+              "value": "={{ $env.GOOGLE_MAPS_API_KEY }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0008-0008-0008-000000000008",
+      "name": "Get Detour Alternatives",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [900, 300],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const payload = $('Normalize Incoming Payload').item.json;\nconst geocodeItem = $('Geocode Incident').item ?? {};\nconst directionsItem = $('Get Detour Alternatives').item ?? {};\n\nconst geocode = geocodeItem.json ?? {};\nconst directions = directionsItem.json ?? {};\nconst geocodeError = geocodeItem.error ?? null;\nconst directionsError = directionsItem.error ?? null;\n\nconst blockedStatuses = ['REQUEST_DENIED', 'OVER_QUERY_LIMIT'];\nconst geocodeStatus = geocode.status ?? 'UNKNOWN';\nconst directionsStatus = directions.status ?? 'UNKNOWN';\nconst geocodeBlocked = blockedStatuses.includes(geocodeStatus);\nconst directionsBlocked = blockedStatuses.includes(directionsStatus);\n\nconst mapsFallback = Boolean(geocodeError || directionsError || geocodeBlocked || directionsBlocked);\n\nconst routes = Array.isArray(directions.routes) ? directions.routes : [];\nconst bestRoute = routes[0] || null;\nconst alternativeRoutes = mapsFallback ? 0 : Math.max(routes.length - 1, 0);\n\nlet incidentLocation = null;\nlet formattedAddress = payload.locationDescription || payload.location?.description || null;\nif (!mapsFallback && Array.isArray(geocode.results) && geocode.results.length > 0) {\n  const first = geocode.results[0];\n  formattedAddress = first.formatted_address ?? formattedAddress;\n  incidentLocation = first.geometry?.location ?? null;\n}\n\nconst durationInTrafficSec = mapsFallback ? null : (bestRoute?.legs?.[0]?.duration_in_traffic?.value ?? bestRoute?.legs?.[0]?.duration?.value ?? null);\nconst distanceMeters = mapsFallback ? null : (bestRoute?.legs?.[0]?.distance?.value ?? null);\n\nconst detourRecommended = mapsFallback ? false : alternativeRoutes > 0;\n\nreturn [{\n  json: {\n    eventType: payload.eventType,\n    vehicles: payload.vehicles,\n    stops: payload.stops,\n    maps: {\n      geocodingStatus: geocodeStatus,\n      directionsStatus: directionsStatus,\n      fallbackApplied: mapsFallback,\n      fallbackReason: mapsFallback ? (geocodeError?.message || directionsError?.message || geocodeStatus || directionsStatus) : null,\n      incidentAddress: formattedAddress,\n      incidentLocation,\n      alternativeRoutes,\n      detourRecommended,\n      bestRoute: {\n        durationInTrafficSec,\n        distanceMeters\n      }\n    }\n  }\n}];"
+      },
+      "id": "a1b2c3d4-0009-0009-0009-000000000009",
+      "name": "Assess Detour",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
         "method": "POST",
         "url": "={{ $env.WEBHOOK_TARGET }}",
         "sendBody": true,
@@ -43,7 +121,7 @@
       "name": "POST to Webhook",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
-      "position": [680, 300]
+      "position": [1340, 300]
     },
     {
       "parameters": {
@@ -72,7 +150,7 @@
       "name": "Check Webhook Response",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [900, 300]
+      "position": [1560, 300]
     },
     {
       "parameters": {
@@ -95,6 +173,24 @@
               "name": "triggeredAt",
               "value": "={{ $('POST to Webhook').item.json.timestamp }}",
               "type": "string"
+            },
+            {
+              "id": "s004",
+              "name": "detourRecommended",
+              "value": "={{ $('Assess Detour').item.json.maps.detourRecommended }}",
+              "type": "boolean"
+            },
+            {
+              "id": "s005",
+              "name": "alternativeRoutes",
+              "value": "={{ $('Assess Detour').item.json.maps.alternativeRoutes }}",
+              "type": "number"
+            },
+            {
+              "id": "s006",
+              "name": "incidentAddress",
+              "value": "={{ $('Assess Detour').item.json.maps.incidentAddress }}",
+              "type": "string"
             }
           ]
         },
@@ -104,7 +200,7 @@
       "name": "Success \u2013 Route Re-optimization",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3,
-      "position": [1120, 200]
+      "position": [1780, 200]
     },
     {
       "parameters": {
@@ -136,7 +232,7 @@
       "name": "Error \u2013 Webhook Delivery Failed",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3,
-      "position": [1120, 420]
+      "position": [1780, 420]
     }
   ],
   "connections": {
@@ -152,6 +248,39 @@
       ]
     },
     "Normalize Incoming Payload": {
+      "main": [
+        [
+          {
+            "node": "Geocode Incident",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Geocode Incident": {
+      "main": [
+        [
+          {
+            "node": "Get Detour Alternatives",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Detour Alternatives": {
+      "main": [
+        [
+          {
+            "node": "Assess Detour",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Assess Detour": {
       "main": [
         [
           {
