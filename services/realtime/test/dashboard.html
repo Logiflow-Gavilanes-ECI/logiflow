@@ -318,6 +318,25 @@
         Evento <span id="t-event" style="color: var(--text); font-family: var(--font-mono);">-</span>
       </div>
     </div>
+
+    <!-- Botón reset vista -->
+    <button onclick="resetMapView()" style="
+      position: absolute;
+      top: 16px; right: 16px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      padding: 8px 14px;
+      border-radius: 6px;
+      cursor: pointer;
+      z-index: 10;
+      transition: border-color 0.2s;
+    " onmouseover="this.style.borderColor='var(--accent)'"
+       onmouseout="this.style.borderColor='var(--border)'">
+      ⊞ Vista general
+    </button>
   </div>
 
   <script>
@@ -453,7 +472,7 @@
 
       const list = document.getElementById('vehicle-list');
       list.innerHTML = Object.values(vehicleData).map(v => `
-        <div class="vehicle-card ${v.isOffline ? 'offline' : ''}">
+        <div class="vehicle-card ${v.isOffline ? 'offline' : ''}" onclick="focusVehicle('${v.vehicleId}')">
           <div class="vehicle-card-header">
             <div class="vehicle-id">${v.vehicleId}</div>
             <div class="vehicle-badge ${v.isOffline ? 'offline' : ''}">
@@ -472,9 +491,37 @@
       `).join('');
 
       const total   = Object.keys(vehicleData).length;
+
       const offline = Object.values(vehicleData).filter(v => v.isOffline).length;
       document.getElementById('stat-online').textContent  = total - offline;
       document.getElementById('stat-offline').textContent = offline;
+    }
+
+    function focusVehicle(vehicleId) {
+      if (markers[vehicleId]) {
+        map.panTo(markers[vehicleId].getPosition());
+        map.setZoom(16);
+        markers[vehicleId].setIcon({
+          path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
+          scale: 10,
+          fillColor: vehicleData[vehicleId]?.isOffline ? '#ff1744' : '#00e5ff',
+          fillOpacity: 1,
+          strokeColor: '#ffffff',
+          strokeWeight: 2,
+        });
+        setTimeout(() => {
+          if (markers[vehicleId]) {
+            markers[vehicleId].setIcon({
+              path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
+              scale: 6,
+              fillColor: vehicleData[vehicleId]?.isOffline ? '#ff1744' : '#00e5ff',
+              fillOpacity: 1,
+              strokeColor: vehicleData[vehicleId]?.isOffline ? '#ff1744' : '#004d5a',
+              strokeWeight: 2,
+            });
+          }
+        }, 2000);
+      }
     }
   </script>
 
@@ -498,6 +545,11 @@
       });
     }
 
+    function resetMapView() {
+      map.panTo({ lat: 4.711, lng: -74.0721 });
+      map.setZoom(13);
+    }
+
     function showRouteToast(vehicleId, stops, eta, dist, eventType) {
       document.getElementById('t-vehicle').textContent = vehicleId;
       document.getElementById('t-stops').textContent   = stops.length;
@@ -512,7 +564,6 @@
   </script>
 
   <script>
-    //
     const GOOGLE_MAPS_API_KEY = 'YOUR_GOOGLE_MAPS_API_KEY';
   </script>
 

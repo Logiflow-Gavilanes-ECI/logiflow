@@ -6,11 +6,15 @@ require('dotenv').config();
 
 const vehicleHeartbeats = {};
 
+vehicleHeartbeats['v-001'] = 0;
+vehicleHeartbeats['v-002'] = 0;
+vehicleHeartbeats['v-003'] = 0;
+
 const offlineVehicles = new Set();
 
 
 const OFFLINE_THRESHOLD_MS = 15000; 
-const CHECK_INTERVAL_MS    = 5000; 
+const CHECK_INTERVAL_MS    = 6000; 
 
 const PORT = process.env.PORT || 3001;
 
@@ -18,7 +22,7 @@ async function main() {
   await initializeServer();
 
   registerRooms(io);
-  startPositionBroadcast(io);
+  startPositionBroadcast(io, vehicleHeartbeats);
 
   app.use(require('express').json());
 
@@ -85,9 +89,11 @@ async function main() {
 
   setInterval(() => {
     const now = Date.now();
+    //console.log(`Checker corriendo. Vehículos en mapa: ${Object.keys(vehicleHeartbeats)}`);
 
     Object.entries(vehicleHeartbeats).forEach(([vehicleId, lastSeen]) => {
       const inactivoMs = now - lastSeen;
+      //console.log(`${vehicleId} → inactivo ${inactivoMs}ms, offline: ${offlineVehicles.has(vehicleId)}`);
 
       if (inactivoMs > OFFLINE_THRESHOLD_MS && !offlineVehicles.has(vehicleId)) {
       
