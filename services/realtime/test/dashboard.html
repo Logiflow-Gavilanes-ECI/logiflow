@@ -173,6 +173,71 @@
       width: 100%;
       height: 100%;
     }
+
+    .vehicle-card {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
+      cursor: pointer;
+      transition: border-color 0.2s;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .vehicle-card::before {
+      content: '';
+      position: absolute;
+      left: 0; top: 0; bottom: 0;
+      width: 3px;
+      background: var(--online);
+      border-radius: 3px 0 0 3px;
+      transition: background 0.3s;
+    }
+
+    .vehicle-card.offline::before { background: var(--offline); }
+    .vehicle-card.offline { border-color: rgba(255,23,68,0.3); }
+
+    .vehicle-card:hover { border-color: var(--accent); }
+
+    .vehicle-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .vehicle-id {
+      font-family: var(--font-mono);
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--accent);
+    }
+
+    .vehicle-badge {
+      font-size: 10px;
+      font-family: var(--font-mono);
+      padding: 2px 8px;
+      border-radius: 20px;
+      background: rgba(0,230,118,0.15);
+      color: var(--online);
+      border: 1px solid rgba(0,230,118,0.3);
+    }
+
+    .vehicle-badge.offline {
+      background: rgba(255,23,68,0.15);
+      color: var(--offline);
+      border-color: rgba(255,23,68,0.3);
+    }
+
+    .vehicle-stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4px;
+    }
+
+    .stat { font-size: 11px; color: var(--muted); }
+    .stat span { color: var(--text); font-family: var(--font-mono); font-size: 11px; }
   </style>
 </head>
 <body>
@@ -251,6 +316,13 @@
         document.getElementById('conn-label').textContent = 'Sin conexión';
         addLog('offline', 'Desconectado del gateway');
       });
+
+      socket.on('vehicle:position', (data) => {
+        const { vehicleId, lat, lng, speed } = data;
+        updateOrCreateMarker(vehicleId, lat, lng, false);
+        updateVehicleCard(vehicleId, lat, lng, speed, false);
+        addLog('position', `${vehicleId} → ${lat.toFixed(4)}, ${lng.toFixed(4)} · ${speed} km/h`);
+      });
     }
 
     function addLog(type, message) {
@@ -264,6 +336,85 @@
       }[type] || 'log-system';
 
       log.innerHTML = `<div class="log-entry"><span class="log-time">${time}</span><span class="${cssClass}">${message}</span></div>` + log.innerHTML;
+    }
+  </script>
+
+  <script>
+    const markers    = {}; 
+    const vehicleData = {};  
+
+    function updateOrCreateMarker(vehicleId, lat, lng, isOffline) {
+      const color = isOffline ? '#ff1744' : '#00e5ff';
+
+      const icon = {
+        path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
+        scale: 6,
+        fillColor: color,
+        fillOpacity: 1,
+        strokeColor: isOffline ? '#ff1744' : '#004d5a',
+        strokeWeight: 2,
+      };
+
+      if (markers[vehicleId]) {
+        if (lat !== null) markers[vehicleId].setPosition({ lat, lng });
+        markers[vehicleId].setIcon(icon);
+      } else {
+        if (lat === null) return;
+        markers[vehicleId] = new google.maps.Marker({
+          position: { lat, lng },
+          map,
+          title: vehicleId,
+          icon,
+          label: {
+            text: vehicleId,
+            color: '#e8edf5',
+            fontSize: '10px',
+            fontFamily: 'Space Mono',
+          }
+        });
+
+        markers[vehicleId].addListener('click', () => {
+          map.panTo(markers[vehicleId].getPosition());
+        });
+      }
+    }
+
+    function updateVehicleCard(vehicleId, lat, lng, speed, isOffline) {
+      if (!vehicleData[vehicleId]) {
+        vehicleData[vehicleId] = { vehicleId, lat, lng, speed, isOffline };
+      } else {
+        if (lat !== null) {
+          vehicleData[vehicleId].lat = lat;
+          vehicleData[vehicleId].lng = lng;
+        }
+        if (speed !== null) vehicleData[vehicleId].speed = speed;
+        vehicleData[vehicleId].isOffline = isOffline;
+      }
+
+      const list = document.getElementById('vehicle-list');
+      list.innerHTML = Object.values(vehicleData).map(v => `
+        <div class="vehicle-card ${v.isOffline ? 'offline' : ''}">
+          <div class="vehicle-card-header">
+            <div class="vehicle-id">${v.vehicleId}</div>
+            <div class="vehicle-badge ${v.isOffline ? 'offline' : ''}">
+              ${v.isOffline ? 'OFFLINE' : 'EN LÍNEA'}
+            </div>
+          </div>
+          <div class="vehicle-stats">
+            <div class="stat">Lat <span>${v.lat ? v.lat.toFixed(4) : '--'}</span></div>
+            <div class="stat">Lng <span>${v.lng ? v.lng.toFixed(4) : '--'}</span></div>
+            <div class="stat">Vel <span>${v.speed ? v.speed + ' km/h' : '--'}</span></div>
+            <div class="stat">Estado <span style="color:${v.isOffline ? 'var(--offline)' : 'var(--online)'}">
+              ${v.isOffline ? '⚠' : '✓'}
+            </span></div>
+          </div>
+        </div>
+      `).join('');
+
+      const total   = Object.keys(vehicleData).length;
+      const offline = Object.values(vehicleData).filter(v => v.isOffline).length;
+      document.getElementById('stat-online').textContent  = total - offline;
+      document.getElementById('stat-offline').textContent = offline;
     }
   </script>
 
