@@ -7,12 +7,14 @@ import { GrpcClientModule } from './grpc-client/grpc-client.module';
 import { SocketClientModule } from './socket-client/socket-client.module';
 import { VehiclesModule } from './vehicles/vehicles.module';
 import { StopsModule } from './stops/stops.module';
+import { PrismaModule } from './prisma/prisma.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
     }),
+    PrismaModule,
     GrpcClientModule,
     SocketClientModule,
     WebhookModule,
