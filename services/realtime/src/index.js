@@ -6,6 +6,10 @@ require('dotenv').config();
 
 const vehicleHeartbeats = {};
 
+
+const OFFLINE_THRESHOLD_MS = 15000; 
+const CHECK_INTERVAL_MS    = 5000; 
+
 const PORT = process.env.PORT || 3001;
 
 async function main() {
@@ -76,6 +80,18 @@ async function main() {
       });
     });
   });
+
+  setInterval(() => {
+    const now = Date.now();
+
+    Object.entries(vehicleHeartbeats).forEach(([vehicleId, lastSeen]) => {
+      const inactivoMs = now - lastSeen;
+
+      if (inactivoMs > OFFLINE_THRESHOLD_MS) {
+        console.log(`Vehículo ${vehicleId} sin señal por ${inactivoMs}ms`);
+      }
+    });
+  }, CHECK_INTERVAL_MS);
 
   httpServer.listen(PORT, () => {
     console.log(`Socket Gateway running on port ${PORT}`);
