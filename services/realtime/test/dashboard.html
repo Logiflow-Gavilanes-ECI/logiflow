@@ -369,6 +369,20 @@
 
         addLog('route', `Ruta para ${vehicleId} → ${stops.length} paradas, ${estimatedTime} min`);
       });
+
+      socket.on('vehicle:offline', (data) => {
+        const { vehicleId } = data;
+        updateOrCreateMarker(vehicleId, null, null, true);
+        updateVehicleCard(vehicleId, null, null, null, true);
+        addLog('offline', `⚠ ${vehicleId} SIN SEÑAL`);
+      });
+
+      socket.on('vehicle:online', (data) => {
+        const { vehicleId } = data;
+        updateOrCreateMarker(vehicleId, null, null, false);
+        updateVehicleCard(vehicleId, null, null, null, false);
+        addLog('system', `✓ ${vehicleId} reconectado`);
+      });
     }
 
     function addLog(type, message) {
