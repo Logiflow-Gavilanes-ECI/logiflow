@@ -13,9 +13,18 @@ services:
       - N8N_BLOCK_ENV_ACCESS_IN_NODE=false
       - WEBHOOK_TARGET=${WEBHOOK_TARGET}
       - GOOGLE_MAPS_API_KEY=${GOOGLE_MAPS_API_KEY}
+      - OPENCLAW_WEBHOOK_URL=${OPENCLAW_WEBHOOK_URL}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
     volumes:
       - n8n_data:/home/node/.n8n
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    networks:
+      - logiflow-net
+
+networks:
+  logiflow-net:
+    external: true
 volumes:
   n8n_data:

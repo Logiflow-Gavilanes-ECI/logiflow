@@ -1,0 +1,29 @@
+{
+  "gateway": {
+    "mode": "local",
+    "bind": "loopback",
+    "port": 18789
+  },
+  "model": {
+    "provider": "anthropic",
+    "model": "claude-sonnet-4-20250514",
+    "maxTokens": 512
+  },
+  "channel": {
+    "type": "telegram",
+    "token": "${TELEGRAM_BOT_TOKEN}"
+  },
+  "agents": {
+    "defaults": {
+      "memorySearch": {
+        "enabled": false
+      }
+    }
+  },
+  "skills": {
+    "logiflow-notify": {
+      "enabled": true,
+      "webhookPath": "/skills/logiflow-notify"
+    }
+  }
+}

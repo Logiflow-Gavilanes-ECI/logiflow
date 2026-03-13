@@ -261,6 +261,178 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3,
       "position": [1780, 420]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "rm-001",
+              "leftValue": "={{ $json.risk.riskLevel }}",
+              "rightValue": "HIGH",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "rm-002",
+              "leftValue": "={{ $json.risk.riskLevel }}",
+              "rightValue": "CRITICAL",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0011-0011-0011-000000000011",
+      "name": "Risk Matrix Switch",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1340, 80]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://api.telegram.org/bot' + $env.TELEGRAM_BOT_TOKEN + '/sendMessage' }}",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "chat_id",
+              "value": "={{ $env.TELEGRAM_CHAT_ID }}"
+            },
+            {
+              "name": "text",
+              "value": "={{ [\n  'LogiFlow Alert',\n  'Risk: ' + ($json.risk?.riskLevel ?? 'N/A'),\n  'Event: ' + ($json.risk?.eventType ?? $json.eventType ?? 'N/A'),\n  'Severity: ' + ($json.severity ?? 'N/A'),\n  'Address: ' + ($json.maps?.incidentAddress ?? $json.locationDescription ?? 'N/A'),\n  'Alternative routes: ' + String($json.maps?.alternativeRoutes ?? 0),\n  'Detour recommended: ' + (($json.maps?.detourRecommended ?? false) ? 'Yes' : 'No'),\n  'Action: ' + ($json.risk?.recommendedAction ?? 'Monitor conditions'),\n  'Timestamp: ' + $now.toISO()\n].join('\\n') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0012-0012-0012-000000000012",
+      "name": "Notify via Telegram",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1560, 40],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "nd-001",
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0013-0013-0013-000000000013",
+      "name": "Notification Delivered?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1780, 40]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ns-001",
+              "name": "notified",
+              "value": true,
+              "type": "boolean"
+            },
+            {
+              "id": "ns-002",
+              "name": "channel",
+              "value": "telegram",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0014-0014-0014-000000000014",
+      "name": "Notification Success Log",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [2000, -20]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "nf-001",
+              "name": "notified",
+              "value": false,
+              "type": "boolean"
+            },
+            {
+              "id": "nf-002",
+              "name": "error",
+              "value": "={{ $json.description || 'Telegram send failed' }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0015-0015-0015-000000000015",
+      "name": "Notification Failure Log",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [2000, 100]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "nk-001",
+              "name": "notified",
+              "value": false,
+              "type": "boolean"
+            },
+            {
+              "id": "nk-002",
+              "name": "reason",
+              "value": "Risk below HIGH - notification skipped",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0016-0016-0016-000000000016",
+      "name": "Notification Skipped Log",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [1560, 180]
     }
   ],
   "connections": {
@@ -326,6 +498,11 @@
             "node": "POST to Webhook",
             "type": "main",
             "index": 0
+          },
+          {
+            "node": "Risk Matrix Switch",
+            "type": "main",
+            "index": 0
           }
         ]
       ]
@@ -358,13 +535,60 @@
           }
         ]
       ]
+    },
+    "Risk Matrix Switch": {
+      "main": [
+        [
+          {
+            "node": "Notify via Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Notification Skipped Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify via Telegram": {
+      "main": [
+        [
+          {
+            "node": "Notification Delivered?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notification Delivered?": {
+      "main": [
+        [
+          {
+            "node": "Notification Success Log",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Notification Failure Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "active": true,
   "settings": {
     "executionOrder": "v1"
   },
-  "versionId": "logiflow-sprint2-webhook-v1",
+  "versionId": "logiflow-sprint2-openclaw-telegram-v1",
   "meta": {
     "instanceId": "logiflow-n8n-ci",
     "templateId": "logiflow-traffic-event-trigger"

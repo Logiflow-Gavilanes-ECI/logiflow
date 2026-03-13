@@ -153,6 +153,72 @@ Risk matrix is evaluated in the `Evaluate Risk Matrix` node using `severity + ev
 
 If an event type is not natively supported by the gateway DTO, the workflow maps it to a compatible gateway value while preserving the original type in risk metadata.
 
+## Step 5 — Telegram Notifications via OpenClaw
+
+### Architecture Decision Record (ADR)
+
+**Considered option:** Twilio + WhatsApp Business API.
+
+**Why it was rejected:**
+- WhatsApp Business API requires Meta manual approval (days/weeks), which is not sprint-friendly.
+- Twilio introduces a paid per-message dependency.
+- It adds an external operational dependency for a feature that can run locally.
+
+**Chosen option:** OpenClaw + Telegram (BotFather).
+
+**Why this is better for Sprint 2:**
+- Zero-cost local runtime.
+- No approval process required.
+- Native Telegram support with fast setup.
+- OpenClaw is not only a forwarder: it is the reasoning layer that composes context-aware alerts using Claude.
+
+### What OpenClaw Does in LogiFlow
+
+n8n handles orchestration and branching. OpenClaw handles intelligence and delivery. n8n sends structured risk payloads, OpenClaw transforms them into dispatcher-friendly natural language alerts, and Telegram delivers those alerts to phones.
+
+```mermaid
+graph LR
+    A[n8n Switch - Risk Matrix] -->|HIGH or CRITICAL| B[OpenClaw HTTP Skill]
+    B --> C[Claude - Compose message]
+    C --> D[Telegram Bot]
+    D --> E[Dispatcher Phone]
+    A -->|LOW| F[Log only]
+```
+
+### BotFather Setup
+
+1. Open Telegram and search `@BotFather`, then run `/newbot`.
+2. Use bot name `LogiFlow Alerts` and username `logiflow_alerts_bot` (or similar available username).
+3. Copy the token and put it in `.env` as `TELEGRAM_BOT_TOKEN`.
+4. Start a chat with your new bot to activate it.
+5. Get your chat ID using `https://api.telegram.org/bot<TOKEN>/getUpdates`.
+
+### Running Step 5
+
+```bash
+docker network create logiflow-net   # if not already created
+cp openclaw/.env.example openclaw/.env
+docker compose -f openclaw/docker-compose.yml up -d
+docker compose -f n8n/docker-compose.yml up -d
+node mock-server/index.js
+```
+
+### OpenClaw Notification Payload Contract
+
+n8n sends this payload to OpenClaw for HIGH/CRITICAL branches:
+
+```json
+{
+  "eventType": "ROAD_CLOSURE",
+  "severity": "CRITICAL",
+  "locationDescription": "Autopista Norte - Calle 100, Bogota",
+  "affectedVehicles": ["V001", "V003"],
+  "riskLevel": "HIGH",
+  "action": "Reroute immediately and notify operations/driver",
+  "timestamp": "2026-03-13T12:00:00.000Z"
+}
+```
+
 3. The workflow now enriches the event with Google Maps data before calling the backend:
 
 - `Geocode Incident` resolves a location description to coordinates
