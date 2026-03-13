@@ -1,57 +1,91 @@
-# 🚦 LogiFlow — n8n Event Trigger & CI
+# LogiFlow — Automation Service
 
-[![CI Pipeline](https://github.com/Logiflow-Gavilanes-ECI/logiflow-n8n-trigger/actions/workflows/ci.yml/badge.svg)](https://github.com/Logiflow-Gavilanes-ECI/logiflow-n8n-trigger/actions/workflows/ci.yml)
-[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=Logiflow-Gavilanes-ECI_logiflow-n8n-trigger&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=Logiflow-Gavilanes-ECI_logiflow-n8n-trigger)
-[![Node.js 20](https://img.shields.io/badge/node-20-brightgreen)](https://nodejs.org/)
+[![CI Pipeline](https://img.shields.io/github/actions/workflow/status/your-org/logiflow-n8n-ci/ci.yml?label=CI&logo=githubactions&logoColor=white)](https://github.com/Logiflow-Gavilanes-ECI/logiflow/actions)
+[![SonarCloud Quality Gate](https://img.shields.io/sonar/quality_gate/logiflow-n8n-ci?server=https%3A%2F%2Fsonarcloud.io&logo=sonarcloud)](https://sonarcloud.io)
+[![Node.js 20](https://img.shields.io/badge/node-20-brightgreen?logo=nodedotjs&logoColor=white)](https://nodejs.org/)
+[![n8n 2.10.3](https://img.shields.io/badge/n8n-2.10.3-ff6d5a?logo=n8n&logoColor=white)](https://n8n.io/)
+[![Sprint 2](https://img.shields.io/badge/Sprint-2-229ED9?logo=azuredevops&logoColor=white)](#)
+[![Telegram Alerts](https://img.shields.io/badge/alerts-Telegram-26A5E4?logo=telegram&logoColor=white)](#-telegram-notifications)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ```
-  ██╗      ██████╗  ██████╗ ██╗███████╗██╗      ██████╗ ██╗    ██╗
-  ██║     ██╔═══██╗██╔════╝ ██║██╔════╝██║     ██╔═══██╗██║    ██║
-  ██║     ██║   ██║██║  ███╗██║█████╗  ██║     ██║   ██║██║ █╗ ██║
-  ██║     ██║   ██║██║   ██║██║██╔══╝  ██║     ██║   ██║██║███╗██║
-  ███████╗╚██████╔╝╚██████╔╝██║██║     ███████╗╚██████╔╝╚███╔███╔╝
-  ╚══════╝ ╚═════╝  ╚═════╝ ╚═╝╚═╝     ╚══════╝ ╚═════╝  ╚══╝╚══╝
+██╗      ██████╗  ██████╗ ██╗███████╗██╗      ██████╗ ██╗    ██╗
+██║     ██╔═══██╗██╔════╝ ██║██╔════╝██║     ██╔═══██╗██║    ██║
+██║     ██║   ██║██║  ███╗██║█████╗  ██║     ██║   ██║██║ █╗ ██║
+██║     ██║   ██║██║   ██║██║██╔══╝  ██║     ██║   ██║██║███╗██║
+███████╗╚██████╔╝╚██████╔╝██║██║     ███████╗╚██████╔╝╚███╔███╔╝
+╚══════╝ ╚═════╝  ╚═════╝ ╚═╝╚═╝     ╚══════╝ ╚═════╝  ╚══╝╚══╝
 ```
 
 > **AI-powered real-time fleet routing — solving the Vehicle Routing Problem, one traffic jam at a time.**
 
 ---
 
-## 📦 This Module
+## 📖 Table of Contents
 
-`logiflow-n8n-trigger` is the **event detection and CI automation** component of the LogiFlow platform. Its responsibilities:
-
-| Responsibility | How |
-|---|---|
-| Receive external traffic events | n8n workflow with Webhook Trigger |
-| Deliver event payloads to the backend | HTTP POST to configured `WEBHOOK_TARGET` |
-| Stand in for the real NestJS backend (Sprint 1) | Lightweight Express mock server |
-| Enforce code quality on every push | GitHub Actions → ESLint → Jest → SonarCloud |
-
-In Sprint 2, the mock server will be replaced by the real NestJS backend, and the n8n workflow will be connected to a live traffic data feed.
+1. [What This Service Does](#-what-this-service-does)
+2. [How It All Connects](#-how-it-all-connects)
+3. [Quick Start](#-quick-start)
+4. [End-to-End Flow Explained](#-end-to-end-flow-explained)
+5. [Risk Matrix](#-risk-matrix)
+6. [Maps Enrichment](#-maps-enrichment)
+7. [Telegram Notifications](#-telegram-notifications)
+8. [Why OpenClaw Instead of Twilio](#-why-openclaw-instead-of-twilio-adr)
+9. [Testing](#-testing)
+10. [CI Pipeline](#️-ci-pipeline)
+11. [Project Structure](#-project-structure)
+12. [Troubleshooting](#️-troubleshooting)
+13. [Team](#-team)
 
 ---
 
-## 🏗️ Architecture
+## 📦 What This Service Does
+
+`services/automation` is the **event detection, enrichment, and notification** component of LogiFlow. It is the first responder when something changes in the field.
+
+When a traffic event occurs — a road closure, a jam, a weather alert — this service:
+
+1. **Receives** the event via an HTTP webhook (n8n)
+2. **Classifies** its risk level using a deterministic Risk Matrix
+3. **Enriches** the incident with real geolocation and detour data (Google Maps)
+4. **Triggers** route re-optimization by notifying the gateway
+5. **Alerts** the operations team via Telegram when impact is HIGH or CRITICAL
+
+This service does not run the optimization itself — that is the responsibility of the VROOM microservice called via gRPC. This service is purely the automation and alerting layer.
+
+| Responsibility | Implementation |
+|---|---|
+| Receive traffic events | n8n Webhook Trigger |
+| Classify risk | Risk Matrix (severity + eventType) |
+| Enrich with map data | Google Geocoding + Directions API |
+| Trigger re-optimization | HTTP POST to `WEBHOOK_TARGET` |
+| Notify operations | Telegram Bot API via n8n |
+| Enforce code quality | ESLint + Jest + SonarCloud |
+
+---
+
+## 🏗️ How It All Connects
+
+This diagram shows the full data flow from a raw traffic event to a notified dispatcher:
 
 ```mermaid
-graph LR
-    A["🔔 n8n\n(Traffic Event Trigger)"] -->|HTTP POST| B["🖥️ Mock Server\n(Sprint 1 stand-in)"]
-    B -.->|Sprint 2| C["⚙️ NestJS Backend\n(Webhook Handler)"]
-    C -->|gRPC| D["🧮 VROOM Optimizer\n(VRP Solver)"]
-    D -->|Optimized Routes| E["📡 Socket.io\n(Real-time Push)"]
-    E -->|New Route| F["🚛 Driver App"]
-    
-    style A fill:#ff6b35,color:#fff
-    style B fill:#ffd166,color:#000
-    style C fill:#06d6a0,color:#fff
-    style D fill:#118ab2,color:#fff
-    style E fill:#073b4c,color:#fff
-    style F fill:#ef476f,color:#fff
+graph TD
+    A[🚨 Traffic Event - external or simulated] --> B[Webhook Trigger - n8n]
+    B --> C[Normalize Payload]
+    C --> D[Evaluate Risk Matrix]
+    D --> E[Geocode Incident - Google Maps]
+    E --> F[Get Detour Alternatives - Google Maps]
+    F --> G[Assess Detour + Fallback]
+    G --> H[POST to Gateway - WEBHOOK_TARGET]
+    G --> I{Risk HIGH or CRITICAL?}
+    I -->|Yes| J[🔔 Notify via Telegram]
+    I -->|No| K[Log only - monitoring path]
+    H --> L{Gateway acknowledged?}
+    L -->|Yes| M[✅ Route re-optimization triggered]
+    L -->|No| N[❌ Webhook delivery failed - logged]
 ```
 
-> **Data flow:** A traffic jam is detected → n8n builds the event payload → POSTs to the backend → VROOM recalculates optimal routes → Socket.io pushes updates to affected drivers instantly.
+> **Key design principle:** the notification path and the re-optimization path are independent. A Telegram failure never blocks the reroute trigger, and a gateway failure never suppresses the alert.
 
 ---
 
@@ -61,294 +95,359 @@ graph LR
 
 - [Node.js 20+](https://nodejs.org/)
 - [Docker + Docker Compose](https://docs.docker.com/compose/)
-- [n8n Desktop](https://n8n.io/get-started/) or access to the Docker-based n8n instance
+- Google Maps API key (Geocoding + Directions APIs enabled)
+- Telegram Bot token + Chat ID (see [Telegram Notifications](#-telegram-notifications))
 
----
-
-### Step 1 — Clone & Install
+### 1 — Install dependencies
 
 ```bash
-git clone https://github.com/Logiflow-Gavilanes-ECI/logiflow-n8n-trigger.git
-cd logiflow-n8n-trigger
+cd services/automation
 npm install
 ```
 
----
-
-### Step 2 — Start the Mock Server
+### 2 — Configure environment
 
 ```bash
-npm start
-```
-
-Expected output:
-
-```
-[LogiFlow] Mock webhook server running on http://localhost:3002
-[LogiFlow] Listening for POST /webhooks/traffic-event
-```
-
-> The server listens on **port 3002** by default to avoid conflicts with the gateway service on port 3000. Keep this terminal open.
-
----
-
-### Step 3 — Start n8n via Docker
-
-Before starting n8n, configure environment variables for webhook forwarding and Google Maps:
-
-```bash
-cd n8n
 cp .env.example .env
 ```
 
-Set `GOOGLE_MAPS_API_KEY` in `n8n/.env`.
+Open `.env` and fill in:
+
+```env
+# Gateway
+WEBHOOK_TARGET=http://your-gateway-url/reroute
+
+# Google Maps
+GOOGLE_MAPS_API_KEY=your_google_maps_key
+
+# Telegram
+TELEGRAM_BOT_TOKEN=your_telegram_bot_token
+TELEGRAM_CHAT_ID=your_chat_id
+
+# OpenClaw (optional — needed only if running the OpenClaw path)
+ANTHROPIC_API_KEY=your_anthropic_key
+OPENCLAW_WEBHOOK_URL=http://openclaw:18789
+```
+
+Also create `services/automation/n8n/.env` from `n8n/.env.example` for the Docker Compose variables used by n8n.
+
+### 3 — Start n8n
 
 ```bash
-cd n8n
+docker network create logiflow-net
+cd services/automation/n8n
 docker compose up -d
 ```
 
-n8n will be available at **http://localhost:5678**.
+n8n UI available at: `http://localhost:5678`
 
-> The `extra_hosts` setting in `docker-compose.yml` ensures that `host.docker.internal` resolves correctly on Linux hosts.
+### 4 — Import the workflow
 
----
-
-### Step 4 — Import the Workflow
-
-1. Open **http://localhost:5678** in your browser
+1. Open `http://localhost:5678`
 2. Go to **Workflows → Import from File**
 3. Select `n8n/workflows/traffic-event-trigger.json`
-4. The workflow **"Traffic Event Trigger – LogiFlow"** will appear
+4. **Activate** the workflow (toggle top-right)
 
----
+> If you modify the JSON file locally, re-import and re-activate. n8n stores workflows in its own database.
 
-### Step 5 — Trigger the Workflow via External POST
-
-1. Open the **"Traffic Event Webhook"** node and copy its **Production URL**
-2. Send a POST request to that URL with a valid payload:
+### 5 — Send a test event
 
 ```bash
 curl -X POST "http://localhost:5678/webhook/logiflow/traffic-event" \
   -H "Content-Type: application/json" \
   -d '{
-    "eventType": "traffic_jam",
-    "severity": "HIGH",
-    "vehicles": [
-      { "id": "v-001", "lat": 4.7110, "lng": -74.0721, "capacity": 12 }
-    ],
-    "stops": [
-      { "id": "s-101", "lat": 4.7050, "lng": -74.0680, "demand": 2, "priority": 1 }
-    ]
+    "eventType": "road_closure",
+    "severity": "CRITICAL",
+    "locationDescription": "Autopista Norte - Calle 100, Bogota",
+    "vehicles": [{"id": "v-001", "lat": 4.7110, "lng": -74.0721, "capacity": 12}],
+    "stops": [{"id": "s-101", "lat": 4.7050, "lng": -74.0680, "demand": 2, "priority": 1}]
   }'
 ```
 
-Risk matrix is evaluated in the `Evaluate Risk Matrix` node using `severity + eventType`.
+**Expected result:**
+- Workflow runs end-to-end ✅
+- Gateway receives the reroute trigger ✅
+- Telegram alert arrives on your phone ✅
+
+---
+
+## 🔄 End-to-End Flow Explained
+
+Understanding what happens inside each step helps when debugging or extending the workflow.
+
+**Step 1 — Webhook Trigger:** n8n exposes a public endpoint (via ngrok in local dev). Any system — or a manual curl — can POST a traffic event to this URL.
+
+**Step 2 — Normalize Payload:** A Set node ensures all downstream nodes receive a consistent structure regardless of how the original payload arrived. Fields like `eventType` are lowercased, `severity` is uppercased.
+
+**Step 3 — Risk Matrix:** A Switch node evaluates `severity + eventType` and assigns a `riskLevel` (`HIGH`, `MEDIUM`, `LOW`) and a `recommendedAction`. See the [Risk Matrix](#-risk-matrix) section.
+
+**Step 4 — Maps Enrichment:** Two sequential HTTP Request nodes call Google Maps — first to geocode the incident location (text → coordinates + formatted address), then to get real detour alternatives from the affected area. If either call fails (quota exceeded, key invalid), a fallback node injects safe defaults so the workflow never stops.
+
+**Step 5 — Gateway POST:** The enriched payload is sent to `WEBHOOK_TARGET` — the endpoint that will trigger VROOM route re-optimization. This happens regardless of risk level.
+
+**Step 6 — Telegram Alert:** An IF node checks whether `riskLevel` is `HIGH` or `CRITICAL`. If yes, the Telegram node fires. If no, a log node records the skip reason and the workflow ends cleanly.
+
+---
+
+## 🧠 Risk Matrix
+
+The risk classification is deterministic — no ML, no probabilities. Given an `eventType` and `severity`, the outcome is always the same.
 
 | Severity | Event Type | Risk Level | Recommended Action |
 |---|---|---|---|
-| `CRITICAL` | `ROAD_CLOSURE` | `HIGH` | Reroute immediately and notify operations/driver |
-| `HIGH` | `TRAFFIC_JAM` | `MEDIUM` | Calculate detour and monitor ETA impact |
-| `LOW` | `WEATHER_ALERT` | `LOW` | Monitor conditions and keep current route |
+| `CRITICAL` | `road_closure` | 🔴 HIGH | Reroute immediately and notify operations/driver |
+| `HIGH` | `traffic_jam` | 🟠 MEDIUM | Calculate detour and monitor ETA impact |
+| `LOW` | `weather_alert` | 🟡 LOW | Monitor conditions and keep current route |
 
-If an event type is not natively supported by the gateway DTO, the workflow maps it to a compatible gateway value while preserving the original type in risk metadata.
+**Fallback rule:** if no exact `eventType + severity` match is found, the Switch falls through to a severity-only rule: `CRITICAL` → HIGH, `HIGH` → MEDIUM, everything else → LOW.
 
-## Step 5 — Telegram Notifications via OpenClaw
+---
 
-### Architecture Decision Record (ADR)
+## 📍 Maps Enrichment
 
-**Considered option:** Twilio + WhatsApp Business API.
+Two Google Maps API calls enrich the raw event payload before it reaches the gateway.
+
+**Geocode Incident** — converts `locationDescription` (a human-readable string like `"Autopista Norte - Calle 100, Bogotá"`) into:
+- `incidentAddress`: formatted address from Google
+- `incidentLat` / `incidentLng`: precise coordinates
+
+**Get Detour Alternatives** — uses the incident coordinates as an avoided waypoint and requests up to 3 alternative routes. Produces:
+- `alternativeRoutes`: count of viable detours found
+- `detourRecommended`: boolean
+- `bestRoute.durationInTrafficSec`: estimated travel time on the best alternative
+
+**Fallback behavior:** if Google returns `REQUEST_DENIED`, `OVER_QUERY_LIMIT`, or any network error, a fallback Set node injects neutral defaults (`detourRecommended: false`, `alternativeRoutes: 0`) and the workflow continues. The reroute trigger and Telegram alert still fire.
+
+---
+
+## 🔔 Telegram Notifications
+
+Alerts are sent directly from n8n to the Telegram Bot API. No external notification service is required.
+
+### Message format
+
+```
+LogiFlow Alert 🚨
+─────────────────────────
+Risk:      HIGH
+Event:     ROAD_CLOSURE
+Severity:  CRITICAL
+Address:   Autopista Norte - Calle 100, Bogotá, Colombia
+Detour alternatives: 2
+Detour recommended:  Yes
+Action:    Reroute immediately and notify operations/driver
+Timestamp: 2026-03-13T12:00:00.000Z
+```
+
+### Bot setup (BotFather)
+
+1. Open Telegram → search `@BotFather` → send `/newbot`
+2. Choose a display name: `LogiFlow Alerts`
+3. Choose a username: `logiflow_alerts_bot`
+4. Copy the token → add to `.env` as `TELEGRAM_BOT_TOKEN`
+5. Open a chat with your new bot and send any message to activate it
+6. Get your `TELEGRAM_CHAT_ID`:
+
+```bash
+curl https://api.telegram.org/bot<YOUR_TOKEN>/getUpdates
+# Look for "chat": { "id": 123456789 } in the response
+```
+
+7. Add that ID to `.env` as `TELEGRAM_CHAT_ID`
+
+Alerts only fire for `HIGH` and `CRITICAL` risk levels. `MEDIUM` and `LOW` events are logged internally but do not produce a notification.
+
+---
+
+## 🤖 Why OpenClaw Instead of Twilio (ADR)
+
+This section documents the architectural decision made at the start of Sprint 2, Step 5.
+
+### What was considered
+
+**Option A — Twilio + WhatsApp Business API**
+
+The original plan. Twilio is battle-tested and WhatsApp has massive reach in Colombia (the target market for LogiFlow).
 
 **Why it was rejected:**
-- WhatsApp Business API requires Meta manual approval (days/weeks), which is not sprint-friendly.
-- Twilio introduces a paid per-message dependency.
-- It adds an external operational dependency for a feature that can run locally.
+- WhatsApp Business API requires manual approval from Meta — a process that can take days or weeks, which is incompatible with a sprint deadline
+- Twilio adds a paid per-message dependency with no free tier for production use
+- Introduces an external billing account and API key management overhead for an academic project
 
-**Chosen option:** OpenClaw + Telegram (BotFather).
+**Option B — OpenClaw + Telegram (chosen)**
 
-**Why this is better for Sprint 2:**
-- Zero-cost local runtime.
-- No approval process required.
-- Native Telegram support with fast setup.
-- OpenClaw is not only a forwarder: it is the reasoning layer that composes context-aware alerts using Claude.
+OpenClaw is an open-source autonomous AI agent that runs locally in Docker. It uses messaging platforms — Telegram, WhatsApp, Discord, Slack — as its primary user interface, and routes messages through a configured LLM (Claude in this project).
 
-### What OpenClaw Does in LogiFlow
+**Why it was chosen:**
+- Zero cost — no billing, no approval, no rate limits for development
+- Telegram bot setup via BotFather takes under 5 minutes
+- OpenClaw runs entirely in Docker alongside n8n on `logiflow-net` — no external dependencies
+- Acts as an **AI reasoning layer**, not just a forwarder: it receives the structured JSON payload and uses Claude to compose a context-aware, human-readable message rather than a templated string
+- Separates concerns cleanly: n8n handles orchestration, OpenClaw handles intelligence and delivery
 
-n8n handles orchestration and branching. OpenClaw handles intelligence and delivery. n8n sends structured risk payloads, OpenClaw transforms them into dispatcher-friendly natural language alerts, and Telegram delivers those alerts to phones.
+### OpenClaw in the LogiFlow architecture
 
 ```mermaid
 graph LR
-    A[n8n Switch - Risk Matrix] -->|HIGH or CRITICAL| B[OpenClaw HTTP Skill]
-    B --> C[Claude - Compose message]
-    C --> D[Telegram Bot]
-    D --> E[Dispatcher Phone]
-    A -->|LOW| F[Log only]
+    A[n8n - Risk Matrix Switch] -->|HIGH or CRITICAL| B[OpenClaw HTTP Skill]
+    B --> C[Claude - Compose context-aware message]
+    C --> D[Telegram Bot API]
+    D --> E[📱 Dispatcher phone]
+    A -->|LOW or MEDIUM| F[Log only]
 ```
 
-### BotFather Setup
+> **Current status:** the direct Telegram node in n8n is the validated runtime path. The OpenClaw path is fully documented and runnable for demonstration purposes, and represents the target architecture for Sprint 3 when the reasoning layer becomes more relevant.
 
-1. Open Telegram and search `@BotFather`, then run `/newbot`.
-2. Use bot name `LogiFlow Alerts` and username `logiflow_alerts_bot` (or similar available username).
-3. Copy the token and put it in `.env` as `TELEGRAM_BOT_TOKEN`.
-4. Start a chat with your new bot to activate it.
-5. Get your chat ID using `https://api.telegram.org/bot<TOKEN>/getUpdates`.
-
-### Running Step 5
+### Running OpenClaw locally
 
 ```bash
-docker network create logiflow-net   # if not already created
-cp openclaw/.env.example openclaw/.env
+# Ensure the shared network exists
+docker network create logiflow-net
+
+# Start OpenClaw
 docker compose -f openclaw/docker-compose.yml up -d
+
+# Start n8n (if not already running)
 docker compose -f n8n/docker-compose.yml up -d
+
+# Start mock server
 node mock-server/index.js
-```
-
-### OpenClaw Notification Payload Contract
-
-n8n sends this payload to OpenClaw for HIGH/CRITICAL branches:
-
-```json
-{
-  "eventType": "ROAD_CLOSURE",
-  "severity": "CRITICAL",
-  "locationDescription": "Autopista Norte - Calle 100, Bogota",
-  "affectedVehicles": ["V001", "V003"],
-  "riskLevel": "HIGH",
-  "action": "Reroute immediately and notify operations/driver",
-  "timestamp": "2026-03-13T12:00:00.000Z"
-}
-```
-
-3. The workflow now enriches the event with Google Maps data before calling the backend:
-
-- `Geocode Incident` resolves a location description to coordinates
-- `Get Detour Alternatives` requests live route alternatives from Directions API
-- `Assess Detour` computes `detourRecommended` and alternative route count
-
-4. In n8n execution details, the final **"Success – Route Re-optimization"** node should output:
-
-```json
-{
-  "message": "Route re-optimization triggered successfully",
-  "vehiclesAffected": 1,
-  "triggeredAt": "2026-03-02T10:00:00.000Z",
-  "detourRecommended": true,
-  "alternativeRoutes": 1,
-  "incidentAddress": "Autopista Norte - Calle 100, Bogota, Colombia"
-}
 ```
 
 ---
 
-### Bonus — Manual Testing with Postman
+## 🧪 Testing
 
-Import `postman/LogiFlow-Sprint1.json` into Postman and run both requests:
+```bash
+# Lint
+npm run lint
 
-| Request | Expected |
+# Unit tests with coverage report
+npm test
+
+# Watch mode for development
+npm run test:watch
+```
+
+### Test coverage
+
+| File | What is tested |
 |---|---|
-| POST with valid payload | `200 OK` · `{ "status": "received" }` |
-| POST with empty body | `400 Bad Request` · missing fields message |
+| `test/workflow.test.js` | Payload contract, required fields, coordinate ranges, enum values |
+| `test/notify.test.js` | Message builder output, missing field errors, emoji by severity, timestamp formatting |
+
+Coverage threshold is enforced by Jest. The CI pipeline fails if coverage drops below 80%.
 
 ---
 
 ## ⚙️ CI Pipeline
 
-Every push to `main`, `develop`, or any `feature/**` branch triggers the pipeline:
+Every push to `main`, `develop`, or any `feature/**` branch triggers the pipeline automatically.
 
 ```
 push / pull_request
-        │
-        ▼
-┌────────────────────┐
-│  1. Checkout code  │  (full history for SonarCloud blame)
-└────────┬───────────┘
-         │
-┌────────▼───────────┐
-│  2. Setup Node 20  │  (with npm cache)
-└────────┬───────────┘
-         │
-┌────────▼───────────┐
-│  3. npm ci         │  (clean install from lock file)
-└────────┬───────────┘
-         │
-┌────────▼───────────┐
-│  4. ESLint         │  → enforces no-var, prefer-const, eqeqeq, curly
-└────────┬───────────┘
-         │
-┌────────▼───────────┐
-│  5. Jest + lcov    │  → unit tests + coverage report
-└────────┬───────────┘
-         │
-┌────────▼───────────┐
-│  6. SonarCloud     │  → quality gate, duplications, bugs, smells
-└────────────────────┘
+      ↓
+Install dependencies (npm ci)
+      ↓
+ESLint (npm run lint)
+      ↓
+Jest + coverage (lcov report generated)
+      ↓
+SonarCloud analysis
 ```
 
-### Required Secrets (GitHub → Settings → Secrets → Actions)
+### Required GitHub secret
 
-| Secret | Description |
+| Secret | Where to get it |
 |---|---|
-| `SONAR_TOKEN` | Generated in SonarCloud under your account |
+| `SONAR_TOKEN` | sonarcloud.io → your project → Administration → Analysis Method |
+
+### PR checklist before merge
+
+- [ ] `npm run lint` passes locally
+- [ ] `npm test` passes with no failures
+- [ ] n8n workflow re-imported and activated after any JSON changes
+- [ ] Telegram alert validated manually with a `CRITICAL` payload
 
 ---
 
 ## 📁 Project Structure
 
 ```
-logiflow-n8n-trigger/
+services/automation/
 ├── .github/
 │   └── workflows/
-│       └── ci.yml              # GitHub Actions: lint → test → SonarCloud
-├── n8n/
-│   ├── docker-compose.yml      # Spins up n8n on port 5678
-│   └── workflows/
-│       └── traffic-event-trigger.json  # Importable n8n workflow (6 nodes)
+│       └── ci.yml                        ← GitHub Actions pipeline
 ├── mock-server/
-│   └── index.js                # Express server – stands in for NestJS (Sprint 1)
-├── sample-data/
-│   └── traffic-event.json      # Shared team payload contract
-├── test/
-│   └── workflow.test.js        # Jest unit tests: payload + mock server
+│   ├── index.js                          ← Express server (stand-in for NestJS gateway)
+│   └── message-builder.js               ← Pure function: builds Telegram message string
+├── n8n/
+│   ├── docker-compose.yml               ← n8n Docker service on logiflow-net
+│   └── workflows/
+│       └── traffic-event-trigger.json   ← Full n8n workflow (importable)
+├── openclaw/
+│   ├── docker-compose.yml               ← OpenClaw Docker service on logiflow-net
+│   ├── openclaw.json                    ← OpenClaw config template (no secrets)
+│   └── skills/
+│       └── logiflow-notify.js           ← Custom skill: receives payload, calls Telegram
 ├── postman/
-│   └── LogiFlow-Sprint1.json   # Postman collection for manual testing
-├── .eslintrc.json              # ESLint rules (no-var, prefer-const, strict equality)
-├── .gitignore                  # Ignores node_modules, coverage, .env, dist
-├── sonar-project.properties    # SonarCloud configuration
-├── package.json                # Scripts: start, lint, test, test:watch
-└── README.md                   # You are here 👋
+│   └── LogiFlow-Sprint2.json            ← Postman collection for manual testing
+├── sample-data/
+│   └── traffic-event.json               ← Shared payload contract (used by all services)
+├── test/
+│   ├── workflow.test.js                 ← Payload validation tests
+│   └── notify.test.js                   ← Message builder tests
+├── .env.example                         ← All required variables with comments
+├── .eslintrc.json
+├── .gitignore
+├── package.json
+├── sonar-project.properties
+└── README.md
 ```
 
 ---
 
-## 🧪 Running Tests
+## 🛠️ Troubleshooting
 
+**`Wrong type: 'true' is a boolean but was expecting a string` in n8n**
+
+This happens in the `Notification Delivered?` IF node when the comparison type is wrong. Fix:
+- Left value: `={{ $json.ok }}`
+- Operator type: `boolean`
+- Right value: `true` (not the string `"true"`)
+
+**Telegram alert arrives but the workflow shows an error downstream**
+
+The Telegram node succeeded but a downstream IF node is comparing incompatible types. Check that all IF nodes use the correct value types (boolean vs string).
+
+**Google Maps returns `REQUEST_DENIED`**
+
+Your API key does not have Geocoding or Directions API enabled. Go to [Google Cloud Console](https://console.cloud.google.com/) → APIs & Services → Enable both APIs for your key.
+
+**n8n cannot reach OpenClaw**
+
+Both services must be on the same Docker network. Verify with:
 ```bash
-# Run all tests with coverage
-npm test
-
-# Run in watch mode during development
-npm run test:watch
-
-# Run linter
-npm run lint
+docker network inspect logiflow-net
 ```
+Both `n8n` and `openclaw` containers must appear in the output.
 
-Expected test output:
+**Port reference**
 
-```
-PASS test/workflow.test.js
-  Traffic Event Payload
-    ✓ should contain all required fields
-    ✓ affectedVehicles should be a non-empty array
-    ✓ eventType should be a valid enum value
-    ✓ location should have valid Bogotá coordinate ranges
-    ✓ severity should be a valid enum value
-  Traffic Event Payload – Mock Server Validation
-    ✓ should return 200 with valid payload
-    ✓ should return 400 when eventType is missing
-    ✓ should return 400 when affectedVehicles is missing
-    ✓ should return 400 when body is empty
-```
+| Service | Port |
+|---|---|
+| n8n | `5678` |
+| Mock server | `3002` |
+| OpenClaw Gateway | `18789` |
+
+---
+
+## 🔒 Security Notes
+
+- Never commit `.env` files — they are in `.gitignore`
+- Rotate any token or key immediately if it appears in logs, chat, or a commit
+- `sonar-project.properties` contains no secrets — it is safe to commit
+- OpenClaw config template (`openclaw.json`) uses `${ENV_VAR}` placeholders — actual values come from `.env` only
 
 ---
 
@@ -359,7 +458,7 @@ PASS test/workflow.test.js
 | **Andersson David Sánchez Méndez** | DevOps / Automation Engineer |
 | **Cristian Santiago Pedraza Rodríguez** | Backend Engineer |
 | **Elizabeth Correa Suárez** | Frontend Engineer |
-| **Juan Sebastian Ortega Muñoz** | Optimization / Algorithms Engineer |
+| **Juan Sebastián Ortega Muñoz** | Optimization / Algorithms Engineer |
 
 ---
 
