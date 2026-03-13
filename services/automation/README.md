@@ -133,6 +133,7 @@ curl -X POST "http://localhost:5678/webhook/logiflow/traffic-event" \
   -H "Content-Type: application/json" \
   -d '{
     "eventType": "traffic_jam",
+    "severity": "HIGH",
     "vehicles": [
       { "id": "v-001", "lat": 4.7110, "lng": -74.0721, "capacity": 12 }
     ],
@@ -141,6 +142,16 @@ curl -X POST "http://localhost:5678/webhook/logiflow/traffic-event" \
     ]
   }'
 ```
+
+Risk matrix is evaluated in the `Evaluate Risk Matrix` node using `severity + eventType`.
+
+| Severity | Event Type | Risk Level | Recommended Action |
+|---|---|---|---|
+| `CRITICAL` | `ROAD_CLOSURE` | `HIGH` | Reroute immediately and notify operations/driver |
+| `HIGH` | `TRAFFIC_JAM` | `MEDIUM` | Calculate detour and monitor ETA impact |
+| `LOW` | `WEATHER_ALERT` | `LOW` | Monitor conditions and keep current route |
+
+If an event type is not natively supported by the gateway DTO, the workflow maps it to a compatible gateway value while preserving the original type in risk metadata.
 
 3. The workflow now enriches the event with Google Maps data before calling the backend:
 

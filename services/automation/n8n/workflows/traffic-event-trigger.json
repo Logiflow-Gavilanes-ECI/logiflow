@@ -26,6 +26,16 @@
     },
     {
       "parameters": {
+        "jsCode": "const payload = $json;\n\nconst severityRaw = String(payload.severity ?? 'MEDIUM').toUpperCase();\nconst eventTypeRaw = String(payload.eventType ?? 'traffic_jam').toUpperCase();\n\nconst severity = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'].includes(severityRaw) ? severityRaw : 'MEDIUM';\nconst eventTypeAliases = {\n  TRAFFIC_JAM: 'TRAFFIC_JAM',\n  TRAFFIC: 'TRAFFIC_JAM',\n  ROAD_CLOSURE: 'ROAD_CLOSURE',\n  CLOSURE: 'ROAD_CLOSURE',\n  WEATHER_ALERT: 'WEATHER_ALERT',\n  WEATHER: 'WEATHER_ALERT'\n};\nconst eventType = eventTypeAliases[eventTypeRaw] || eventTypeRaw;\n\nconst exactMatrix = {\n  'CRITICAL::ROAD_CLOSURE': { riskLevel: 'HIGH', riskColor: 'red', recommendedAction: 'Reroute immediately and notify operations/driver' },\n  'HIGH::TRAFFIC_JAM': { riskLevel: 'MEDIUM', riskColor: 'orange', recommendedAction: 'Calculate detour and monitor ETA impact' },\n  'LOW::WEATHER_ALERT': { riskLevel: 'LOW', riskColor: 'yellow', recommendedAction: 'Monitor conditions and keep current route' }\n};\n\nconst severityFallback = {\n  CRITICAL: { riskLevel: 'HIGH', riskColor: 'red', recommendedAction: 'Reroute immediately and notify operations/driver' },\n  HIGH: { riskLevel: 'MEDIUM', riskColor: 'orange', recommendedAction: 'Calculate detour and monitor ETA impact' },\n  MEDIUM: { riskLevel: 'MEDIUM', riskColor: 'orange', recommendedAction: 'Assess detour options and continue monitoring' },\n  LOW: { riskLevel: 'LOW', riskColor: 'yellow', recommendedAction: 'Monitor conditions and keep current route' }\n};\n\nconst gatewayEventTypeMap = {\n  TRAFFIC_JAM: 'traffic_jam',\n  ROAD_CLOSURE: 'traffic_jam',\n  WEATHER_ALERT: 'weather_change'\n};\nconst gatewayEventType = gatewayEventTypeMap[eventType] || 'traffic_jam';\n\nconst key = `${severity}::${eventType}`;\nconst result = exactMatrix[key] || severityFallback[severity] || severityFallback.MEDIUM;\n\nreturn [{\n  json: {\n    ...payload,\n    severity,\n    gatewayEventType,\n    risk: {\n      eventType,\n      severity,\n      riskLevel: result.riskLevel,\n      riskColor: result.riskColor,\n      recommendedAction: result.recommendedAction\n    }\n  }\n}];"
+      },
+      "id": "a1b2c3d4-0010-0010-0010-000000000010",
+      "name": "Evaluate Risk Matrix",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [570, 120]
+    },
+    {
+      "parameters": {
         "method": "GET",
         "url": "https://maps.googleapis.com/maps/api/geocode/json",
         "sendQuery": true,
@@ -94,7 +104,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const payload = $('Normalize Incoming Payload').item.json;\nconst geocodeItem = $('Geocode Incident').item ?? {};\nconst directionsItem = $('Get Detour Alternatives').item ?? {};\n\nconst geocode = geocodeItem.json ?? {};\nconst directions = directionsItem.json ?? {};\nconst geocodeError = geocodeItem.error ?? null;\nconst directionsError = directionsItem.error ?? null;\n\nconst blockedStatuses = ['REQUEST_DENIED', 'OVER_QUERY_LIMIT'];\nconst geocodeStatus = geocode.status ?? 'UNKNOWN';\nconst directionsStatus = directions.status ?? 'UNKNOWN';\nconst geocodeBlocked = blockedStatuses.includes(geocodeStatus);\nconst directionsBlocked = blockedStatuses.includes(directionsStatus);\n\nconst mapsFallback = Boolean(geocodeError || directionsError || geocodeBlocked || directionsBlocked);\n\nconst routes = Array.isArray(directions.routes) ? directions.routes : [];\nconst bestRoute = routes[0] || null;\nconst alternativeRoutes = mapsFallback ? 0 : Math.max(routes.length - 1, 0);\n\nlet incidentLocation = null;\nlet formattedAddress = payload.locationDescription || payload.location?.description || null;\nif (!mapsFallback && Array.isArray(geocode.results) && geocode.results.length > 0) {\n  const first = geocode.results[0];\n  formattedAddress = first.formatted_address ?? formattedAddress;\n  incidentLocation = first.geometry?.location ?? null;\n}\n\nconst durationInTrafficSec = mapsFallback ? null : (bestRoute?.legs?.[0]?.duration_in_traffic?.value ?? bestRoute?.legs?.[0]?.duration?.value ?? null);\nconst distanceMeters = mapsFallback ? null : (bestRoute?.legs?.[0]?.distance?.value ?? null);\n\nconst detourRecommended = mapsFallback ? false : alternativeRoutes > 0;\n\nreturn [{\n  json: {\n    eventType: payload.eventType,\n    vehicles: payload.vehicles,\n    stops: payload.stops,\n    maps: {\n      geocodingStatus: geocodeStatus,\n      directionsStatus: directionsStatus,\n      fallbackApplied: mapsFallback,\n      fallbackReason: mapsFallback ? (geocodeError?.message || directionsError?.message || geocodeStatus || directionsStatus) : null,\n      incidentAddress: formattedAddress,\n      incidentLocation,\n      alternativeRoutes,\n      detourRecommended,\n      bestRoute: {\n        durationInTrafficSec,\n        distanceMeters\n      }\n    }\n  }\n}];"
+        "jsCode": "const payload = $('Evaluate Risk Matrix').item.json;\nconst geocodeItem = $('Geocode Incident').item ?? {};\nconst directionsItem = $('Get Detour Alternatives').item ?? {};\n\nconst geocode = geocodeItem.json ?? {};\nconst directions = directionsItem.json ?? {};\nconst geocodeError = geocodeItem.error ?? null;\nconst directionsError = directionsItem.error ?? null;\n\nconst blockedStatuses = ['REQUEST_DENIED', 'OVER_QUERY_LIMIT'];\nconst geocodeStatus = geocode.status ?? 'UNKNOWN';\nconst directionsStatus = directions.status ?? 'UNKNOWN';\nconst geocodeBlocked = blockedStatuses.includes(geocodeStatus);\nconst directionsBlocked = blockedStatuses.includes(directionsStatus);\n\nconst mapsFallback = Boolean(geocodeError || directionsError || geocodeBlocked || directionsBlocked);\n\nconst routes = Array.isArray(directions.routes) ? directions.routes : [];\nconst bestRoute = routes[0] || null;\nconst alternativeRoutes = mapsFallback ? 0 : Math.max(routes.length - 1, 0);\n\nlet incidentLocation = null;\nlet formattedAddress = payload.locationDescription || payload.location?.description || null;\nif (!mapsFallback && Array.isArray(geocode.results) && geocode.results.length > 0) {\n  const first = geocode.results[0];\n  formattedAddress = first.formatted_address ?? formattedAddress;\n  incidentLocation = first.geometry?.location ?? null;\n}\n\nconst durationInTrafficSec = mapsFallback ? null : (bestRoute?.legs?.[0]?.duration_in_traffic?.value ?? bestRoute?.legs?.[0]?.duration?.value ?? null);\nconst distanceMeters = mapsFallback ? null : (bestRoute?.legs?.[0]?.distance?.value ?? null);\n\nconst detourRecommended = mapsFallback ? false : alternativeRoutes > 0;\n\nreturn [{\n  json: {\n    eventType: payload.gatewayEventType || payload.eventType,\n    sourceEventType: payload.eventType,\n    severity: payload.severity,\n    risk: payload.risk,\n    vehicles: payload.vehicles,\n    stops: payload.stops,\n    maps: {\n      geocodingStatus: geocodeStatus,\n      directionsStatus: directionsStatus,\n      fallbackApplied: mapsFallback,\n      fallbackReason: mapsFallback ? (geocodeError?.message || directionsError?.message || geocodeStatus || directionsStatus) : null,\n      incidentAddress: formattedAddress,\n      incidentLocation,\n      alternativeRoutes,\n      detourRecommended,\n      bestRoute: {\n        durationInTrafficSec,\n        distanceMeters\n      }\n    }\n  }\n}];"
       },
       "id": "a1b2c3d4-0009-0009-0009-000000000009",
       "name": "Assess Detour",
@@ -191,6 +201,24 @@
               "name": "incidentAddress",
               "value": "={{ $('Assess Detour').item.json.maps.incidentAddress }}",
               "type": "string"
+            },
+            {
+              "id": "s007",
+              "name": "riskLevel",
+              "value": "={{ $('Assess Detour').item.json.risk.riskLevel }}",
+              "type": "string"
+            },
+            {
+              "id": "s008",
+              "name": "recommendedAction",
+              "value": "={{ $('Assess Detour').item.json.risk.recommendedAction }}",
+              "type": "string"
+            },
+            {
+              "id": "s009",
+              "name": "severity",
+              "value": "={{ $('Assess Detour').item.json.severity }}",
+              "type": "string"
             }
           ]
         },
@@ -248,6 +276,17 @@
       ]
     },
     "Normalize Incoming Payload": {
+      "main": [
+        [
+          {
+            "node": "Evaluate Risk Matrix",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evaluate Risk Matrix": {
       "main": [
         [
           {
