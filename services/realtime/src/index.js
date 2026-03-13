@@ -4,6 +4,8 @@ const { startPositionBroadcast } = require('./events/position');
 const { emitRouteUpdate } = require('./events/routeUpdate');
 require('dotenv').config();
 
+const vehicleHeartbeats = {};
+
 const PORT = process.env.PORT || 3001;
 
 async function main() {
@@ -37,6 +39,14 @@ async function main() {
   });
 
   io.on('connection', (socket) => {
+    socket.on('vehicle:position', (data) => {
+      const { vehicleId } = data;
+      if (vehicleId) {
+        vehicleHeartbeats[vehicleId] = Date.now();
+        console.log(`Heartbeat actualizado: ${vehicleId} → ${vehicleHeartbeats[vehicleId]}`);
+      }
+    });
+
     socket.on('route-update', (incoming) => {
       console.log('Core backend/front connected:', socket.id);
 
