@@ -232,5 +232,37 @@
     updateClock();
   </script>
 
+  <script>
+    const GOOGLE_MAPS_API_KEY = 'YOUR_GOOGLE_MAPS_API_KEY';
+  </script>
+
+  <script>
+    let map;
+
+    function initMap() {
+      map = new google.maps.Map(document.getElementById('map'), {
+        center: { lat: 4.7110, lng: -74.0721 },
+        zoom: 13,
+        styles: [
+          { elementType: 'geometry',           stylers: [{ color: '#0d1420' }] },
+          { elementType: 'labels.text.fill',   stylers: [{ color: '#4a5568' }] },
+          { elementType: 'labels.text.stroke', stylers: [{ color: '#080c14' }] },
+          { featureType: 'road',             elementType: 'geometry',        stylers: [{ color: '#1a2540' }] },
+          { featureType: 'road',             elementType: 'geometry.stroke', stylers: [{ color: '#080c14' }] },
+          { featureType: 'road.highway',     elementType: 'geometry',        stylers: [{ color: '#1f3060' }] },
+          { featureType: 'water',            elementType: 'geometry',        stylers: [{ color: '#060a10' }] },
+          { featureType: 'poi',              stylers: [{ visibility: 'off' }] },
+          { featureType: 'transit',          stylers: [{ visibility: 'off' }] },
+        ]
+      });
+    }
+  </script>
+
+  <script
+    src="https://maps.googleapis.com/maps/api/js?key=YOUR_GOOGLE_MAPS_API_KEY&callback=initMap"
+    async defer>
+  </script>
+
+
 </body>
 </html>
