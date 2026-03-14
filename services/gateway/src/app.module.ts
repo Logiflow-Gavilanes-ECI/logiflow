@@ -8,6 +8,7 @@ import { SocketClientModule } from './socket-client/socket-client.module';
 import { VehiclesModule } from './vehicles/vehicles.module';
 import { StopsModule } from './stops/stops.module';
 import { PrismaModule } from './prisma/prisma.module';
+import { RetryModule } from './common/retry/retry.module';
 import { CorrelationIdMiddleware } from './common/middleware/correlation-id.middleware';
 
 @Module({
@@ -16,6 +17,7 @@ import { CorrelationIdMiddleware } from './common/middleware/correlation-id.midd
       isGlobal: true,
     }),
     PrismaModule,
+    RetryModule,
     GrpcClientModule,
     SocketClientModule,
     WebhookModule,

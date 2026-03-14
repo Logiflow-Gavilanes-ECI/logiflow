@@ -2,10 +2,18 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { WebhookService } from './webhook.service';
 import { GrpcClientService } from '../grpc-client/grpc-client.service';
 import { SocketClientService } from '../socket-client/socket-client.service';
+import { RetryService } from '../common/retry/retry.service';
 
 const mockSocketClientService = {
   emitRouteUpdate: jest.fn(),
   isConnected: jest.fn().mockReturnValue(false),
+};
+
+// executes the operation directly without delays so that unit tests remain synchronous and fast.
+const mockRetryService = {
+  execute: jest
+    .fn()
+    .mockImplementation((operation: () => Promise<unknown>) => operation()),
 };
 
 const mockGrpcClientService = {
@@ -32,6 +40,7 @@ describe('WebhookService', () => {
         WebhookService,
         { provide: GrpcClientService, useValue: mockGrpcClientService },
         { provide: SocketClientService, useValue: mockSocketClientService },
+        { provide: RetryService, useValue: mockRetryService },
       ],
     }).compile();
 
@@ -44,11 +53,14 @@ describe('WebhookService', () => {
 
   describe('handleEvent', () => {
     it('should call gRPC optimizer and return optimized routes', async () => {
-      const result = await service.handleEvent({
-        eventType: 'new_order',
-        vehicles: [{ id: 'v1', lat: 4.711, lng: -74.0721, capacity: 100 }],
-        stops: [{ id: 's1', lat: 4.6097, lng: -74.0817, demand: 20 }],
-      }, 'corr-123');
+      const result = await service.handleEvent(
+        {
+          eventType: 'new_order',
+          vehicles: [{ id: 'v1', lat: 4.711, lng: -74.0721, capacity: 100 }],
+          stops: [{ id: 's1', lat: 4.6097, lng: -74.0817, demand: 20 }],
+        },
+        'corr-123',
+      );
 
       expect(result.received).toBe(true);
       expect(result.eventType).toBe('new_order');
@@ -74,11 +86,14 @@ describe('WebhookService', () => {
         new Error('Connection refused'),
       );
 
-      const result = await service.handleEvent({
-        eventType: 'traffic_jam',
-        vehicles: [{ id: 'v1', lat: 4.711, lng: -74.0721, capacity: 100 }],
-        stops: [{ id: 's1', lat: 4.6097, lng: -74.0817, demand: 20 }],
-      }, 'corr-failure');
+      const result = await service.handleEvent(
+        {
+          eventType: 'traffic_jam',
+          vehicles: [{ id: 'v1', lat: 4.711, lng: -74.0721, capacity: 100 }],
+          stops: [{ id: 's1', lat: 4.6097, lng: -74.0817, demand: 20 }],
+        },
+        'corr-failure',
+      );
 
       expect(result.received).toBe(true);
       expect(result.optimizedRoutes).toBeDefined();

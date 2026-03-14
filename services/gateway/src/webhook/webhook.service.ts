@@ -7,6 +7,8 @@ import {
   SolveRouteResponse,
 } from '../grpc-client/interfaces/route-optimizer.interface';
 import { UNKNOWN_CORRELATION_ID } from '../common/constants/correlation-id.constant';
+import { RetryService } from '../common/retry/retry.service';
+import { DEFAULT_RETRY_OPTIONS } from '../common/retry/retry.options';
 
 @Injectable()
 export class WebhookService {
@@ -15,6 +17,7 @@ export class WebhookService {
   constructor(
     private readonly grpcClient: GrpcClientService,
     private readonly socketClient: SocketClientService,
+    private readonly retryService: RetryService,
   ) {}
 
   async handleEvent(event: WebhookEventDto, correlationId?: string) {
@@ -44,16 +47,20 @@ export class WebhookService {
     let optimizedRoutes: SolveRouteResponse;
 
     try {
-      optimizedRoutes = await this.grpcClient.solveRoute(
-        grpcRequest,
-        effectiveCorrelationId,
+      optimizedRoutes = await this.retryService.execute(
+        () => this.grpcClient.solveRoute(grpcRequest, effectiveCorrelationId),
+        {
+          correlationId: effectiveCorrelationId,
+          operationName: 'grpc.solveRoute',
+        },
+        DEFAULT_RETRY_OPTIONS,
       );
       this.logger.log(
         `Optimizer returned routes successfully | correlationId: ${effectiveCorrelationId}`,
       );
     } catch (error) {
       this.logger.warn(
-        `gRPC optimizer unavailable, using mock response | correlationId: ${effectiveCorrelationId}. ` +
+        `gRPC optimizer unavailable after all retries, using mock response | correlationId: ${effectiveCorrelationId}. ` +
           `Error: ${error instanceof Error ? error.message : String(error)}`,
       );
       optimizedRoutes = this.buildMockResponse(grpcRequest);
