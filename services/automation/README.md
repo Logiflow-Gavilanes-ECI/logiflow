@@ -1,7 +1,7 @@
 # LogiFlow — Automation Service
 
-[![CI Pipeline](https://img.shields.io/github/actions/workflow/status/your-org/logiflow-n8n-ci/ci.yml?label=CI&logo=githubactions&logoColor=white)](https://github.com/Logiflow-Gavilanes-ECI/logiflow/actions)
-[![SonarCloud Quality Gate](https://img.shields.io/sonar/quality_gate/logiflow-n8n-ci?server=https%3A%2F%2Fsonarcloud.io&logo=sonarcloud)](https://sonarcloud.io)
+[![CI Pipeline](https://img.shields.io/github/actions/workflow/status/Logiflow-Gavilanes-ECI/logiflow/ci.yml?label=CI&logo=githubactions&logoColor=white)](https://github.com/Logiflow-Gavilanes-ECI/logiflow/actions)
+[![SonarCloud Quality Gate](https://img.shields.io/sonar/quality_gate/logiflow?server=https%3A%2F%2Fsonarcloud.io&logo=sonarcloud)](https://sonarcloud.io)
 [![Node.js 20](https://img.shields.io/badge/node-20-brightgreen?logo=nodedotjs&logoColor=white)](https://nodejs.org/)
 [![n8n 2.10.3](https://img.shields.io/badge/n8n-2.10.3-ff6d5a?logo=n8n&logoColor=white)](https://n8n.io/)
 [![Sprint 2](https://img.shields.io/badge/Sprint-2-229ED9?logo=azuredevops&logoColor=white)](#)
