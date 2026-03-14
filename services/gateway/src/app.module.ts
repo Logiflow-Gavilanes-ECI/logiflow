@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -8,6 +8,7 @@ import { SocketClientModule } from './socket-client/socket-client.module';
 import { VehiclesModule } from './vehicles/vehicles.module';
 import { StopsModule } from './stops/stops.module';
 import { PrismaModule } from './prisma/prisma.module';
+import { CorrelationIdMiddleware } from './common/middleware/correlation-id.middleware';
 
 @Module({
   imports: [
@@ -24,4 +25,8 @@ import { PrismaModule } from './prisma/prisma.module';
   controllers: [AppController],
   providers: [AppService],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer): void {
+    consumer.apply(CorrelationIdMiddleware).forRoutes('*');
+  }
+}

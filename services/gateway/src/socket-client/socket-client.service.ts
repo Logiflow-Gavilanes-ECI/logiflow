@@ -7,6 +7,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { io, Socket } from 'socket.io-client';
 import { SolveRouteResponse } from '../grpc-client/interfaces/route-optimizer.interface';
+import { UNKNOWN_CORRELATION_ID } from '../common/constants/correlation-id.constant';
 
 @Injectable()
 export class SocketClientService implements OnModuleInit, OnModuleDestroy {
@@ -60,9 +61,16 @@ export class SocketClientService implements OnModuleInit, OnModuleDestroy {
     return this.connected;
   }
 
-  emitRouteUpdate(eventType: string, routes: SolveRouteResponse): void {
+  emitRouteUpdate(
+    eventType: string,
+    routes: SolveRouteResponse,
+    correlationId?: string,
+  ): void {
+    const effectiveCorrelationId = correlationId ?? UNKNOWN_CORRELATION_ID;
+
     const payload = {
       eventType,
+      correlationId: effectiveCorrelationId,
       routes: routes.routes,
       totalCost: routes.totalCost,
       solvedAt: routes.solvedAt,
@@ -72,11 +80,11 @@ export class SocketClientService implements OnModuleInit, OnModuleDestroy {
     if (this.connected) {
       this.socket.emit('route-update', payload);
       this.logger.log(
-        `Emitted route-update: ${routes.routes.length} routes for event ${eventType}`,
+        `Emitted route-update: ${routes.routes.length} routes for event ${eventType} | correlationId: ${effectiveCorrelationId}`,
       );
     } else {
       this.logger.warn(
-        'Socket.io server not connected. Route update not sent. ' +
+        `Socket.io server not connected. Route update not sent | correlationId: ${effectiveCorrelationId}. ` +
           'Will be sent when connection is restored.',
       );
     }

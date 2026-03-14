@@ -6,6 +6,7 @@ import {
   SolveRouteRequest,
   SolveRouteResponse,
 } from '../grpc-client/interfaces/route-optimizer.interface';
+import { UNKNOWN_CORRELATION_ID } from '../common/constants/correlation-id.constant';
 
 @Injectable()
 export class WebhookService {
@@ -16,9 +17,11 @@ export class WebhookService {
     private readonly socketClient: SocketClientService,
   ) {}
 
-  async handleEvent(event: WebhookEventDto) {
+  async handleEvent(event: WebhookEventDto, correlationId?: string) {
+    const effectiveCorrelationId = correlationId ?? UNKNOWN_CORRELATION_ID;
+
     this.logger.log(
-      `Received event: ${event.eventType} | vehicles: ${event.vehicles.length} | stops: ${event.stops.length}`,
+      `Received event: ${event.eventType} | vehicles: ${event.vehicles.length} | stops: ${event.stops.length} | correlationId: ${effectiveCorrelationId}`,
     );
 
     const grpcRequest: SolveRouteRequest = {
@@ -41,23 +44,33 @@ export class WebhookService {
     let optimizedRoutes: SolveRouteResponse;
 
     try {
-      optimizedRoutes = await this.grpcClient.solveRoute(grpcRequest);
-      this.logger.log('Optimizer returned routes successfully');
+      optimizedRoutes = await this.grpcClient.solveRoute(
+        grpcRequest,
+        effectiveCorrelationId,
+      );
+      this.logger.log(
+        `Optimizer returned routes successfully | correlationId: ${effectiveCorrelationId}`,
+      );
     } catch (error) {
       this.logger.warn(
-        'gRPC optimizer unavailable, using mock response. ' +
+        `gRPC optimizer unavailable, using mock response | correlationId: ${effectiveCorrelationId}. ` +
           `Error: ${error instanceof Error ? error.message : String(error)}`,
       );
       optimizedRoutes = this.buildMockResponse(grpcRequest);
     }
 
-    this.socketClient.emitRouteUpdate(event.eventType, optimizedRoutes);
+    this.socketClient.emitRouteUpdate(
+      event.eventType,
+      optimizedRoutes,
+      effectiveCorrelationId,
+    );
 
     return {
       received: true,
       eventType: event.eventType,
       vehicleCount: event.vehicles.length,
       stopCount: event.stops.length,
+      correlationId: effectiveCorrelationId,
       optimizedRoutes,
       socketConnected: this.socketClient.isConnected(),
       timestamp: new Date().toISOString(),

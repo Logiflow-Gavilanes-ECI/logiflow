@@ -48,19 +48,24 @@ describe('WebhookService', () => {
         eventType: 'new_order',
         vehicles: [{ id: 'v1', lat: 4.711, lng: -74.0721, capacity: 100 }],
         stops: [{ id: 's1', lat: 4.6097, lng: -74.0817, demand: 20 }],
-      });
+      }, 'corr-123');
 
       expect(result.received).toBe(true);
       expect(result.eventType).toBe('new_order');
+      expect(result.correlationId).toBe('corr-123');
       expect(result.vehicleCount).toBe(1);
       expect(result.stopCount).toBe(1);
       expect(result.optimizedRoutes).toBeDefined();
       expect(result.optimizedRoutes.routes).toHaveLength(1);
       expect(result.socketConnected).toBe(false);
-      expect(mockGrpcClientService.solveRoute).toHaveBeenCalled();
+      expect(mockGrpcClientService.solveRoute).toHaveBeenCalledWith(
+        expect.objectContaining({ eventType: 'new_order' }),
+        'corr-123',
+      );
       expect(mockSocketClientService.emitRouteUpdate).toHaveBeenCalledWith(
         'new_order',
         result.optimizedRoutes,
+        'corr-123',
       );
     });
 
@@ -73,13 +78,17 @@ describe('WebhookService', () => {
         eventType: 'traffic_jam',
         vehicles: [{ id: 'v1', lat: 4.711, lng: -74.0721, capacity: 100 }],
         stops: [{ id: 's1', lat: 4.6097, lng: -74.0817, demand: 20 }],
-      });
+      }, 'corr-failure');
 
       expect(result.received).toBe(true);
       expect(result.optimizedRoutes).toBeDefined();
       expect(result.optimizedRoutes.routes).toHaveLength(1);
       expect(result.optimizedRoutes.solvedAt).toBeDefined();
-      expect(mockSocketClientService.emitRouteUpdate).toHaveBeenCalled();
+      expect(mockSocketClientService.emitRouteUpdate).toHaveBeenCalledWith(
+        'traffic_jam',
+        result.optimizedRoutes,
+        'corr-failure',
+      );
     });
   });
 });
