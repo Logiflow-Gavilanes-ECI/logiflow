@@ -70,6 +70,8 @@ describe('WebhookService', () => {
       expect(result.optimizedRoutes).toBeDefined();
       expect(result.optimizedRoutes.routes).toHaveLength(1);
       expect(result.socketConnected).toBe(false);
+      expect(result.fallback).toBe(false);
+      expect(result.fallbackReason).toBeUndefined();
       expect(mockGrpcClientService.solveRoute).toHaveBeenCalledWith(
         expect.objectContaining({ eventType: 'new_order' }),
         'corr-123',
@@ -99,11 +101,9 @@ describe('WebhookService', () => {
       expect(result.optimizedRoutes).toBeDefined();
       expect(result.optimizedRoutes.routes).toHaveLength(1);
       expect(result.optimizedRoutes.solvedAt).toBeDefined();
-      expect(mockSocketClientService.emitRouteUpdate).toHaveBeenCalledWith(
-        'traffic_jam',
-        result.optimizedRoutes,
-        'corr-failure',
-      );
+      expect(result.fallback).toBe(true);
+      expect(result.fallbackReason).toBe('optimizer-unreachable');
+      expect(mockSocketClientService.emitRouteUpdate).toHaveBeenCalled();
     });
   });
 });

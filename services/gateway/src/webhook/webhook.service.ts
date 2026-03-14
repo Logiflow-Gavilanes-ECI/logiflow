@@ -8,7 +8,11 @@ import {
 } from '../grpc-client/interfaces/route-optimizer.interface';
 import { UNKNOWN_CORRELATION_ID } from '../common/constants/correlation-id.constant';
 import { RetryService } from '../common/retry/retry.service';
-import { DEFAULT_RETRY_OPTIONS } from '../common/retry/retry.options';
+import {
+  DEFAULT_RETRY_OPTIONS,
+  SOCKET_RETRY_OPTIONS,
+} from '../common/retry/retry.options';
+import { RetryExhaustedException } from '../common/retry/retry-exhausted.exception';
 
 @Injectable()
 export class WebhookService {
@@ -45,6 +49,7 @@ export class WebhookService {
     };
 
     let optimizedRoutes: SolveRouteResponse;
+    let optimizerFailed = false;
 
     try {
       optimizedRoutes = await this.retryService.execute(
@@ -59,18 +64,50 @@ export class WebhookService {
         `Optimizer returned routes successfully | correlationId: ${effectiveCorrelationId}`,
       );
     } catch (error) {
-      this.logger.warn(
-        `gRPC optimizer unavailable after all retries, using mock response | correlationId: ${effectiveCorrelationId}. ` +
-          `Error: ${error instanceof Error ? error.message : String(error)}`,
-      );
+      if (error instanceof RetryExhaustedException) {
+        this.logger.error(
+          `[grpc.solveRoute] exhausted ${error.attempts} attempt(s), activating fallback | ` +
+            `correlationId: ${effectiveCorrelationId} | lastError: ${error.lastErrorMessage}`,
+        );
+      } else {
+        this.logger.warn(
+          `gRPC optimizer unavailable, activating fallback | correlationId: ${effectiveCorrelationId}. ` +
+            `Error: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+      optimizerFailed = true;
       optimizedRoutes = this.buildMockResponse(grpcRequest);
     }
 
-    this.socketClient.emitRouteUpdate(
-      event.eventType,
-      optimizedRoutes,
-      effectiveCorrelationId,
-    );
+    try {
+      await this.retryService.execute(
+        () => {
+          this.socketClient.emitRouteUpdate(
+            event.eventType,
+            optimizedRoutes,
+            effectiveCorrelationId,
+          );
+          return Promise.resolve();
+        },
+        {
+          correlationId: effectiveCorrelationId,
+          operationName: 'socket.emitRouteUpdate',
+        },
+        SOCKET_RETRY_OPTIONS,
+      );
+    } catch (error) {
+      if (error instanceof RetryExhaustedException) {
+        this.logger.error(
+          `[socket.emitRouteUpdate] exhausted ${error.attempts} attempt(s) | ` +
+            `correlationId: ${effectiveCorrelationId} | lastError: ${error.lastErrorMessage}`,
+        );
+      } else {
+        this.logger.warn(
+          `Socket emit failed | correlationId: ${effectiveCorrelationId}. ` +
+            `Error: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
 
     return {
       received: true,
@@ -79,6 +116,8 @@ export class WebhookService {
       stopCount: event.stops.length,
       correlationId: effectiveCorrelationId,
       optimizedRoutes,
+      fallback: optimizerFailed,
+      fallbackReason: optimizerFailed ? 'optimizer-unreachable' : undefined,
       socketConnected: this.socketClient.isConnected(),
       timestamp: new Date().toISOString(),
     };

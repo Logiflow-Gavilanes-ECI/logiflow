@@ -1,4 +1,5 @@
 import { RetryService } from './retry.service';
+import { RetryExhaustedException } from './retry-exhausted.exception';
 
 describe('RetryService', () => {
   let service: RetryService;
@@ -44,12 +45,21 @@ describe('RetryService', () => {
       const error = new Error('permanent failure');
       const operation = jest.fn().mockRejectedValue(error);
 
-      const expectation = expect(
-        service.execute(operation, context, options),
-      ).rejects.toThrow('permanent failure');
+      let thrown: unknown;
+      const pending = service
+        .execute(operation, context, options)
+        .catch((e) => {
+          thrown = e;
+        });
       await jest.runAllTimersAsync();
-      await expectation;
+      await pending;
 
+      expect(thrown).toBeInstanceOf(RetryExhaustedException);
+      const ex = thrown as RetryExhaustedException;
+      expect(ex.operationName).toBe('test.op');
+      expect(ex.correlationId).toBe('corr-test');
+      expect(ex.attempts).toBe(3);
+      expect(ex.lastErrorMessage).toBe('permanent failure');
       expect(operation).toHaveBeenCalledTimes(3);
     });
 
@@ -57,13 +67,21 @@ describe('RetryService', () => {
       const error = new Error('instant fail');
       const operation = jest.fn().mockRejectedValue(error);
 
-      await expect(
-        service.execute(operation, context, {
+      let thrown: unknown;
+      try {
+        await service.execute(operation, context, {
           maxAttempts: 1,
           baseDelayMs: 100,
           maxDelayMs: 1000,
-        }),
-      ).rejects.toThrow('instant fail');
+        });
+      } catch (e) {
+        thrown = e;
+      }
+
+      expect(thrown).toBeInstanceOf(RetryExhaustedException);
+      expect((thrown as RetryExhaustedException).lastErrorMessage).toBe(
+        'instant fail',
+      );
       expect(operation).toHaveBeenCalledTimes(1);
     });
   });

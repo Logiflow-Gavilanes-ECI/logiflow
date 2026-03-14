@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { DEFAULT_RETRY_OPTIONS, RetryOptions } from './retry.options';
+import { RetryExhaustedException } from './retry-exhausted.exception';
 
 export interface RetryContext {
   correlationId: string;
@@ -13,9 +14,6 @@ export class RetryService {
   /**
    * Executes `operation` up to `options.maxAttempts` times using exponential
    * backoff with jitter between each failed attempt.
-   *
-   * Formula for delay before attempt n (0-indexed):
-   *   delay = min(baseDelayMs * 2^n, maxDelayMs) + random(0, delay * 0.2)
    *
    * If all attempts are exhausted, the last error is re-thrown so the caller
    * can decide the fallback strategy.
@@ -60,15 +58,26 @@ export class RetryService {
       }
     }
 
-    throw lastError;
+    const lastErrorMessage =
+      lastError instanceof Error ? lastError.message : String(lastError);
+    throw new RetryExhaustedException(
+      operationName,
+      correlationId,
+      maxAttempts,
+      lastErrorMessage,
+      lastError,
+    );
   }
 
-  /**
-   * Exponential backoff with ±20% jitter.
-   * attempt is 1-based so the first retry uses exponent 0 (baseDelayMs * 1).
-   */
-  computeDelay(attempt: number, baseDelayMs: number, maxDelayMs: number): number {
-    const exponential = Math.min(baseDelayMs * Math.pow(2, attempt - 1), maxDelayMs);
+  computeDelay(
+    attempt: number,
+    baseDelayMs: number,
+    maxDelayMs: number,
+  ): number {
+    const exponential = Math.min(
+      baseDelayMs * Math.pow(2, attempt - 1),
+      maxDelayMs,
+    );
     const jitter = Math.floor(Math.random() * exponential * 0.2);
     return exponential + jitter;
   }

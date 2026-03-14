@@ -83,9 +83,8 @@ export class SocketClientService implements OnModuleInit, OnModuleDestroy {
         `Emitted route-update: ${routes.routes.length} routes for event ${eventType} | correlationId: ${effectiveCorrelationId}`,
       );
     } else {
-      this.logger.warn(
-        `Socket.io server not connected. Route update not sent | correlationId: ${effectiveCorrelationId}. ` +
-          'Will be sent when connection is restored.',
+      throw new Error(
+        `Socket.io server not connected, route update not emitted | correlationId: ${effectiveCorrelationId}`,
       );
     }
   }
