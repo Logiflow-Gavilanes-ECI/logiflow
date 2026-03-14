@@ -40,6 +40,6 @@ export class StopsController {
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   remove(@Param('id') id: string) {
-    this.stopsService.remove(id);
+    return this.stopsService.remove(id);
   }
 }
