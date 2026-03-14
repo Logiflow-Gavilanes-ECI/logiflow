@@ -1,67 +1,37 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { randomUUID } from 'crypto';
 import { CreateStopDto } from './dto/create-stop.dto';
 import { UpdateStopDto } from './dto/update-stop.dto';
+import { StopsRepository, StopRecord } from './stops.repository';
 
-export interface StopEntity {
-  id: string;
-  lat: number;
-  lng: number;
-  demand: number;
-  priority: number;
-  createdAt: string;
-  updatedAt: string;
-}
+export type { StopRecord as StopEntity };
 
 @Injectable()
 export class StopsService {
-  private readonly stops = new Map<string, StopEntity>();
+  constructor(private readonly repo: StopsRepository) {}
 
-  findAll(): StopEntity[] {
-    return Array.from(this.stops.values());
+  findAll(): Promise<StopRecord[]> {
+    return this.repo.findAll();
   }
 
-  findOne(id: string): StopEntity {
-    const stop = this.stops.get(id);
+  async findOne(id: string): Promise<StopRecord> {
+    const stop = await this.repo.findById(id);
     if (!stop) {
       throw new NotFoundException(`Stop "${id}" not found`);
     }
     return stop;
   }
 
-  create(dto: CreateStopDto): StopEntity {
-    const now = new Date().toISOString();
-    const stop: StopEntity = {
-      id: dto.id ?? randomUUID(),
-      lat: dto.lat,
-      lng: dto.lng,
-      demand: dto.demand,
-      priority: dto.priority ?? 0,
-      createdAt: now,
-      updatedAt: now,
-    };
-    this.stops.set(stop.id, stop);
-    return stop;
+  create(dto: CreateStopDto): Promise<StopRecord> {
+    return this.repo.create(dto);
   }
 
-  update(id: string, dto: UpdateStopDto): StopEntity {
-    const stop = this.findOne(id);
-    const updated: StopEntity = {
-      ...stop,
-      ...(dto.lat !== undefined && { lat: dto.lat }),
-      ...(dto.lng !== undefined && { lng: dto.lng }),
-      ...(dto.demand !== undefined && { demand: dto.demand }),
-      ...(dto.priority !== undefined && { priority: dto.priority }),
-      updatedAt: new Date().toISOString(),
-    };
-    this.stops.set(id, updated);
-    return updated;
+  async update(id: string, dto: UpdateStopDto): Promise<StopRecord> {
+    await this.findOne(id);
+    return this.repo.update(id, dto);
   }
 
-  remove(id: string): void {
-    if (!this.stops.has(id)) {
-      throw new NotFoundException(`Stop "${id}" not found`);
-    }
-    this.stops.delete(id);
+  async remove(id: string): Promise<void> {
+    await this.findOne(id);
+    return this.repo.remove(id);
   }
 }
