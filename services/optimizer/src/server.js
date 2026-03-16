@@ -19,11 +19,18 @@ if (!PROTO_PATH) {
 
 const VROOM_URL = process.env.VROOM_URL || 'http://vroom:3000';
 const MATRIX_SOURCE = process.env.MATRIX_SOURCE || 'request';
+const GOOGLE_ROUTES_ENABLED = process.env.GOOGLE_ROUTES_ENABLED === 'true';
+const GOOGLE_ROUTES_ALLOW_CALLS = process.env.GOOGLE_ROUTES_ALLOW_CALLS === 'true';
+const GOOGLE_ROUTES_MOCK = process.env.GOOGLE_ROUTES_MOCK === 'true';
+const MAX_GOOGLE_MATRIX_LOCATIONS = Number(process.env.MAX_GOOGLE_MATRIX_LOCATIONS || 10);
 
 const googleRoutesClient = new GoogleRoutesClient({
   apiKey: process.env.GOOGLE_MAPS_API_KEY,
   endpoint: process.env.GOOGLE_ROUTES_ENDPOINT,
   timeoutMs: Number(process.env.GOOGLE_ROUTES_TIMEOUT_MS || 20000),
+  allowLiveCalls: GOOGLE_ROUTES_ALLOW_CALLS,
+  mockMode: GOOGLE_ROUTES_MOCK,
+  cacheTtlMs: Number(process.env.GOOGLE_ROUTES_CACHE_TTL_MS || 300000),
 });
 
 const packageDefinition = protoLoader.loadSync(PROTO_PATH, {
@@ -197,6 +204,10 @@ async function maybeAttachGoogleMatrix(req, vroomRequest) {
     return;
   }
 
+  if (!GOOGLE_ROUTES_ENABLED) {
+    throw new Error('Google Routes is disabled. Set GOOGLE_ROUTES_ENABLED=true to enable matrix computation.');
+  }
+
   const firstVehicleProfile = req.vehicles?.[0]?.profile;
   const travelMode = profileToGoogleTravelMode(firstVehicleProfile);
 
@@ -204,6 +215,18 @@ async function maybeAttachGoogleMatrix(req, vroomRequest) {
     lat: location.lat,
     lon: location.lon,
   }));
+
+  if (locations.length > MAX_GOOGLE_MATRIX_LOCATIONS) {
+    throw new Error(
+      `Google Routes guardrail triggered: locations=${locations.length}, max=${MAX_GOOGLE_MATRIX_LOCATIONS}.`,
+    );
+  }
+
+  if (!GOOGLE_ROUTES_ALLOW_CALLS && !GOOGLE_ROUTES_MOCK) {
+    throw new Error(
+      'Google Routes live calls are blocked. Set GOOGLE_ROUTES_ALLOW_CALLS=true or GOOGLE_ROUTES_MOCK=true.',
+    );
+  }
 
   const matrixResult = await googleRoutesClient.computeRouteMatrix({
     locations,

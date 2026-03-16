@@ -10,6 +10,11 @@ services:
       - VROOM_URL=http://vroom:3000
       - GRPC_PORT=50051
       - MATRIX_SOURCE=request
+      - GOOGLE_ROUTES_ENABLED=false
+      - GOOGLE_ROUTES_ALLOW_CALLS=false
+      - GOOGLE_ROUTES_MOCK=true
+      - MAX_GOOGLE_MATRIX_LOCATIONS=10
+      - GOOGLE_ROUTES_CACHE_TTL_MS=300000
       - GOOGLE_MAPS_API_KEY=
       - GOOGLE_ROUTES_TIMEOUT_MS=20000
     depends_on:

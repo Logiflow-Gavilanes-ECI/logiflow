@@ -69,6 +69,11 @@ npm run dev
 | `GRPC_PORT` | `50051` | gRPC server port |
 | `VROOM_URL` | `http://vroom:3000` | VROOM API endpoint |
 | `MATRIX_SOURCE` | `request` | Matrix source strategy (`request` or `google`) |
+| `GOOGLE_ROUTES_ENABLED` | `false` | Master switch for Google matrix mode |
+| `GOOGLE_ROUTES_ALLOW_CALLS` | `false` | Allows live Google API calls only when explicitly enabled |
+| `GOOGLE_ROUTES_MOCK` | `true` | Uses local mock matrix and avoids external billing |
+| `MAX_GOOGLE_MATRIX_LOCATIONS` | `10` | Guardrail limit for matrix size |
+| `GOOGLE_ROUTES_CACHE_TTL_MS` | `300000` | In-memory cache TTL to avoid repeated matrix calls |
 | `GOOGLE_MAPS_API_KEY` | `` | API key for Google Routes API |
 | `GOOGLE_ROUTES_TIMEOUT_MS` | `20000` | Timeout in milliseconds for Google Routes matrix requests |
 | `GOOGLE_ROUTES_DEPARTURE_TIME` | `` | Optional RFC3339 departure time (e.g. `2026-03-17T14:30:00Z`) |
@@ -84,10 +89,21 @@ MATRIX_SOURCE=google
 GOOGLE_MAPS_API_KEY=<your-api-key>
 ```
 
+Recommended safe defaults while testing:
+
+```bash
+GOOGLE_ROUTES_ENABLED=true
+GOOGLE_ROUTES_ALLOW_CALLS=false
+GOOGLE_ROUTES_MOCK=true
+MAX_GOOGLE_MATRIX_LOCATIONS=10
+```
+
 Current behavior:
 
 - If `MATRIX_SOURCE=request`, optimizer uses the matrix sent in gRPC request.
 - If `MATRIX_SOURCE=google` and `request.matrix.locations` is present, optimizer computes distances/durations with Google Routes and injects that matrix into the VROOM payload.
+- If `GOOGLE_ROUTES_MOCK=true`, matrix is generated locally (no external API call, no billing).
+- Live Google calls require all of: `GOOGLE_ROUTES_ENABLED=true`, `GOOGLE_ROUTES_ALLOW_CALLS=true`, and a valid `GOOGLE_MAPS_API_KEY`.
 - Automatic location extraction (`buildMatrix()`) from vehicles/jobs/shipments is tracked as a separate task.
 
 ## gRPC Contract
