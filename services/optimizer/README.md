@@ -17,11 +17,6 @@ The Optimizer service provides route optimization capabilities by acting as a br
                                           ┌────────▼────────┐
                                           │      VROOM      │
                                           │   (port 3000)   │
-                                          └────────┬────────┘
-                                                   │
-                                          ┌────────▼────────┐
-                                          │      OSRM       │
-                                          │  (Colombia PBF) │
                                           └─────────────────┘
 ```
 
@@ -35,24 +30,15 @@ The Optimizer service provides route optimization capabilities by acting as a br
 ### Run with Docker
 
 ```bash
-# Required before running docker compose:
-mkdir -p services/optimizer/osrm-data
-curl -L --progress-bar \
-  https://download.geofabrik.de/south-america/colombia-latest.osm.pbf \
-  -o services/optimizer/osrm-data/colombia-latest.osm.pbf
-
 cd services/optimizer
 npm install
 docker compose up --build
 
 ```
 
-> ⚠️ **First run:** OSRM will download and process the Colombia map (~200MB).
-> This takes 10–30 minutes. Subsequent runs use cached data and start in seconds.
 This starts:
 - **optimizer** - gRPC server on port `50051`
 - **vroom** - VROOM Express API on port `3000` (internal)
-- **osrm** - OSRM routing backend with Colombia map data
 
 ### Run Locally
 
@@ -139,7 +125,7 @@ npm run lint
 
 ```
 services/optimizer/
-├── docker-compose.yml    # VROOM + OSRM + optimizer stack
+├── docker-compose.yml    # VROOM + optimizer stack
 ├── Dockerfile           # gRPC server container
 ├── package.json         # Node.js dependencies
 ├── src/

@@ -32,33 +32,9 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - VROOM_ROUTER=osrm
-      - OSRM_HOST=osrm
       - VROOM_PORT=3000
-    depends_on:
-      osrm:
-        condition: service_healthy
     networks:
       - logiflow-network
-
-  osrm:
-      image: peterevans/osrm-backend:latest
-      container_name: logiflow-osrm
-      ports:
-        - "5000:5000"
-      environment:
-        - OSRM_PBF_URL=file:///osrm-data/colombia-latest.osm.pbf
-        - OSRM_GRAPH_PROFILE=car
-      volumes:
-        - ./osrm-data:/osrm-data
-      healthcheck:
-        test: ["CMD-SHELL", "curl -sf 'http://localhost:5000/route/v1/car/-74.0,4.0;-74.1,4.1?overview=false' || exit 1"]
-        interval: 30s
-        timeout: 10s
-        retries: 10
-        start_period: 600s
-      networks:
-        - logiflow-network
 
 networks:
   logiflow-network:

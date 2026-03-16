@@ -9,7 +9,7 @@
 1. [What is the Vehicle Routing Problem (VRP)?](#what-is-the-vehicle-routing-problem-vrp)
 2. [What is VROOM?](#what-is-vroom)
 3. [What is gRPC?](#what-is-grpc)
-4. [What is OSRM?](#what-is-osrm)
+4. [Routing Matrix Strategy](#routing-matrix-strategy)
 5. [Architecture Overview](#architecture-overview)
 6. [The gRPC Contract (optimizer.proto)](#the-grpc-contract-optimizerproto)
 7. [The Docker Compose Stack](#the-docker-compose-stack)
@@ -136,23 +136,19 @@ No manual JSON parsing, no type errors, blazing fast.
 
 ---
 
-## What is OSRM?
+## Routing Matrix Strategy
 
-**OSRM** (Open Source Routing Machine) is a routing engine that calculates the fastest path between two points on a road network.
+The optimizer supports two matrix strategies:
 
-### Why Do We Need OSRM?
+- **Request matrix**: use the `matrix` sent in `OptimizeRequest`.
+- **Google Routes matrix**: compute matrix values from Google Routes when `MATRIX_SOURCE=google`.
 
-VROOM is an *optimizer* — it decides the **order** of stops. But it needs to know:
+For Google mode, locations are resolved in this order:
 
-- "What's the fastest route from A to B?"
-- "How far is it in kilometers?"
-- "How long does it take in traffic?"
+1. `request.matrix.locations` if provided
+2. otherwise, auto-built from `vehicles.start/end`, `jobs.location`, and `shipments.pickup/delivery`
 
-That's what OSRM provides. It's the **navigation engine** behind VROOM.
-
-### OSRM + Colombia
-
-Our docker-compose downloads the **Colombia .pbf** from Geofabrik (OpenStreetMap data for Colombia), processes it, and runs OSRM locally. This gives us accurate routing for Colombian roads.
+This keeps Docker setup lightweight because matrix generation can be externalized instead of bootstrapping a local routing engine.
 
 ---
 
@@ -176,11 +172,6 @@ Here's how all pieces fit together:
 │                         │                   ┌───────────────┐  │  │
 │                         │                   │    VROOM       │  │  │
 │                         │                   │  (port 3000)   │  │  │
-│                         │                   └───────┬───────┘  │  │
-│                         │                           │           │  │
-│                         │                   ┌───────▼────────┐  │  │
-│                         │                   │     OSRM       │  │  │
-│                         │                   │  (Colombia)    │  │  │
 │                         │                   └────────────────┘  │  │
 │                         │                                        │  │
 │                         │     docker-compose.yml                │  │
@@ -196,11 +187,10 @@ Here's how all pieces fit together:
 3. **Optimizer** (our Node.js gRPC server) receives the gRPC request
 4. **Optimizer** translates it to VROOM's HTTP JSON format
 5. **Optimizer** sends it to VROOM (port 3000)
-6. **VROOM** queries OSRM for routing distances/times
-7. **VROOM** runs its optimization algorithm
-8. **VROOM** returns optimized routes
-9. **Optimizer** translates VROOM's response back to gRPC format
-10. **Gateway** receives the response and pushes routes to drivers via WebSocket
+6. **VROOM** runs its optimization algorithm using the request payload and matrix data
+7. **VROOM** returns optimized routes
+8. **Optimizer** translates VROOM's response back to gRPC format
+9. **Gateway** receives the response and pushes routes to drivers via WebSocket
 
 ---
 
@@ -287,7 +277,7 @@ enum Profile {
 
 File: `services/optimizer/docker-compose.yml`
 
-This file defines three services that work together:
+This file defines two services that work together:
 
 ### Service 1: optimizer (Our gRPC Server)
 
@@ -317,41 +307,10 @@ vroom:
   image: vroomproject/vroom-express:latest
   ports:
     - "3000:3000"
-  environment:
-    - VROOM_ROUTER=osrm
-    - OSRM_HOST=osrm
 ```
 
 - Uses the official VROOM Express Docker image
 - Acts as an HTTP API wrapper around VROOM's core
-- Configured to use OSRM for routing calculations
-
-### Service 3: osrm (Routing Engine)
-
-```yaml
-osrm:
-  image: osrm/osrm-backend:latest
-  volumes:
-    - osrm-data:/data
-  command: >
-    sh -c "if [ ! -f /data/colombia.osrm ]; then
-      wget -q https://download.geofabrik.de/south-america/colombia-latest.osm.pbf -O /data/colombia.osm.pbf &&
-      osrm-extract -p /opt/car.lua /data/colombia.osm.pbf &&
-      osrm-partition /data/colombia.osrm &&
-      osrm-customize /data/colombia.osrm;
-    fi &&
-    osrm-routed --algorithm mld --max-table-size 10000 /data/colombia.osrm"
-```
-
-This is the most complex part. Let me break it down:
-
-1. **Downloads Colombia map**: `wget .../colombia-latest.osm.pbf`
-2. **Extracts road network**: `osrm-extract` processes the PBF file
-3. **Partitions**: `osrm-partition` prepares for multi-level Dijkstra
-4. **Customizes**: `osrm-customize` optimizes the data
-5. **Runs server**: `osrm-routed` starts the routing API
-
-**Important**: First run takes 10-30 minutes (downloading + processing 200MB+ PBF). Subsequent runs use cached data.
 
 ### Networks
 
@@ -493,10 +452,7 @@ Expected output:
 CONTAINER ID   IMAGE           PORTS
 abc123         logiflow-optimizer  0.0.0.0:50051->50051/tcp
 def456         logiflow-vroom      0.0.0.0:3000->3000/tcp
-ghi789         logiflow-osrm       0.0.0.0:5000->5000/tcp
 ```
-
-**First run**: OSRM will take 10-30 minutes to download and process Colombia map. You'll see progress in logs.
 
 ### Option 2: Local Development (Without Docker)
 
@@ -505,8 +461,8 @@ ghi789         logiflow-osrm       0.0.0.0:5000->5000/tcp
 cd services/optimizer
 npm install
 
-# 2. Start VROOM + OSRM via Docker (required)
-docker compose up vroom osrm
+# 2. Start VROOM via Docker (required)
+docker compose up vroom
 
 # 3. Run our gRPC server locally
 npm start
@@ -536,14 +492,7 @@ curl -X POST http://localhost:3000/optimize \
   }'
 ```
 
-### 2. Test OSRM Routing
-
-```bash
-# Get route between two points
-curl "http://localhost:5000/route/v1/car/-74.006,4.679;-74.05,4.65?overview=false"
-```
-
-### 3. Test gRPC (Using grpcurl)
+### 2. Test gRPC (Using grpcurl)
 
 ```bash
 # Install grpcurl
@@ -686,15 +635,14 @@ const response = {
 |-----------|------------|---------|
 | **Optimizer** | Node.js + @grpc/grpc-js | gRPC server that bridges Gateway ↔ VROOM |
 | **VROOM** | vroom-express | VRP optimization engine with HTTP API |
-| **OSRM** | osrm-backend | Routing engine for distance/matrix calculations |
-| **Data** | Colombia Geofabrik PBF | OpenStreetMap data for Colombian roads |
+| **Matrix Source** | Request / Google Routes | Provides distances and durations for optimization |
 | **Contract** | Protocol Buffers (.proto) | Type-safe API definition shared between services |
 
 ### Why This Architecture?
 
 1. **Separation of Concerns**: VROOM is complex to run; we isolate it in Docker
 2. **gRPC for Performance**: Gateway ↔ Optimizer communication is fast and type-safe
-3. **Local OSRM**: No external API calls, faster routing for Colombia
+3. **Flexible Matrix Strategy**: Use provided matrix or Google Routes depending on environment
 4. **Docker Compose**: Easy to deploy, reproducible environment
 5. **Proto Contract**: Single source of truth, no mismatched APIs
 
