@@ -8,6 +8,7 @@ services:
       - "50051:50051"
     environment:
       - VROOM_URL=http://vroom:3000
+      - VROOM_OPTIMIZE_PATH=/
       - GRPC_PORT=50051
       - MATRIX_SOURCE=request
       - GOOGLE_ROUTES_ENABLED=false

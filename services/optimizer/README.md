@@ -68,7 +68,9 @@ npm run dev
 |----------|---------|-------------|
 | `GRPC_PORT` | `50051` | gRPC server port |
 | `VROOM_URL` | `http://vroom:3000` | VROOM API endpoint |
+| `VROOM_OPTIMIZE_PATH` | `/` | VROOM optimize endpoint path (vroom-express default) |
 | `MATRIX_SOURCE` | `request` | Matrix source strategy (`request` or `google`) |
+| `OPTIMIZER_VALIDATE_MATRIX_ONLY` | `false` | If true, returns computed matrix directly and skips VROOM solve |
 | `GOOGLE_ROUTES_ENABLED` | `false` | Master switch for Google matrix mode |
 | `GOOGLE_ROUTES_ALLOW_CALLS` | `false` | Allows live Google API calls only when explicitly enabled |
 | `GOOGLE_ROUTES_MOCK` | `true` | Uses local mock matrix and avoids external billing |

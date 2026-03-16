@@ -18,7 +18,9 @@ if (!PROTO_PATH) {
 }
 
 const VROOM_URL = process.env.VROOM_URL || 'http://vroom:3000';
+const VROOM_OPTIMIZE_PATH = process.env.VROOM_OPTIMIZE_PATH || '/';
 const MATRIX_SOURCE = process.env.MATRIX_SOURCE || 'request';
+const OPTIMIZER_VALIDATE_MATRIX_ONLY = process.env.OPTIMIZER_VALIDATE_MATRIX_ONLY === 'true';
 const GOOGLE_ROUTES_ENABLED = process.env.GOOGLE_ROUTES_ENABLED === 'true';
 const GOOGLE_ROUTES_ALLOW_CALLS = process.env.GOOGLE_ROUTES_ALLOW_CALLS === 'true';
 const GOOGLE_ROUTES_MOCK = process.env.GOOGLE_ROUTES_MOCK === 'true';
@@ -238,14 +240,34 @@ async function maybeAttachGoogleMatrix(req, vroomRequest) {
     distances: matrixResult.distances,
     durations: matrixResult.durations,
   };
+
+  return matrixResult;
 }
 
 async function optimizeRoutes(call, callback) {
   try {
     const vroomRequest = grpcToVroomRequest(call.request);
-    await maybeAttachGoogleMatrix(call.request, vroomRequest);
+    const matrixResult = await maybeAttachGoogleMatrix(call.request, vroomRequest);
+
+    if (OPTIMIZER_VALIDATE_MATRIX_ONLY && matrixResult) {
+      callback(null, {
+        code: 0,
+        error: '',
+        routes: [],
+        unassigned: [],
+        matrix: {
+          distances: matrixResult.distances,
+          durations: matrixResult.durations,
+          locations: matrixResult.locations,
+        },
+        routingDistance: 0,
+        routingDuration: 0,
+      });
+      return;
+    }
+    const vroomTargetUrl = new URL(VROOM_OPTIMIZE_PATH, `${VROOM_URL.replace(/\/$/, '')}/`).toString();
     
-    const vroomRes = await axios.post(`${VROOM_URL}/optimize`, vroomRequest, {
+    const vroomRes = await axios.post(vroomTargetUrl, vroomRequest, {
       headers: { 'Content-Type': 'application/json' },
       timeout: 30000,
     });
@@ -253,10 +275,13 @@ async function optimizeRoutes(call, callback) {
     const grpcResponse = vroomToGrpcResponse(vroomRes.data);
     callback(null, grpcResponse);
   } catch (error) {
-    console.error('OptimizeRoutes failed:', error.message);
+    const upstreamDetails = typeof error.response?.data === 'string'
+      ? error.response.data
+      : JSON.stringify(error.response?.data || {});
+    console.error('OptimizeRoutes failed:', error.message, upstreamDetails);
     const errorResponse = {
       code: error.response?.status || 500,
-      error: error.message || 'Internal server error',
+      error: `${error.message || 'Internal server error'}${upstreamDetails && upstreamDetails !== '{}' ? ` | ${upstreamDetails}` : ''}`,
       routes: [],
       unassigned: [],
     };
