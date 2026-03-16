@@ -103,10 +103,12 @@ MAX_GOOGLE_MATRIX_LOCATIONS=10
 Current behavior:
 
 - If `MATRIX_SOURCE=request`, optimizer uses the matrix sent in gRPC request.
-- If `MATRIX_SOURCE=google` and `request.matrix.locations` is present, optimizer computes distances/durations with Google Routes and injects that matrix into the VROOM payload.
+- If `MATRIX_SOURCE=google`, optimizer computes distances/durations with Google Routes and injects that matrix into the VROOM payload.
+- For `MATRIX_SOURCE=google`, locations are resolved in this order:
+  1. `request.matrix.locations` if provided
+  2. otherwise auto-built from `vehicles.start/end`, `jobs.location`, and `shipments.pickup/delivery` (deduplicated)
 - If `GOOGLE_ROUTES_MOCK=true`, matrix is generated locally (no external API call, no billing).
 - Live Google calls require all of: `GOOGLE_ROUTES_ENABLED=true`, `GOOGLE_ROUTES_ALLOW_CALLS=true`, and a valid `GOOGLE_MAPS_API_KEY`.
-- Automatic location extraction (`buildMatrix()`) from vehicles/jobs/shipments is tracked as a separate task.
 
 ## gRPC Contract
 

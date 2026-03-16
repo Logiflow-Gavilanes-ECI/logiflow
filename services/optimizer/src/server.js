@@ -198,7 +198,59 @@ function vroomToGrpcResponse(vroomRes) {
 }
 
 function shouldComputeGoogleMatrix(req) {
-  return MATRIX_SOURCE === 'google' && Boolean(req?.matrix?.locations?.length);
+  return MATRIX_SOURCE === 'google';
+}
+
+function isValidCoordinate(coordinate) {
+  if (!coordinate) {
+    return false;
+  }
+
+  const lat = Number(coordinate.lat);
+  const lon = Number(coordinate.lon);
+  return Number.isFinite(lat) && Number.isFinite(lon);
+}
+
+function buildMatrixLocations(req) {
+  const fromRequest = (req?.matrix?.locations || [])
+    .filter(isValidCoordinate)
+    .map((location) => ({ lat: Number(location.lat), lon: Number(location.lon) }));
+
+  if (fromRequest.length > 0) {
+    return fromRequest;
+  }
+
+  const dedupe = new Map();
+
+  const addCoordinate = (coordinate) => {
+    if (!isValidCoordinate(coordinate)) {
+      return;
+    }
+
+    const lat = Number(coordinate.lat);
+    const lon = Number(coordinate.lon);
+    const key = `${lat.toFixed(6)},${lon.toFixed(6)}`;
+
+    if (!dedupe.has(key)) {
+      dedupe.set(key, { lat, lon });
+    }
+  };
+
+  for (const vehicle of req?.vehicles || []) {
+    addCoordinate(vehicle.start);
+    addCoordinate(vehicle.end);
+  }
+
+  for (const job of req?.jobs || []) {
+    addCoordinate(job.location);
+  }
+
+  for (const shipment of req?.shipments || []) {
+    addCoordinate(shipment.pickup?.location);
+    addCoordinate(shipment.delivery?.location);
+  }
+
+  return Array.from(dedupe.values());
 }
 
 async function maybeAttachGoogleMatrix(req, vroomRequest) {
@@ -212,11 +264,13 @@ async function maybeAttachGoogleMatrix(req, vroomRequest) {
 
   const firstVehicleProfile = req.vehicles?.[0]?.profile;
   const travelMode = profileToGoogleTravelMode(firstVehicleProfile);
+  const locations = buildMatrixLocations(req);
 
-  const locations = req.matrix.locations.map((location) => ({
-    lat: location.lat,
-    lon: location.lon,
-  }));
+  if (locations.length === 0) {
+    throw new Error(
+      'Unable to build matrix: provide matrix.locations or at least one valid location in vehicles/jobs/shipments.',
+    );
+  }
 
   if (locations.length > MAX_GOOGLE_MATRIX_LOCATIONS) {
     throw new Error(
