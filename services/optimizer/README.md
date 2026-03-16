@@ -35,7 +35,14 @@ The Optimizer service provides route optimization capabilities by acting as a br
 ### Run with Docker
 
 ```bash
+# Required before running docker compose:
+mkdir -p services/optimizer/osrm-data
+curl -L --progress-bar \
+  https://download.geofabrik.de/south-america/colombia-latest.osm.pbf \
+  -o services/optimizer/osrm-data/colombia-latest.osm.pbf
+
 cd services/optimizer
+npm install
 docker compose up --build
 
 ```
@@ -61,6 +68,27 @@ npm run dev
 |----------|---------|-------------|
 | `GRPC_PORT` | `50051` | gRPC server port |
 | `VROOM_URL` | `http://vroom:3000` | VROOM API endpoint |
+| `MATRIX_SOURCE` | `request` | Matrix source strategy (`request` or `google`) |
+| `GOOGLE_MAPS_API_KEY` | `` | API key for Google Routes API |
+| `GOOGLE_ROUTES_TIMEOUT_MS` | `20000` | Timeout in milliseconds for Google Routes matrix requests |
+| `GOOGLE_ROUTES_DEPARTURE_TIME` | `` | Optional RFC3339 departure time (e.g. `2026-03-17T14:30:00Z`) |
+
+### Google Routes Matrix (Sprint 2)
+
+The optimizer now includes a Google Routes client.
+
+Use Google as matrix source by setting:
+
+```bash
+MATRIX_SOURCE=google
+GOOGLE_MAPS_API_KEY=<your-api-key>
+```
+
+Current behavior:
+
+- If `MATRIX_SOURCE=request`, optimizer uses the matrix sent in gRPC request.
+- If `MATRIX_SOURCE=google` and `request.matrix.locations` is present, optimizer computes distances/durations with Google Routes and injects that matrix into the VROOM payload.
+- Automatic location extraction (`buildMatrix()`) from vehicles/jobs/shipments is tracked as a separate task.
 
 ## gRPC Contract
 

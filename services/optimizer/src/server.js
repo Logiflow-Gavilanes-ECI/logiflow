@@ -3,6 +3,7 @@ const protoLoader = require('@grpc/proto-loader');
 const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
+const { GoogleRoutesClient, profileToGoogleTravelMode } = require('./google-routes-client');
 
 const protoPathCandidates = [
   process.env.OPTIMIZER_PROTO_PATH,
@@ -17,6 +18,13 @@ if (!PROTO_PATH) {
 }
 
 const VROOM_URL = process.env.VROOM_URL || 'http://vroom:3000';
+const MATRIX_SOURCE = process.env.MATRIX_SOURCE || 'request';
+
+const googleRoutesClient = new GoogleRoutesClient({
+  apiKey: process.env.GOOGLE_MAPS_API_KEY,
+  endpoint: process.env.GOOGLE_ROUTES_ENDPOINT,
+  timeoutMs: Number(process.env.GOOGLE_ROUTES_TIMEOUT_MS || 20000),
+});
 
 const packageDefinition = protoLoader.loadSync(PROTO_PATH, {
   keepCase: false,
@@ -180,9 +188,39 @@ function vroomToGrpcResponse(vroomRes) {
   return response;
 }
 
+function shouldComputeGoogleMatrix(req) {
+  return MATRIX_SOURCE === 'google' && Boolean(req?.matrix?.locations?.length);
+}
+
+async function maybeAttachGoogleMatrix(req, vroomRequest) {
+  if (!shouldComputeGoogleMatrix(req)) {
+    return;
+  }
+
+  const firstVehicleProfile = req.vehicles?.[0]?.profile;
+  const travelMode = profileToGoogleTravelMode(firstVehicleProfile);
+
+  const locations = req.matrix.locations.map((location) => ({
+    lat: location.lat,
+    lon: location.lon,
+  }));
+
+  const matrixResult = await googleRoutesClient.computeRouteMatrix({
+    locations,
+    travelMode,
+    departureTime: process.env.GOOGLE_ROUTES_DEPARTURE_TIME,
+  });
+
+  vroomRequest.matrix = {
+    distances: matrixResult.distances,
+    durations: matrixResult.durations,
+  };
+}
+
 async function optimizeRoutes(call, callback) {
   try {
     const vroomRequest = grpcToVroomRequest(call.request);
+    await maybeAttachGoogleMatrix(call.request, vroomRequest);
     
     const vroomRes = await axios.post(`${VROOM_URL}/optimize`, vroomRequest, {
       headers: { 'Content-Type': 'application/json' },
@@ -192,6 +230,7 @@ async function optimizeRoutes(call, callback) {
     const grpcResponse = vroomToGrpcResponse(vroomRes.data);
     callback(null, grpcResponse);
   } catch (error) {
+    console.error('OptimizeRoutes failed:', error.message);
     const errorResponse = {
       code: error.response?.status || 500,
       error: error.message || 'Internal server error',

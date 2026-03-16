@@ -9,6 +9,9 @@ services:
     environment:
       - VROOM_URL=http://vroom:3000
       - GRPC_PORT=50051
+      - MATRIX_SOURCE=request
+      - GOOGLE_MAPS_API_KEY=
+      - GOOGLE_ROUTES_TIMEOUT_MS=20000
     depends_on:
       vroom:
         condition: service_started
