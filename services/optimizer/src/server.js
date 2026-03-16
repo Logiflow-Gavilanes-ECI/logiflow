@@ -1,11 +1,21 @@
 const grpc = require('@grpc/grpc-js');
 const protoLoader = require('@grpc/proto-loader');
 const axios = require('axios');
+const fs = require('fs');
 const path = require('path');
 
-const PROTO_PATH =
-  process.env.OPTIMIZER_PROTO_PATH
-  || path.resolve(__dirname, '..', '..', '..', 'shared', 'proto', 'optimizer.proto');
+const protoPathCandidates = [
+  process.env.OPTIMIZER_PROTO_PATH,
+  path.resolve(__dirname, '..', 'shared', 'proto', 'optimizer.proto'),
+  path.resolve(__dirname, '..', '..', '..', 'shared', 'proto', 'optimizer.proto'),
+].filter(Boolean);
+
+const PROTO_PATH = protoPathCandidates.find((candidate) => fs.existsSync(candidate));
+
+if (!PROTO_PATH) {
+  throw new Error(`optimizer.proto not found. Checked: ${protoPathCandidates.join(', ')}`);
+}
+
 const VROOM_URL = process.env.VROOM_URL || 'http://vroom:3000';
 
 const packageDefinition = protoLoader.loadSync(PROTO_PATH, {

@@ -1,8 +1,8 @@
 services:
   optimizer:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ../..
+      dockerfile: services/optimizer/Dockerfile
     container_name: logiflow-optimizer
     ports:
       - "50051:50051"
