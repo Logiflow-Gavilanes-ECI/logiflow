@@ -7,7 +7,7 @@ import {
   IsOptional,
   ArrayMinSize,
 } from 'class-validator';
-import { VehicleDto } from './vehicle.dto.js';
+import { VehicleDto } from './vehicle.dto';
 import { StopDto } from './stop.dto';
 import { JobDto } from './job.dto';
 import { ShipmentDto } from './shipment.dto';

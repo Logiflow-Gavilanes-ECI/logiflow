@@ -29,6 +29,13 @@ import { GrpcClientService } from './grpc-client.service';
               package: 'logiflow',
               protoPath,
               url: `${configService.get<string>('GRPC_OPTIMIZER_HOST', 'localhost')}:${configService.get<string>('GRPC_OPTIMIZER_PORT', '50051')}`,
+              loader: {
+                keepCase: false,
+                longs: String,
+                enums: String,
+                defaults: true,
+                oneofs: true,
+              },
             },
           };
         },

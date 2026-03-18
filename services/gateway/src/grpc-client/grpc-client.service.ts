@@ -32,9 +32,12 @@ export class GrpcClientService implements OnModuleInit {
     correlationId?: string,
   ): Promise<OptimizeResponse> {
     const effectiveCorrelationId = correlationId ?? UNKNOWN_CORRELATION_ID;
+    const vehiclesCount = request.vehicles?.length ?? 0;
+    const jobsCount = request.jobs?.length ?? 0;
+    const shipmentsCount = request.shipments?.length ?? 0;
 
     this.logger.log(
-      `Sending VRP to optimizer: ${request.vehicles.length} vehicles, ${request.jobs.length} jobs, ${request.shipments.length} shipments | correlationId: ${effectiveCorrelationId}`,
+      `Sending VRP to optimizer: ${vehiclesCount} vehicles, ${jobsCount} jobs, ${shipmentsCount} shipments | correlationId: ${effectiveCorrelationId}`,
     );
 
     const metadata = new Metadata();
@@ -50,9 +53,10 @@ export class GrpcClientService implements OnModuleInit {
     const response = await firstValueFrom(
       result as unknown as Observable<OptimizeResponse>,
     );
+    const routesCount = response.routes?.length ?? 0;
 
     this.logger.log(
-      `Optimizer returned ${response.routes.length} routes, code: ${response.code} | correlationId: ${effectiveCorrelationId}`,
+      `Optimizer returned ${routesCount} routes, code: ${response.code} | correlationId: ${effectiveCorrelationId}`,
     );
 
     return response;

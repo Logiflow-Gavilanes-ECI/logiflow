@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateVehicleDto } from './dto/create-vehicle.dto';
 import { UpdateVehicleDto } from './dto/update-vehicle.dto';
-import { Vehicle } from '../generated/prisma/client';
+import { Vehicle } from '@prisma/client';
 
 export interface VehicleRecord {
   id: string;

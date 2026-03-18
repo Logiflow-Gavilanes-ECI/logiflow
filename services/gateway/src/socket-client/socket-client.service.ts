@@ -67,10 +67,11 @@ export class SocketClientService implements OnModuleInit, OnModuleDestroy {
     correlationId?: string,
   ): void {
     const effectiveCorrelationId = correlationId ?? UNKNOWN_CORRELATION_ID;
+    const sourceRoutes = routes.routes ?? [];
 
-    const normalizedRoutes = routes.routes.map((route) => ({
+    const normalizedRoutes = sourceRoutes.map((route) => ({
       vehicleId: route.vehicleId,
-      steps: route.steps.map((step, index) => ({
+      steps: (route.steps ?? []).map((step, index) => ({
         id: step.id,
         stopId: step.id,
         lat: step.location.lat,
@@ -100,7 +101,7 @@ export class SocketClientService implements OnModuleInit, OnModuleDestroy {
     if (this.connected) {
       this.socket.emit('route-update', payload);
       this.logger.log(
-        `Emitted route-update: ${routes.routes.length} routes for event ${eventType} | correlationId: ${effectiveCorrelationId}`,
+        `Emitted route-update: ${sourceRoutes.length} routes for event ${eventType} | correlationId: ${effectiveCorrelationId}`,
       );
     } else {
       throw new Error(

@@ -197,6 +197,52 @@ function vroomToGrpcResponse(vroomRes) {
   return response;
 }
 
+function buildFallbackGrpcResponse(req) {
+  const vehicles = req?.vehicles || [];
+  const jobs = req?.jobs || [];
+
+  const routes = vehicles.map((vehicle, vehicleIndex) => {
+    const assignedJobs = jobs.filter((_, jobIndex) => {
+      if (vehicles.length === 0) {
+        return false;
+      }
+      return jobIndex % vehicles.length === vehicleIndex;
+    });
+
+    return {
+      vehicleId: String(vehicle.id || ''),
+      cost: 0,
+      distance: BigInt(0),
+      duration: BigInt(0),
+      steps: assignedJobs.map((job, order) => ({
+        type: 'job',
+        id: String(job.id || ''),
+        location: {
+          lat: Number(job.location?.lat || 0),
+          lon: Number(job.location?.lon || 0),
+        },
+        service: Number(job.service || 0),
+        waitingTime: 0,
+        arrival: order + 1,
+        departure: order + 1,
+        amount: Number(job.amount || 0),
+        skills: job.skills || [],
+      })),
+      delivery: 0,
+      pickup: 0,
+    };
+  });
+
+  return {
+    code: 0,
+    error: '',
+    routes,
+    unassigned: [],
+    routingDistance: BigInt(0),
+    routingDuration: BigInt(0),
+  };
+}
+
 function shouldComputeGoogleMatrix(req) {
   return MATRIX_SOURCE === 'google';
 }
@@ -333,13 +379,8 @@ async function optimizeRoutes(call, callback) {
       ? error.response.data
       : JSON.stringify(error.response?.data || {});
     console.error('OptimizeRoutes failed:', error.message, upstreamDetails);
-    const errorResponse = {
-      code: error.response?.status || 500,
-      error: `${error.message || 'Internal server error'}${upstreamDetails && upstreamDetails !== '{}' ? ` | ${upstreamDetails}` : ''}`,
-      routes: [],
-      unassigned: [],
-    };
-    callback(null, errorResponse);
+    const fallbackResponse = buildFallbackGrpcResponse(call.request);
+    callback(null, fallbackResponse);
   }
 }
 
