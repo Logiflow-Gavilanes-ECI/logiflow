@@ -9,7 +9,6 @@ const mockSocketClientService = {
   isConnected: jest.fn().mockReturnValue(false),
 };
 
-// executes the operation directly without delays so that unit tests remain synchronous and fast.
 const mockRetryService = {
   execute: jest
     .fn()
@@ -17,17 +16,35 @@ const mockRetryService = {
 };
 
 const mockGrpcClientService = {
-  solveRoute: jest.fn().mockResolvedValue({
+  optimizeRoutes: jest.fn().mockResolvedValue({
+    code: '0',
+    error: '',
     routes: [
       {
         vehicleId: 'v1',
-        steps: [{ stopId: 's1', lat: 4.6097, lng: -74.0817, arrivalOrder: 1 }],
-        totalDistance: 12.5,
-        estimatedTime: 25.0,
+        cost: 10,
+        distance: '12500',
+        duration: '2500',
+        steps: [
+          {
+            type: 'job',
+            id: 's1',
+            location: { lat: 4.6097, lon: -74.0817 },
+            service: 0,
+            waitingTime: 0,
+            arrival: 1,
+            departure: 1,
+            amount: 20,
+            skills: [],
+          },
+        ],
+        delivery: 0,
+        pickup: 0,
       },
     ],
-    totalCost: 100.0,
-    solvedAt: '2026-03-05T00:00:00.000Z',
+    unassigned: [],
+    routingDistance: '12500',
+    routingDuration: '2500',
   }),
 };
 
@@ -72,8 +89,14 @@ describe('WebhookService', () => {
       expect(result.socketConnected).toBe(false);
       expect(result.fallback).toBe(false);
       expect(result.fallbackReason).toBeUndefined();
-      expect(mockGrpcClientService.solveRoute).toHaveBeenCalledWith(
-        expect.objectContaining({ eventType: 'new_order' }),
+      expect(mockGrpcClientService.optimizeRoutes).toHaveBeenCalledWith(
+        expect.objectContaining({
+          jobs: [
+            expect.objectContaining({
+              id: 's1',
+            }),
+          ],
+        }),
         'corr-123',
       );
       expect(mockSocketClientService.emitRouteUpdate).toHaveBeenCalledWith(
@@ -84,7 +107,7 @@ describe('WebhookService', () => {
     });
 
     it('should use mock response when gRPC is unavailable', async () => {
-      mockGrpcClientService.solveRoute.mockRejectedValueOnce(
+      mockGrpcClientService.optimizeRoutes.mockRejectedValueOnce(
         new Error('Connection refused'),
       );
 
@@ -100,7 +123,7 @@ describe('WebhookService', () => {
       expect(result.received).toBe(true);
       expect(result.optimizedRoutes).toBeDefined();
       expect(result.optimizedRoutes.routes).toHaveLength(1);
-      expect(result.optimizedRoutes.solvedAt).toBeDefined();
+      expect(result.optimizedRoutes.code).toBe(0);
       expect(result.fallback).toBe(true);
       expect(result.fallbackReason).toBe('optimizer-unreachable');
       expect(mockSocketClientService.emitRouteUpdate).toHaveBeenCalled();

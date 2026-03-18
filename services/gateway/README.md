@@ -61,7 +61,7 @@ NestJS Gateway (api/v1)
   - Retry service (exponential backoff + jitter)
   - Prisma repositories (vehicles/stops)
         |
-        +--> gRPC Optimizer (RouteOptimizer.SolveRoute)
+        +--> gRPC Optimizer (RouteOptimizer.OptimizeRoutes)
         |
         +--> Socket.io Realtime Gateway (route-update)
 ```
@@ -72,7 +72,7 @@ NestJS Gateway (api/v1)
 POST /webhook
   -> validate payload (DTO + ValidationPipe)
   -> ensure correlation id
-  -> retry grpc.solveRoute (max 3)
+  -> retry grpc.optimizeRoutes (max 3)
   -> fallback mock route if optimizer unavailable
   -> retry socket.emitRouteUpdate (max 5)
   -> return HTTP response with fallback metadata
@@ -165,6 +165,7 @@ Create a `.env` file in `services/gateway`.
 | DATABASE_URL | none | Prisma PostgreSQL connection string |
 | GRPC_OPTIMIZER_HOST | `localhost` | Optimizer host |
 | GRPC_OPTIMIZER_PORT | `50051` | Optimizer port |
+| GRPC_OPTIMIZER_PROTO_PATH | `../../shared/proto/optimizer.proto` | Shared optimizer proto path |
 | SOCKETIO_SERVER_HOST | `localhost` | Socket.io host |
 | SOCKETIO_SERVER_PORT | `3001` | Socket.io port |
 
@@ -175,6 +176,7 @@ PORT=3000
 DATABASE_URL="postgresql://postgres:postgres@localhost:5432/logiflow?schema=public"
 GRPC_OPTIMIZER_HOST=localhost
 GRPC_OPTIMIZER_PORT=50051
+GRPC_OPTIMIZER_PROTO_PATH=../../shared/proto/optimizer.proto
 SOCKETIO_SERVER_HOST=localhost
 SOCKETIO_SERVER_PORT=3001
 ```
@@ -230,10 +232,13 @@ Request body:
 ```json
 {
   "eventType": "new_order",
-  "vehicles": [{ "id": "v1", "lat": 4.711, "lng": -74.072, "capacity": 100 }],
-  "stops": [{ "id": "s1", "lat": 4.609, "lng": -74.081, "demand": 20 }]
+  "vehicles": [{ "id": "v1", "start": { "lat": 4.711, "lon": -74.072 }, "capacity": 100 }],
+  "jobs": [{ "id": "j1", "location": { "lat": 4.609, "lon": -74.081 }, "amount": 20 }],
+  "options": { "metric": "duration", "optimize": true, "algorithm": "greedy" }
 }
 ```
+
+Compatibility note: legacy `stops` payloads with `lat/lng/demand` are still accepted and internally mapped to `jobs`.
 
 Example response:
 
@@ -242,9 +247,10 @@ Example response:
   "received": true,
   "eventType": "new_order",
   "vehicleCount": 1,
-  "stopCount": 1,
+  "stopCount": 0,
+  "jobCount": 1,
   "correlationId": "2bf53f08-34d6-4203-bf79-f524e44bbf3a",
-  "optimizedRoutes": { "routes": [], "totalCost": 100, "solvedAt": "2026-03-14T00:00:00.000Z" },
+  "optimizedRoutes": { "code": "0", "error": "", "routes": [], "routingDistance": "0", "routingDuration": "0" },
   "fallback": false,
   "socketConnected": true,
   "timestamp": "2026-03-14T00:00:00.000Z"

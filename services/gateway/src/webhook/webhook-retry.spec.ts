@@ -11,27 +11,45 @@ const BASE_EVENT = {
 };
 
 const OPTIMIZER_SUCCESS = {
+  code: '0',
+  error: '',
   routes: [
     {
       vehicleId: 'v1',
-      steps: [{ stopId: 's1', lat: 4.6097, lng: -74.0817, arrivalOrder: 1 }],
-      totalDistance: 12.5,
-      estimatedTime: 25.0,
+      cost: 10,
+      distance: '12500',
+      duration: '2500',
+      steps: [
+        {
+          type: 'job',
+          id: 's1',
+          location: { lat: 4.6097, lon: -74.0817 },
+          service: 0,
+          waitingTime: 0,
+          arrival: 1,
+          departure: 1,
+          amount: 20,
+          skills: [],
+        },
+      ],
+      delivery: 0,
+      pickup: 0,
     },
   ],
-  totalCost: 100.0,
-  solvedAt: '2026-03-13T00:00:00.000Z',
+  unassigned: [],
+  routingDistance: '12500',
+  routingDuration: '2500',
 };
 
 describe('WebhookService — retry integration (Task 194)', () => {
   let service: WebhookService;
-  let solveRoute: jest.Mock;
+  let optimizeRoutes: jest.Mock;
   let emitRouteUpdate: jest.Mock;
 
   beforeEach(async () => {
     jest.useFakeTimers();
 
-    solveRoute = jest.fn();
+    optimizeRoutes = jest.fn();
     emitRouteUpdate = jest.fn();
 
     const module: TestingModule = await Test.createTestingModule({
@@ -40,7 +58,7 @@ describe('WebhookService — retry integration (Task 194)', () => {
         RetryService,
         {
           provide: GrpcClientService,
-          useValue: { solveRoute },
+          useValue: { optimizeRoutes },
         },
         {
           provide: SocketClientService,
@@ -60,17 +78,15 @@ describe('WebhookService — retry integration (Task 194)', () => {
     jest.clearAllMocks();
   });
 
-  // Simulate optimizer failure
-
   describe('optimizer failure simulation', () => {
     it('should call optimizer exactly 3 times (maxAttempts) when it always fails', async () => {
-      solveRoute.mockRejectedValue(new Error('gRPC: connection refused'));
+      optimizeRoutes.mockRejectedValue(new Error('gRPC: connection refused'));
 
       const pending = service.handleEvent(BASE_EVENT, 'corr-always-fail');
       await jest.runAllTimersAsync();
       const result = await pending;
 
-      expect(solveRoute).toHaveBeenCalledTimes(3);
+      expect(optimizeRoutes).toHaveBeenCalledTimes(3);
 
       expect(result.fallback).toBe(true);
       expect(result.fallbackReason).toBe('optimizer-unreachable');
@@ -80,7 +96,7 @@ describe('WebhookService — retry integration (Task 194)', () => {
     });
 
     it('should call optimizer exactly 2 times when it fails once then recovers', async () => {
-      solveRoute
+      optimizeRoutes
         .mockRejectedValueOnce(new Error('gRPC: timeout'))
         .mockResolvedValue(OPTIMIZER_SUCCESS);
 
@@ -88,16 +104,16 @@ describe('WebhookService — retry integration (Task 194)', () => {
       await jest.runAllTimersAsync();
       const result = await pending;
 
-      expect(solveRoute).toHaveBeenCalledTimes(2);
+      expect(optimizeRoutes).toHaveBeenCalledTimes(2);
 
       expect(result.fallback).toBe(false);
       expect(result.fallbackReason).toBeUndefined();
       expect(result.optimizedRoutes.routes).toHaveLength(1);
-      expect(result.optimizedRoutes.totalCost).toBe(100.0);
+      expect(result.optimizedRoutes.routingDistance).toBe('12500');
     });
 
     it('should call optimizer exactly 3 times when it fails twice then recovers', async () => {
-      solveRoute
+      optimizeRoutes
         .mockRejectedValueOnce(new Error('gRPC: unavailable'))
         .mockRejectedValueOnce(new Error('gRPC: unavailable'))
         .mockResolvedValue(OPTIMIZER_SUCCESS);
@@ -106,9 +122,9 @@ describe('WebhookService — retry integration (Task 194)', () => {
       await jest.runAllTimersAsync();
       const result = await pending;
 
-      expect(solveRoute).toHaveBeenCalledTimes(3);
+      expect(optimizeRoutes).toHaveBeenCalledTimes(3);
       expect(result.fallback).toBe(false);
-      expect(result.optimizedRoutes.totalCost).toBe(100.0);
+      expect(result.optimizedRoutes.routingDistance).toBe('12500');
     });
   });
 
@@ -116,7 +132,7 @@ describe('WebhookService — retry integration (Task 194)', () => {
 
   describe('retry execution confirmation', () => {
     it('should pass correlationId to every optimizer call across retries', async () => {
-      solveRoute
+      optimizeRoutes
         .mockRejectedValueOnce(new Error('fail'))
         .mockResolvedValue(OPTIMIZER_SUCCESS);
 
@@ -124,20 +140,24 @@ describe('WebhookService — retry integration (Task 194)', () => {
       await jest.runAllTimersAsync();
       await pending;
 
-      expect(solveRoute).toHaveBeenNthCalledWith(
+      expect(optimizeRoutes).toHaveBeenNthCalledWith(
         1,
-        expect.objectContaining({ eventType: 'new_order' }),
+        expect.objectContaining({
+          jobs: [expect.objectContaining({ id: 's1' })],
+        }),
         'corr-propagate',
       );
-      expect(solveRoute).toHaveBeenNthCalledWith(
+      expect(optimizeRoutes).toHaveBeenNthCalledWith(
         2,
-        expect.objectContaining({ eventType: 'new_order' }),
+        expect.objectContaining({
+          jobs: [expect.objectContaining({ id: 's1' })],
+        }),
         'corr-propagate',
       );
     });
 
     it('should include fallback metadata in response when all attempts fail', async () => {
-      solveRoute.mockRejectedValue(new Error('gRPC: connection refused'));
+      optimizeRoutes.mockRejectedValue(new Error('gRPC: connection refused'));
 
       const pending = service.handleEvent(BASE_EVENT, 'corr-exhausted');
       await jest.runAllTimersAsync();
@@ -152,7 +172,7 @@ describe('WebhookService — retry integration (Task 194)', () => {
     });
 
     it('should still return a valid response even when socket emits also fail', async () => {
-      solveRoute.mockResolvedValue(OPTIMIZER_SUCCESS);
+      optimizeRoutes.mockResolvedValue(OPTIMIZER_SUCCESS);
       emitRouteUpdate.mockImplementation(() => {
         throw new Error('Socket.io server not connected');
       });
@@ -163,7 +183,7 @@ describe('WebhookService — retry integration (Task 194)', () => {
 
       expect(result.received).toBe(true);
       expect(result.fallback).toBe(false);
-      expect(result.optimizedRoutes.totalCost).toBe(100.0);
+      expect(result.optimizedRoutes.routingDistance).toBe('12500');
       expect(emitRouteUpdate).toHaveBeenCalledTimes(5);
     });
   });

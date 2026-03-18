@@ -46,9 +46,19 @@ describe('StopsService', () => {
     it('should create a stop and return it', async () => {
       repo.create.mockResolvedValue(mockStop);
 
-      const stop = await service.create({ lat: 4.609, lng: -74.081, demand: 20 });
+      const stop = await service.create({
+        lat: 4.609,
+        lng: -74.081,
+        demand: 20,
+      });
 
-      expect(repo.create).toHaveBeenCalledWith({ lat: 4.609, lng: -74.081, demand: 20 });
+      expect(repo.create.mock.calls).toContainEqual([
+        {
+          lat: 4.609,
+          lng: -74.081,
+          demand: 20,
+        },
+      ]);
       expect(stop.id).toBeDefined();
       expect(stop.lat).toBe(4.609);
       expect(stop.lng).toBe(-74.081);
@@ -60,7 +70,13 @@ describe('StopsService', () => {
     it('should create a stop with custom id and priority', async () => {
       repo.create.mockResolvedValue({ ...mockStop, id: 's1', priority: 5 });
 
-      const stop = await service.create({ id: 's1', lat: 4.609, lng: -74.081, demand: 20, priority: 5 });
+      const stop = await service.create({
+        id: 's1',
+        lat: 4.609,
+        lng: -74.081,
+        demand: 20,
+        priority: 5,
+      });
 
       expect(stop.id).toBe('s1');
       expect(stop.priority).toBe(5);
@@ -93,7 +109,9 @@ describe('StopsService', () => {
     it('should throw NotFoundException for unknown id', async () => {
       repo.findById.mockResolvedValue(null);
 
-      await expect(service.findOne('unknown')).rejects.toThrow(NotFoundException);
+      await expect(service.findOne('unknown')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -113,7 +131,9 @@ describe('StopsService', () => {
     it('should throw NotFoundException for unknown id', async () => {
       repo.findById.mockResolvedValue(null);
 
-      await expect(service.update('unknown', { demand: 10 })).rejects.toThrow(NotFoundException);
+      await expect(service.update('unknown', { demand: 10 })).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -124,13 +144,15 @@ describe('StopsService', () => {
 
       await service.remove('s1');
 
-      expect(repo.remove).toHaveBeenCalledWith('s1');
+      expect(repo.remove.mock.calls).toContainEqual(['s1']);
     });
 
     it('should throw NotFoundException for unknown id', async () => {
       repo.findById.mockResolvedValue(null);
 
-      await expect(service.remove('unknown')).rejects.toThrow(NotFoundException);
+      await expect(service.remove('unknown')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 });

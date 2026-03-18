@@ -17,4 +17,4 @@ async function bootstrap() {
     'Bootstrap',
   );
 }
-bootstrap();
+void bootstrap();

@@ -65,13 +65,13 @@ logiflow/
 │   └── automation/         ← n8n workflows + CI pipeline            @AnderssonProgramming
 ├── shared/
 │   └── proto/
-│       └── route-optimizer.proto ← Single source of truth for gRPC contract
+│       └── optimizer.proto ← Single source of truth for gRPC contract
 ├── docker-compose.yml      ← Full system integration (all services)
 ├── docker-compose.dev.yml  ← Local dev overrides
 └── .gitignore
 ```
 
-> **Rule:** The `shared/proto/route-optimizer.proto` file is owned by `@cris-eci` and is the canonical contract between `optimizer` and `gateway`. Never duplicate it.
+> **Rule:** The `shared/proto/optimizer.proto` file is owned by `@cris-eci` and is the canonical contract between `optimizer` and `gateway`.
 
 ---
 
@@ -117,9 +117,9 @@ See each service's own `README.md` for its specific setup, environment variables
 All inter-service communication between `gateway` and `optimizer` uses the shared proto definition:
 
 ```protobuf
-// shared/proto/route-optimizer.proto
+// shared/proto/optimizer.proto
 service RouteOptimizer {
-  rpc SolveRoute (SolveRouteRequest) returns (SolveRouteResponse);
+  rpc OptimizeRoutes (OptimizeRequest) returns (OptimizeResponse);
 }
 ```
 

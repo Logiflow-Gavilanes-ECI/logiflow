@@ -45,9 +45,19 @@ describe('VehiclesService', () => {
     it('should create a vehicle and return it', async () => {
       repo.create.mockResolvedValue(mockVehicle);
 
-      const vehicle = await service.create({ lat: 4.711, lng: -74.072, capacity: 100 });
+      const vehicle = await service.create({
+        lat: 4.711,
+        lng: -74.072,
+        capacity: 100,
+      });
 
-      expect(repo.create).toHaveBeenCalledWith({ lat: 4.711, lng: -74.072, capacity: 100 });
+      expect(repo.create.mock.calls).toContainEqual([
+        {
+          lat: 4.711,
+          lng: -74.072,
+          capacity: 100,
+        },
+      ]);
       expect(vehicle.id).toBeDefined();
       expect(vehicle.lat).toBe(4.711);
       expect(vehicle.lng).toBe(-74.072);
@@ -59,7 +69,12 @@ describe('VehiclesService', () => {
     it('should create a vehicle with custom id', async () => {
       repo.create.mockResolvedValue({ ...mockVehicle, id: 'custom-id' });
 
-      const vehicle = await service.create({ id: 'custom-id', lat: 4.711, lng: -74.072, capacity: 50 });
+      const vehicle = await service.create({
+        id: 'custom-id',
+        lat: 4.711,
+        lng: -74.072,
+        capacity: 50,
+      });
 
       expect(vehicle.id).toBe('custom-id');
     });
@@ -73,7 +88,10 @@ describe('VehiclesService', () => {
     });
 
     it('should return all vehicles', async () => {
-      repo.findAll.mockResolvedValue([mockVehicle, { ...mockVehicle, id: 'v2' }]);
+      repo.findAll.mockResolvedValue([
+        mockVehicle,
+        { ...mockVehicle, id: 'v2' },
+      ]);
 
       const vehicles = await service.findAll();
       expect(vehicles).toHaveLength(2);
@@ -91,7 +109,9 @@ describe('VehiclesService', () => {
     it('should throw NotFoundException for unknown id', async () => {
       repo.findById.mockResolvedValue(null);
 
-      await expect(service.findOne('unknown')).rejects.toThrow(NotFoundException);
+      await expect(service.findOne('unknown')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -111,7 +131,9 @@ describe('VehiclesService', () => {
     it('should throw NotFoundException for unknown id', async () => {
       repo.findById.mockResolvedValue(null);
 
-      await expect(service.update('unknown', { lat: 5.0 })).rejects.toThrow(NotFoundException);
+      await expect(service.update('unknown', { lat: 5.0 })).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -122,13 +144,15 @@ describe('VehiclesService', () => {
 
       await service.remove('v1');
 
-      expect(repo.remove).toHaveBeenCalledWith('v1');
+      expect(repo.remove.mock.calls).toContainEqual(['v1']);
     });
 
     it('should throw NotFoundException for unknown id', async () => {
       repo.findById.mockResolvedValue(null);
 
-      await expect(service.remove('unknown')).rejects.toThrow(NotFoundException);
+      await expect(service.remove('unknown')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 });

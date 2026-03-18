@@ -64,7 +64,11 @@ describe('VehiclesController', () => {
     it('should create and return a vehicle', async () => {
       service.create.mockResolvedValue(mockVehicle);
 
-      const result = await controller.create({ lat: 4.711, lng: -74.072, capacity: 100 });
+      const result = await controller.create({
+        lat: 4.711,
+        lng: -74.072,
+        capacity: 100,
+      });
 
       expect(result.id).toBeDefined();
       expect(result.lat).toBe(4.711);
@@ -85,7 +89,7 @@ describe('VehiclesController', () => {
       service.remove.mockResolvedValue(undefined);
 
       await controller.remove('v1');
-      expect(service.remove).toHaveBeenCalledWith('v1');
+      expect(service.remove.mock.calls).toContainEqual(['v1']);
     });
   });
 });

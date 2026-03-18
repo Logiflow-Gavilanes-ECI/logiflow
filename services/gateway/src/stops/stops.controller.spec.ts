@@ -65,7 +65,11 @@ describe('StopsController', () => {
     it('should create and return a stop', async () => {
       service.create.mockResolvedValue(mockStop);
 
-      const result = await controller.create({ lat: 4.609, lng: -74.081, demand: 20 });
+      const result = await controller.create({
+        lat: 4.609,
+        lng: -74.081,
+        demand: 20,
+      });
 
       expect(result.id).toBeDefined();
       expect(result.demand).toBe(20);
@@ -86,7 +90,7 @@ describe('StopsController', () => {
       service.remove.mockResolvedValue(undefined);
 
       await controller.remove('s1');
-      expect(service.remove).toHaveBeenCalledWith('s1');
+      expect(service.remove.mock.calls).toContainEqual(['s1']);
     });
   });
 });

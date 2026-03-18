@@ -6,7 +6,7 @@ describe('GrpcClientService', () => {
 
   const mockGrpcClient = {
     getService: jest.fn().mockReturnValue({
-      solveRoute: jest.fn().mockReturnValue({
+      optimizeRoutes: jest.fn().mockReturnValue({
         toPromise: jest.fn(),
       }),
     }),

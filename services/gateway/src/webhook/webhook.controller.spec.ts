@@ -8,10 +8,13 @@ import { RetryService } from '../common/retry/retry.service';
 import { UNKNOWN_CORRELATION_ID } from '../common/constants/correlation-id.constant';
 
 const mockGrpcClientService = {
-  solveRoute: jest.fn().mockResolvedValue({
+  optimizeRoutes: jest.fn().mockResolvedValue({
+    code: '0',
+    error: '',
     routes: [],
-    totalCost: 0,
-    solvedAt: '2026-03-05T00:00:00.000Z',
+    unassigned: [],
+    routingDistance: '0',
+    routingDuration: '0',
   }),
 };
 

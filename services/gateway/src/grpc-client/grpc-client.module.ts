@@ -12,7 +12,6 @@ import { GrpcClientService } from './grpc-client.service';
         imports: [ConfigModule],
         inject: [ConfigService],
         useFactory: (configService: ConfigService) => {
-          // Use monorepo shared contract by default, while allowing explicit override in env.
           const protoPath =
             configService.get<string>('GRPC_OPTIMIZER_PROTO_PATH') ??
             resolve(
@@ -21,13 +20,13 @@ import { GrpcClientService } from './grpc-client.service';
               '..',
               'shared',
               'proto',
-              'route-optimizer.proto',
+              'optimizer.proto',
             );
 
           return {
             transport: Transport.GRPC,
             options: {
-              package: 'optimizer',
+              package: 'logiflow',
               protoPath,
               url: `${configService.get<string>('GRPC_OPTIMIZER_HOST', 'localhost')}:${configService.get<string>('GRPC_OPTIMIZER_PORT', '50051')}`,
             },

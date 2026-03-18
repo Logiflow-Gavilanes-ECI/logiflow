@@ -3,11 +3,16 @@ import {
   IsString,
   IsArray,
   ValidateNested,
-  ArrayMinSize,
   IsIn,
+  IsOptional,
+  ArrayMinSize,
 } from 'class-validator';
-import { VehicleDto } from './vehicle.dto';
+import { VehicleDto } from './vehicle.dto.js';
 import { StopDto } from './stop.dto';
+import { JobDto } from './job.dto';
+import { ShipmentDto } from './shipment.dto';
+import { MatrixDto } from './matrix.dto';
+import { OptionsDto } from './options.dto';
 
 export class WebhookEventDto {
   @IsString()
@@ -20,9 +25,31 @@ export class WebhookEventDto {
   @Type(() => VehicleDto)
   vehicles!: VehicleDto[];
 
+  @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
-  @ArrayMinSize(1)
   @Type(() => StopDto)
-  stops!: StopDto[];
+  stops?: StopDto[];
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => JobDto)
+  jobs?: JobDto[];
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ShipmentDto)
+  shipments?: ShipmentDto[];
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => MatrixDto)
+  matrix?: MatrixDto;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => OptionsDto)
+  options?: OptionsDto;
 }
