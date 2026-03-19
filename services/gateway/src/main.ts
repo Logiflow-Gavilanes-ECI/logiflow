@@ -9,7 +9,7 @@ async function bootstrap() {
   app.setGlobalPrefix('api/v1');
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
 
-  const port = process.env.PORT ?? 3000;
+  const port = process.env.PORT ?? 3002;
   await app.listen(port);
 
   Logger.log(

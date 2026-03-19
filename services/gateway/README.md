@@ -161,7 +161,7 @@ Create a `.env` file in `services/gateway`.
 
 | Variable | Default | Description |
 |---|---|---|
-| PORT | `3000` | HTTP server port |
+| PORT | `3002` | HTTP server port |
 | DATABASE_URL | none | Prisma PostgreSQL connection string |
 | GRPC_OPTIMIZER_HOST | `localhost` | Optimizer host |
 | GRPC_OPTIMIZER_PORT | `50051` | Optimizer port |
@@ -172,7 +172,7 @@ Create a `.env` file in `services/gateway`.
 Example:
 
 ```env
-PORT=3000
+PORT=3002
 DATABASE_URL="postgresql://postgres:postgres@localhost:5432/logiflow?schema=public"
 GRPC_OPTIMIZER_HOST=localhost
 GRPC_OPTIMIZER_PORT=50051
@@ -205,7 +205,7 @@ npm run build
 npm run start:prod
 ```
 
-Base URL: `http://localhost:3000/api/v1`
+Base URL: `http://localhost:3002/api/v1`
 
 ---
 
