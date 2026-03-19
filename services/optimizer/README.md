@@ -95,6 +95,7 @@ Current behavior:
   2. otherwise auto-built from `vehicles.start/end`, `jobs.location`, and `shipments.pickup/delivery` (deduplicated)
 - If `GOOGLE_ROUTES_MOCK=true`, matrix is generated locally (no external API call, no billing).
 - Live Google calls require all of: `GOOGLE_ROUTES_ENABLED=true`, `GOOGLE_ROUTES_ALLOW_CALLS=true`, and a valid `GOOGLE_MAPS_API_KEY`.
+- Upstream failures (Google/VROOM) return controlled error responses with empty routes; they are not masked as successful plans.
 
 ### Docker Validation (Google Matrix + grpcurl)
 
@@ -187,9 +188,6 @@ See `shared/proto/optimizer.proto` for full message definitions.
 ```bash
 # Unit tests
 npm test
-
-# Watch mode
-npm run test:watch
 
 # Lint
 npm run lint
