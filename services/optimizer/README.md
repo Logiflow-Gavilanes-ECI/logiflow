@@ -45,7 +45,7 @@ This starts:
 ```bash
 cd services/optimizer
 npm install
-npm run dev
+npm run start:dev
 ```
 
 ## Environment Variables
@@ -95,6 +95,80 @@ Current behavior:
   2. otherwise auto-built from `vehicles.start/end`, `jobs.location`, and `shipments.pickup/delivery` (deduplicated)
 - If `GOOGLE_ROUTES_MOCK=true`, matrix is generated locally (no external API call, no billing).
 - Live Google calls require all of: `GOOGLE_ROUTES_ENABLED=true`, `GOOGLE_ROUTES_ALLOW_CALLS=true`, and a valid `GOOGLE_MAPS_API_KEY`.
+
+### Docker Validation (Google Matrix + grpcurl)
+
+This section was verified in Docker with safe no-billing settings.
+
+#### 1) Start stack in safe Google mock mode
+
+```bash
+cd services/optimizer
+
+MATRIX_SOURCE=google \
+OPTIMIZER_VALIDATE_MATRIX_ONLY=true \
+GOOGLE_ROUTES_ENABLED=true \
+GOOGLE_ROUTES_ALLOW_CALLS=false \
+GOOGLE_ROUTES_MOCK=true \
+MAX_GOOGLE_MATRIX_LOCATIONS=10 \
+docker compose up --build -d
+```
+
+#### 2) Call gRPC without `matrix.locations`
+
+```bash
+grpcurl -plaintext \
+  -import-path ../shared/proto \
+  -proto optimizer.proto \
+  -d '{
+    "vehicles": [
+      {
+        "id": "1",
+        "profile": "CAR",
+        "start": { "lat": 4.60971, "lon": -74.08175 },
+        "end": { "lat": 4.60971, "lon": -74.08175 },
+        "capacity": 10
+      }
+    ],
+    "jobs": [
+      {
+        "id": "100",
+        "location": { "lat": 4.64862, "lon": -74.24789 },
+        "service": 300,
+        "amount": 1
+      }
+    ],
+    "options": {
+      "geometry": false,
+      "metric": "duration",
+      "optimize": true,
+      "algorithm": "greedy"
+    }
+  }' \
+  localhost:50051 logiflow.RouteOptimizer/OptimizeRoutes
+```
+
+Expected: response includes a `matrix` section even when request omits `matrix.locations`.
+
+Example response excerpt:
+
+```json
+{
+  "matrix": {
+    "distances": ["0", "18915", "18915", "0"],
+    "durations": ["0", "1704", "1704", "0"],
+    "locations": [
+      { "lat": 4.60971, "lon": -74.08175 },
+      { "lat": 4.64862, "lon": -74.24789 }
+    ]
+  }
+}
+```
+
+This validates:
+- Google matrix path wiring in Docker
+- automatic location extraction (`buildMatrix`) from vehicles/jobs when matrix locations are omitted
+- guardrails in mock mode (no paid external call)
 
 ## gRPC Contract
 
