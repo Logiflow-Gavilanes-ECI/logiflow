@@ -27,10 +27,12 @@ NestJS service that orchestrates webhook events, gRPC route optimization, real-t
   - [Database Setup (Prisma)](#database-setup-prisma)
   - [Run the App](#run-the-app)
 - [API Endpoints](#api-endpoints)
+  - [Auth](#auth)
   - [Health Check](#health-check)
   - [Webhook](#webhook)
   - [Vehicles CRUD](#vehicles-crud)
   - [Stops CRUD](#stops-crud)
+  - [Security Rules](#security-rules)
 - [Reliability and Traceability](#reliability-and-traceability)
 - [Testing](#testing)
 - [Team](#team)
@@ -44,7 +46,7 @@ LogiFlow is an ARSW - Software Architecture university project that solves dynam
 1. Receives events from n8n via webhook.
 2. Calls a gRPC optimizer service (VROOM).
 3. Emits route updates to a Socket.io real-time service.
-4. Exposes REST APIs for vehicles and stops.
+4. Secures critical routes with JWT Bearer authentication.
 5. Persists vehicle/stop data in PostgreSQL through Prisma.
 
 ---
@@ -56,6 +58,7 @@ n8n (HTTP webhook)
         |
         v
 NestJS Gateway (api/v1)
+  - Auth module (JWT + Passport)
   - CorrelationId middleware
   - Webhook module
   - Retry service (exponential backoff + jitter)
@@ -69,11 +72,17 @@ NestJS Gateway (api/v1)
 ### Event Data Flow
 
 ```text
-POST /webhook
+POST /auth/login
+  -> validate demo credentials from env
+  -> sign JWT with JWT_SECRET and JWT_EXPIRES_IN
+
+POST /webhook (JWT protected)
   -> validate payload (DTO + ValidationPipe)
   -> ensure correlation id
+  -> map payload to OptimizeRequest (vehicles/jobs/shipments)
   -> retry grpc.optimizeRoutes (max 3)
   -> fallback mock route if optimizer unavailable
+  -> normalize OptimizeResponse.routes to realtime payload
   -> retry socket.emitRouteUpdate (max 5)
   -> return HTTP response with fallback metadata
 ```
@@ -168,6 +177,10 @@ Create a `.env` file in `services/gateway`.
 | GRPC_OPTIMIZER_PROTO_PATH | `../../shared/proto/optimizer.proto` | Shared optimizer proto path |
 | SOCKETIO_SERVER_HOST | `localhost` | Socket.io host |
 | SOCKETIO_SERVER_PORT | `3001` | Socket.io port |
+| JWT_SECRET | none | Secret used to sign and verify JWT tokens |
+| JWT_EXPIRES_IN | `1h` | JWT token expiration, e.g. `15m`, `1h`, `24h` |
+| AUTH_DEMO_USERNAME | `demo` | Demo username for `/auth/login` |
+| AUTH_DEMO_PASSWORD | `demo123` | Demo password for `/auth/login` |
 
 Example:
 
@@ -179,6 +192,10 @@ GRPC_OPTIMIZER_PORT=50051
 GRPC_OPTIMIZER_PROTO_PATH=../../shared/proto/optimizer.proto
 SOCKETIO_SERVER_HOST=localhost
 SOCKETIO_SERVER_PORT=3001
+JWT_SECRET=your-super-secret-key-change-this-in-production
+JWT_EXPIRES_IN=1h
+AUTH_DEMO_USERNAME=demo
+AUTH_DEMO_PASSWORD=demo123
 ```
 
 ### Database Setup (Prisma)
@@ -207,11 +224,46 @@ npm run start:prod
 
 Base URL: `http://localhost:3002/api/v1`
 
+### Run Full Stack (Root Compose)
+
+From repository root:
+
+```bash
+docker compose up --build
+```
+
+This starts gateway, realtime, optimizer, Redis, and PostgreSQL in one command.
+
 ---
 
 ## API Endpoints
 
 All routes are prefixed with `/api/v1`.
+
+### Auth
+
+| Method | Endpoint |
+|---|---|
+| POST | `/auth/login` |
+
+Request body:
+
+```json
+{
+  "username": "demo",
+  "password": "demo123"
+}
+```
+
+Success response:
+
+```json
+{
+  "accessToken": "<jwt>",
+  "tokenType": "Bearer",
+  "expiresIn": "1h"
+}
+```
 
 ### Health Check
 
@@ -225,6 +277,8 @@ All routes are prefixed with `/api/v1`.
 |---|---|
 | POST | `/webhook` |
 
+Requires header: `Authorization: Bearer <token>`
+
 Valid `eventType` values: `traffic_jam`, `new_order`, `vehicle_breakdown`, `weather_change`.
 
 Request body:
@@ -234,6 +288,9 @@ Request body:
   "eventType": "new_order",
   "vehicles": [{ "id": "v1", "start": { "lat": 4.711, "lon": -74.072 }, "capacity": 100 }],
   "jobs": [{ "id": "j1", "location": { "lat": 4.609, "lon": -74.081 }, "amount": 20 }],
+  "severity": "HIGH",
+  "risk": { "riskLevel": "CRITICAL", "recommendedAction": "REROUTE_IMMEDIATELY" },
+  "maps": { "detourRecommended": true },
   "options": { "metric": "duration", "optimize": true, "algorithm": "greedy" }
 }
 ```
@@ -269,6 +326,8 @@ Note: `fallbackReason` is returned only when `fallback` is `true`.
 | PUT | `/vehicles/:id` |
 | DELETE | `/vehicles/:id` |
 
+All routes require Bearer token.
+
 ### Stops CRUD
 
 | Method | Endpoint |
@@ -278,6 +337,14 @@ Note: `fallbackReason` is returned only when `fallback` is `true`.
 | POST | `/stops` |
 | PUT | `/stops/:id` |
 | DELETE | `/stops/:id` |
+
+All routes require Bearer token.
+
+### Security Rules
+
+- Public route: `GET /health`
+- Protected routes: `/webhook`, `/vehicles`, `/stops`
+- Invalid, expired, or missing Bearer token returns `401 Unauthorized`.
 
 ---
 
@@ -321,7 +388,8 @@ npm run test:cov
 Current status (latest run):
 
 - 12 test suites passing.
-- 62 tests passing.
+- 63 tests passing.
+- 23 e2e tests passing.
 - Includes retry integration coverage in `webhook-retry.spec.ts`.
 
 ---

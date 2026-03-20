@@ -131,7 +131,10 @@ export class SocketClientService implements OnModuleInit, OnModuleDestroy {
     }));
   }
 
-  private mapStepToInternalFormat(step: RouteStep, index: number): InternalRouteStep {
+  private mapStepToInternalFormat(
+    step: RouteStep,
+    index: number,
+  ): InternalRouteStep {
     return {
       id: step.id,
       stopId: step.id,
