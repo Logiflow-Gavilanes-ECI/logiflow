@@ -1,5 +1,8 @@
 export type Int64Value = string | number;
 
+import type { Metadata } from '@grpc/grpc-js';
+import type { Observable } from 'rxjs';
+
 export enum Profile {
   CAR = 0,
   BICYCLE = 1,
@@ -121,5 +124,8 @@ export interface OptimizeResponse {
 }
 
 export interface RouteOptimizerGrpcService {
-  optimizeRoutes(request: OptimizeRequest): Promise<OptimizeResponse>;
+  optimizeRoutes(
+    request: OptimizeRequest,
+    metadata: Metadata,
+  ): Observable<OptimizeResponse>;
 }

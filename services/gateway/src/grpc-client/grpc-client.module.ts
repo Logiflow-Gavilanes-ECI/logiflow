@@ -32,8 +32,8 @@ import { GrpcClientService } from './grpc-client.service';
               loader: {
                 keepCase: false,
                 longs: String,
-                enums: String,
-                defaults: true,
+                enums: Number,
+                defaults: false,
                 oneofs: true,
               },
             },

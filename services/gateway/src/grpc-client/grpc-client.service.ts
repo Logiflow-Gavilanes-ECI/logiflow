@@ -6,7 +6,7 @@ import {
   OptimizeRequest,
   OptimizeResponse,
 } from './interfaces/route-optimizer.interface';
-import { firstValueFrom, Observable } from 'rxjs';
+import { firstValueFrom } from 'rxjs';
 import {
   CORRELATION_ID_HEADER,
   UNKNOWN_CORRELATION_ID,
@@ -42,17 +42,10 @@ export class GrpcClientService implements OnModuleInit {
 
     const metadata = new Metadata();
     metadata.add(CORRELATION_ID_HEADER, effectiveCorrelationId);
-    const result = (
-      this.routeOptimizerService.optimizeRoutes as unknown as (
-        payload: OptimizeRequest,
-        md: Metadata,
-      ) => Observable<OptimizeResponse>
-    )(request, metadata);
+    const result = this.routeOptimizerService.optimizeRoutes(request, metadata);
 
     // gRPC in NestJS returns Observable; convert to Promise
-    const response = await firstValueFrom(
-      result as unknown as Observable<OptimizeResponse>,
-    );
+    const response = await firstValueFrom(result);
     const routesCount = response.routes?.length ?? 0;
 
     this.logger.log(
