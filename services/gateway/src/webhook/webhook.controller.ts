@@ -1,12 +1,21 @@
-import { Controller, Post, Body, Logger, Headers } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Body,
+  Logger,
+  Headers,
+  UseGuards,
+} from '@nestjs/common';
 import { WebhookService } from './webhook.service';
 import { WebhookEventDto } from './dto/webhook-event.dto';
 import {
   CORRELATION_ID_HEADER,
   UNKNOWN_CORRELATION_ID,
 } from '../common/constants/correlation-id.constant';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
 @Controller('webhook')
+@UseGuards(JwtAuthGuard)
 export class WebhookController {
   private readonly logger = new Logger(WebhookController.name);
 

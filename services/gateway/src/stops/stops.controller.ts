@@ -8,12 +8,15 @@ import {
   Param,
   HttpCode,
   HttpStatus,
+  UseGuards,
 } from '@nestjs/common';
 import { StopsService } from './stops.service';
 import { CreateStopDto } from './dto/create-stop.dto';
 import { UpdateStopDto } from './dto/update-stop.dto';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
 @Controller('stops')
+@UseGuards(JwtAuthGuard)
 export class StopsController {
   constructor(private readonly stopsService: StopsService) {}
 

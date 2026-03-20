@@ -8,6 +8,7 @@ import { AppModule } from './../src/app.module';
 
 describe('AppController (e2e)', () => {
   let app: INestApplication<App>;
+  let accessToken: string;
 
   jest.setTimeout(15000);
 
@@ -22,6 +23,16 @@ describe('AppController (e2e)', () => {
       new ValidationPipe({ whitelist: true, transform: true }),
     );
     await app.init();
+
+    const loginResponse = await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .send({
+        username: process.env.AUTH_DEMO_USERNAME ?? 'demo',
+        password: process.env.AUTH_DEMO_PASSWORD ?? 'demo123',
+      })
+      .expect(200);
+
+    accessToken = loginResponse.body.accessToken as string;
   });
 
   it('/api/v1/health (GET)', () => {
@@ -41,9 +52,17 @@ describe('AppController (e2e)', () => {
       stops: [{ id: 's1', lat: 4.6097, lng: -74.0817, demand: 20 }],
     };
 
+    it('/api/v1/webhook (POST) should reject when missing bearer token', () => {
+      return request(app.getHttpServer())
+        .post('/api/v1/webhook')
+        .send(validPayload)
+        .expect(401);
+    });
+
     it('/api/v1/webhook (POST) should accept valid event', () => {
       return request(app.getHttpServer())
         .post('/api/v1/webhook')
+        .set('Authorization', `Bearer ${accessToken}`)
         .send(validPayload)
         .expect(201)
         .then((res) => {
@@ -57,6 +76,7 @@ describe('AppController (e2e)', () => {
     it('/api/v1/webhook (POST) should reject invalid eventType', () => {
       return request(app.getHttpServer())
         .post('/api/v1/webhook')
+        .set('Authorization', `Bearer ${accessToken}`)
         .send({ ...validPayload, eventType: 'invalid_event' })
         .expect(400);
     });
@@ -64,6 +84,7 @@ describe('AppController (e2e)', () => {
     it('/api/v1/webhook (POST) should reject empty vehicles', () => {
       return request(app.getHttpServer())
         .post('/api/v1/webhook')
+        .set('Authorization', `Bearer ${accessToken}`)
         .send({ ...validPayload, vehicles: [] })
         .expect(400);
     });
@@ -71,15 +92,21 @@ describe('AppController (e2e)', () => {
     it('/api/v1/webhook (POST) should reject missing body', () => {
       return request(app.getHttpServer())
         .post('/api/v1/webhook')
+        .set('Authorization', `Bearer ${accessToken}`)
         .send({})
         .expect(400);
     });
   });
 
   describe('Vehicles CRUD (e2e)', () => {
+    it('GET /api/v1/vehicles should reject when missing bearer token', () => {
+      return request(app.getHttpServer()).get('/api/v1/vehicles').expect(401);
+    });
+
     it('GET /api/v1/vehicles should return empty array', () => {
       return request(app.getHttpServer())
         .get('/api/v1/vehicles')
+        .set('Authorization', `Bearer ${accessToken}`)
         .expect(200)
         .then((res) => {
           expect(res.body).toEqual([]);
@@ -89,6 +116,7 @@ describe('AppController (e2e)', () => {
     it('POST /api/v1/vehicles should create a vehicle', () => {
       return request(app.getHttpServer())
         .post('/api/v1/vehicles')
+        .set('Authorization', `Bearer ${accessToken}`)
         .send({ lat: 4.711, lng: -74.072, capacity: 100 })
         .expect(201)
         .then((res) => {
@@ -101,6 +129,7 @@ describe('AppController (e2e)', () => {
     it('POST should reject invalid lat', () => {
       return request(app.getHttpServer())
         .post('/api/v1/vehicles')
+        .set('Authorization', `Bearer ${accessToken}`)
         .send({ lat: 200, lng: -74.072, capacity: 100 })
         .expect(400);
     });
@@ -108,10 +137,12 @@ describe('AppController (e2e)', () => {
     it('GET /api/v1/vehicles/:id should return a vehicle', async () => {
       const created = await request(app.getHttpServer())
         .post('/api/v1/vehicles')
+        .set('Authorization', `Bearer ${accessToken}`)
         .send({ id: 'v-test', lat: 4.711, lng: -74.072, capacity: 100 });
 
       return request(app.getHttpServer())
         .get(`/api/v1/vehicles/${created.body.id}`)
+        .set('Authorization', `Bearer ${accessToken}`)
         .expect(200)
         .then((res) => {
           expect(res.body.id).toBe('v-test');
@@ -121,16 +152,19 @@ describe('AppController (e2e)', () => {
     it('GET /api/v1/vehicles/:id should 404 for unknown', () => {
       return request(app.getHttpServer())
         .get('/api/v1/vehicles/unknown')
+        .set('Authorization', `Bearer ${accessToken}`)
         .expect(404);
     });
 
     it('PUT /api/v1/vehicles/:id should update', async () => {
       await request(app.getHttpServer())
         .post('/api/v1/vehicles')
+        .set('Authorization', `Bearer ${accessToken}`)
         .send({ id: 'v-upd', lat: 4.711, lng: -74.072, capacity: 100 });
 
       return request(app.getHttpServer())
         .put('/api/v1/vehicles/v-upd')
+        .set('Authorization', `Bearer ${accessToken}`)
         .send({ capacity: 250 })
         .expect(200)
         .then((res) => {
@@ -142,22 +176,30 @@ describe('AppController (e2e)', () => {
     it('DELETE /api/v1/vehicles/:id should remove', async () => {
       await request(app.getHttpServer())
         .post('/api/v1/vehicles')
+        .set('Authorization', `Bearer ${accessToken}`)
         .send({ id: 'v-del', lat: 4.711, lng: -74.072, capacity: 100 });
 
       await request(app.getHttpServer())
         .delete('/api/v1/vehicles/v-del')
+        .set('Authorization', `Bearer ${accessToken}`)
         .expect(204);
 
       return request(app.getHttpServer())
         .get('/api/v1/vehicles/v-del')
+        .set('Authorization', `Bearer ${accessToken}`)
         .expect(404);
     });
   });
 
   describe('Stops CRUD (e2e)', () => {
+    it('GET /api/v1/stops should reject when missing bearer token', () => {
+      return request(app.getHttpServer()).get('/api/v1/stops').expect(401);
+    });
+
     it('GET /api/v1/stops should return empty array', () => {
       return request(app.getHttpServer())
         .get('/api/v1/stops')
+        .set('Authorization', `Bearer ${accessToken}`)
         .expect(200)
         .then((res) => {
           expect(res.body).toEqual([]);
@@ -167,6 +209,7 @@ describe('AppController (e2e)', () => {
     it('POST /api/v1/stops should create a stop', () => {
       return request(app.getHttpServer())
         .post('/api/v1/stops')
+        .set('Authorization', `Bearer ${accessToken}`)
         .send({ lat: 4.609, lng: -74.081, demand: 20 })
         .expect(201)
         .then((res) => {
@@ -179,6 +222,7 @@ describe('AppController (e2e)', () => {
     it('POST should reject negative demand', () => {
       return request(app.getHttpServer())
         .post('/api/v1/stops')
+        .set('Authorization', `Bearer ${accessToken}`)
         .send({ lat: 4.609, lng: -74.081, demand: -5 })
         .expect(400);
     });
@@ -186,10 +230,12 @@ describe('AppController (e2e)', () => {
     it('GET /api/v1/stops/:id should return a stop', async () => {
       const created = await request(app.getHttpServer())
         .post('/api/v1/stops')
+        .set('Authorization', `Bearer ${accessToken}`)
         .send({ id: 's-test', lat: 4.609, lng: -74.081, demand: 20 });
 
       return request(app.getHttpServer())
         .get(`/api/v1/stops/${created.body.id}`)
+        .set('Authorization', `Bearer ${accessToken}`)
         .expect(200)
         .then((res) => {
           expect(res.body.id).toBe('s-test');
@@ -199,16 +245,19 @@ describe('AppController (e2e)', () => {
     it('GET /api/v1/stops/:id should 404 for unknown', () => {
       return request(app.getHttpServer())
         .get('/api/v1/stops/unknown')
+        .set('Authorization', `Bearer ${accessToken}`)
         .expect(404);
     });
 
     it('PUT /api/v1/stops/:id should update', async () => {
       await request(app.getHttpServer())
         .post('/api/v1/stops')
+        .set('Authorization', `Bearer ${accessToken}`)
         .send({ id: 's-upd', lat: 4.609, lng: -74.081, demand: 20 });
 
       return request(app.getHttpServer())
         .put('/api/v1/stops/s-upd')
+        .set('Authorization', `Bearer ${accessToken}`)
         .send({ demand: 50, priority: 3 })
         .expect(200)
         .then((res) => {
@@ -220,14 +269,17 @@ describe('AppController (e2e)', () => {
     it('DELETE /api/v1/stops/:id should remove', async () => {
       await request(app.getHttpServer())
         .post('/api/v1/stops')
+        .set('Authorization', `Bearer ${accessToken}`)
         .send({ id: 's-del', lat: 4.609, lng: -74.081, demand: 20 });
 
       await request(app.getHttpServer())
         .delete('/api/v1/stops/s-del')
+        .set('Authorization', `Bearer ${accessToken}`)
         .expect(204);
 
       return request(app.getHttpServer())
         .get('/api/v1/stops/s-del')
+        .set('Authorization', `Bearer ${accessToken}`)
         .expect(404);
     });
   });

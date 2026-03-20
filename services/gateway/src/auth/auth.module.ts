@@ -6,6 +6,7 @@ import { StringValue } from 'ms';
 import { JwtStrategy } from './jwt.strategy';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
+import { JwtAuthGuard } from './jwt-auth.guard';
 
 @Module({
   imports: [
@@ -27,7 +28,7 @@ import { AuthService } from './auth.service';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy],
-  exports: [PassportModule, JwtModule],
+  providers: [AuthService, JwtStrategy, JwtAuthGuard],
+  exports: [PassportModule, JwtModule, JwtAuthGuard],
 })
 export class AuthModule {}
