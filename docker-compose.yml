@@ -1,0 +1,103 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: logiflow-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: logiflow_dev
+      POSTGRES_DB: logiflow_gateway
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d logiflow_gateway"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: logiflow-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  vroom:
+    build:
+      context: ./services/optimizer
+      dockerfile: Dockerfile.vroom
+    container_name: logiflow-vroom
+    ports:
+      - "3000:3000"
+
+  optimizer:
+    build:
+      context: .
+      dockerfile: services/optimizer/Dockerfile
+    container_name: logiflow-optimizer
+    ports:
+      - "50051:50051"
+    environment:
+      GRPC_PORT: 50051
+      VROOM_URL: http://vroom:3000
+      OPTIMIZER_PROTO_PATH: /app/shared/proto/optimizer.proto
+      MATRIX_SOURCE: request
+      GOOGLE_ROUTES_ENABLED: "false"
+      GOOGLE_ROUTES_ALLOW_CALLS: "false"
+      GOOGLE_ROUTES_MOCK: "true"
+    depends_on:
+      vroom:
+        condition: service_started
+
+  realtime:
+    image: node:22-alpine
+    container_name: logiflow-realtime
+    working_dir: /workspace/services/realtime
+    command: sh -c "npm install && node src/index.js"
+    volumes:
+      - .:/workspace
+    environment:
+      PORT: 3001
+      REDIS_URL: redis://redis:6379
+    ports:
+      - "3001:3001"
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  gateway:
+    image: node:22-alpine
+    container_name: logiflow-gateway
+    working_dir: /workspace/services/gateway
+    command: sh -c "npm install && npx prisma generate && npm run start:dev"
+    volumes:
+      - .:/workspace
+    environment:
+      PORT: 3002
+      DATABASE_URL: postgresql://postgres:logiflow_dev@postgres:5432/logiflow_gateway?schema=public
+      GRPC_OPTIMIZER_HOST: optimizer
+      GRPC_OPTIMIZER_PORT: 50051
+      GRPC_OPTIMIZER_PROTO_PATH: ../../shared/proto/optimizer.proto
+      SOCKETIO_SERVER_HOST: realtime
+      SOCKETIO_SERVER_PORT: 3001
+      JWT_SECRET: your-super-secret-key-change-this-in-production
+      JWT_EXPIRES_IN: 1h
+      AUTH_DEMO_USERNAME: demo
+      AUTH_DEMO_PASSWORD: demo123
+    ports:
+      - "3002:3002"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      optimizer:
+        condition: service_started
+      realtime:
+        condition: service_started
+
+volumes:
+  postgres_data:
