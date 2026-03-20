@@ -94,10 +94,10 @@ describe('WebhookService', () => {
           jobs: [
             expect.objectContaining({
               id: 's1',
-              location: expect.objectContaining({
+              location: {
                 lat: 4.6097,
                 lon: -74.0817,
-              }),
+              },
             }),
           ],
         }),

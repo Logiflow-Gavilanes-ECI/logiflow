@@ -6,8 +6,32 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { io, Socket } from 'socket.io-client';
-import { OptimizeResponse } from '../grpc-client/interfaces/route-optimizer.interface';
+import {
+  OptimizeResponse,
+  Route,
+  RouteStep,
+} from '../grpc-client/interfaces/route-optimizer.interface';
 import { UNKNOWN_CORRELATION_ID } from '../common/constants/correlation-id.constant';
+
+interface InternalRouteStep {
+  id: string;
+  stopId: string;
+  lat: number;
+  lng: number;
+  lon: number;
+  type: string;
+  arrivalOrder: number;
+}
+
+interface InternalRoute {
+  vehicleId: string;
+  steps: InternalRouteStep[];
+  totalDistance: number;
+  estimatedTime: number;
+  distance: string | number;
+  duration: string | number;
+  cost: number;
+}
 
 @Injectable()
 export class SocketClientService implements OnModuleInit, OnModuleDestroy {
@@ -68,24 +92,7 @@ export class SocketClientService implements OnModuleInit, OnModuleDestroy {
   ): void {
     const effectiveCorrelationId = correlationId ?? UNKNOWN_CORRELATION_ID;
     const sourceRoutes = routes.routes ?? [];
-
-    const normalizedRoutes = sourceRoutes.map((route) => ({
-      vehicleId: route.vehicleId,
-      steps: (route.steps ?? []).map((step, index) => ({
-        id: step.id,
-        stopId: step.id,
-        lat: step.location.lat,
-        lng: step.location.lon,
-        lon: step.location.lon,
-        type: step.type,
-        arrivalOrder: step.arrival || index + 1,
-      })),
-      totalDistance: Number(route.distance || 0),
-      estimatedTime: Number(route.duration || 0),
-      distance: route.distance,
-      duration: route.duration,
-      cost: route.cost,
-    }));
+    const normalizedRoutes = this.mapRoutesToInternalFormat(sourceRoutes);
 
     const payload = {
       eventType,
@@ -108,5 +115,31 @@ export class SocketClientService implements OnModuleInit, OnModuleDestroy {
         `Socket.io server not connected, route update not emitted | correlationId: ${effectiveCorrelationId}`,
       );
     }
+  }
+
+  private mapRoutesToInternalFormat(routes: Route[]): InternalRoute[] {
+    return routes.map((route) => ({
+      vehicleId: route.vehicleId,
+      steps: (route.steps ?? []).map((step, index) =>
+        this.mapStepToInternalFormat(step, index),
+      ),
+      totalDistance: Number(route.distance || 0),
+      estimatedTime: Number(route.duration || 0),
+      distance: route.distance,
+      duration: route.duration,
+      cost: route.cost,
+    }));
+  }
+
+  private mapStepToInternalFormat(step: RouteStep, index: number): InternalRouteStep {
+    return {
+      id: step.id,
+      stopId: step.id,
+      lat: step.location.lat,
+      lng: step.location.lon,
+      lon: step.location.lon,
+      type: step.type,
+      arrivalOrder: step.arrival || index + 1,
+    };
   }
 }
