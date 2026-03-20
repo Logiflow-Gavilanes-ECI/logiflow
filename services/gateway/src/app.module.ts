@@ -10,6 +10,7 @@ import { StopsModule } from './stops/stops.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { RetryModule } from './common/retry/retry.module';
 import { CorrelationIdMiddleware } from './common/middleware/correlation-id.middleware';
+import { AuthModule } from './auth/auth.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { CorrelationIdMiddleware } from './common/middleware/correlation-id.midd
     }),
     PrismaModule,
     RetryModule,
+    AuthModule,
     GrpcClientModule,
     SocketClientModule,
     WebhookModule,
