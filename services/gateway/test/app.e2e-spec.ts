@@ -73,6 +73,28 @@ describe('AppController (e2e)', () => {
         });
     });
 
+    it('/api/v1/webhook (POST) should accept enriched payload fields', () => {
+      return request(app.getHttpServer())
+        .post('/api/v1/webhook')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({
+          ...validPayload,
+          severity: 'HIGH',
+          risk: {
+            riskLevel: 'CRITICAL',
+            recommendedAction: 'REROUTE_IMMEDIATELY',
+          },
+          maps: {
+            detourRecommended: true,
+          },
+        })
+        .expect(201)
+        .then((res) => {
+          expect(res.body.received).toBe(true);
+          expect(res.body.eventType).toBe('traffic_jam');
+        });
+    });
+
     it('/api/v1/webhook (POST) should reject invalid eventType', () => {
       return request(app.getHttpServer())
         .post('/api/v1/webhook')
