@@ -66,15 +66,22 @@ async function main() {
         const vehicleId = route.vehicleId || route.vehicle_id;
         if (!vehicleId) return;
 
+        const steps = (route.steps || []).map((s) => ({
+          id: s.id || s.stopId,
+          lat: s.lat ?? s.location?.lat,
+          lng: s.lng ?? s.lon ?? s.location?.lon,
+          order: s.arrivalOrder || s.arrival,
+          type: s.type,
+        }));
+
+        const polyline = steps
+          .filter((s) => s.lat != null && s.lng != null)
+          .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+          .map((s) => ({ lat: s.lat, lng: s.lng }));
+
         const routeData = {
-          stops: (route.steps || []).map((s) => ({
-            id: s.id || s.stopId,
-            lat: s.lat ?? s.location?.lat,
-            lng: s.lng ?? s.lon ?? s.location?.lon,
-            order: s.arrivalOrder || s.arrival,
-            type: s.type,
-          })),
-          polyline: [],
+          stops: steps,
+          polyline,
           estimatedTime: route.estimatedTime ?? route.duration,
           totalDistance: route.totalDistance ?? route.distance,
         };
