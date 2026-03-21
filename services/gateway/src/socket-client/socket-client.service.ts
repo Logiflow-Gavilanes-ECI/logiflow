@@ -6,7 +6,8 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { io, Socket } from 'socket.io-client';
-import { SolveRouteResponse } from '../grpc-client/interfaces/route-optimizer.interface';
+import { OptimizeResponse } from '../grpc-client/interfaces/route-optimizer.interface';
+import { UNKNOWN_CORRELATION_ID } from '../common/constants/correlation-id.constant';
 
 @Injectable()
 export class SocketClientService implements OnModuleInit, OnModuleDestroy {
@@ -60,24 +61,51 @@ export class SocketClientService implements OnModuleInit, OnModuleDestroy {
     return this.connected;
   }
 
-  emitRouteUpdate(eventType: string, routes: SolveRouteResponse): void {
+  emitRouteUpdate(
+    eventType: string,
+    routes: OptimizeResponse,
+    correlationId?: string,
+  ): void {
+    const effectiveCorrelationId = correlationId ?? UNKNOWN_CORRELATION_ID;
+    const sourceRoutes = routes.routes ?? [];
+
+    const normalizedRoutes = sourceRoutes.map((route) => ({
+      vehicleId: route.vehicleId,
+      steps: (route.steps ?? []).map((step, index) => ({
+        id: step.id,
+        stopId: step.id,
+        lat: step.location.lat,
+        lng: step.location.lon,
+        lon: step.location.lon,
+        type: step.type,
+        arrivalOrder: step.arrival || index + 1,
+      })),
+      totalDistance: Number(route.distance || 0),
+      estimatedTime: Number(route.duration || 0),
+      distance: route.distance,
+      duration: route.duration,
+      cost: route.cost,
+    }));
+
     const payload = {
       eventType,
-      routes: routes.routes,
-      totalCost: routes.totalCost,
-      solvedAt: routes.solvedAt,
+      correlationId: effectiveCorrelationId,
+      routes: normalizedRoutes,
+      code: routes.code,
+      error: routes.error,
+      routingDistance: routes.routingDistance,
+      routingDuration: routes.routingDuration,
       emittedAt: new Date().toISOString(),
     };
 
     if (this.connected) {
       this.socket.emit('route-update', payload);
       this.logger.log(
-        `Emitted route-update: ${routes.routes.length} routes for event ${eventType}`,
+        `Emitted route-update: ${sourceRoutes.length} routes for event ${eventType} | correlationId: ${effectiveCorrelationId}`,
       );
     } else {
-      this.logger.warn(
-        'Socket.io server not connected. Route update not sent. ' +
-          'Will be sent when connection is restored.',
+      throw new Error(
+        `Socket.io server not connected, route update not emitted | correlationId: ${effectiveCorrelationId}`,
       );
     }
   }

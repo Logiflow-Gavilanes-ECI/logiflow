@@ -1,11 +1,16 @@
 import { Injectable, Logger, OnModuleInit, Inject } from '@nestjs/common';
 import type { ClientGrpc } from '@nestjs/microservices';
+import { Metadata } from '@grpc/grpc-js';
 import {
   RouteOptimizerGrpcService,
-  SolveRouteRequest,
-  SolveRouteResponse,
+  OptimizeRequest,
+  OptimizeResponse,
 } from './interfaces/route-optimizer.interface';
 import { firstValueFrom, Observable } from 'rxjs';
+import {
+  CORRELATION_ID_HEADER,
+  UNKNOWN_CORRELATION_ID,
+} from '../common/constants/correlation-id.constant';
 
 @Injectable()
 export class GrpcClientService implements OnModuleInit {
@@ -22,20 +27,36 @@ export class GrpcClientService implements OnModuleInit {
     this.logger.log('gRPC RouteOptimizer client initialized');
   }
 
-  async solveRoute(request: SolveRouteRequest): Promise<SolveRouteResponse> {
+  async optimizeRoutes(
+    request: OptimizeRequest,
+    correlationId?: string,
+  ): Promise<OptimizeResponse> {
+    const effectiveCorrelationId = correlationId ?? UNKNOWN_CORRELATION_ID;
+    const vehiclesCount = request.vehicles?.length ?? 0;
+    const jobsCount = request.jobs?.length ?? 0;
+    const shipmentsCount = request.shipments?.length ?? 0;
+
     this.logger.log(
-      `Sending VRP to optimizer: ${request.vehicles.length} vehicles, ${request.stops.length} stops`,
+      `Sending VRP to optimizer: ${vehiclesCount} vehicles, ${jobsCount} jobs, ${shipmentsCount} shipments | correlationId: ${effectiveCorrelationId}`,
     );
 
-    const result = this.routeOptimizerService.solveRoute(request);
+    const metadata = new Metadata();
+    metadata.add(CORRELATION_ID_HEADER, effectiveCorrelationId);
+    const result = (
+      this.routeOptimizerService.optimizeRoutes as unknown as (
+        payload: OptimizeRequest,
+        md: Metadata,
+      ) => Observable<OptimizeResponse>
+    )(request, metadata);
 
     // gRPC in NestJS returns Observable; convert to Promise
     const response = await firstValueFrom(
-      result as unknown as Observable<SolveRouteResponse>,
+      result as unknown as Observable<OptimizeResponse>,
     );
+    const routesCount = response.routes?.length ?? 0;
 
     this.logger.log(
-      `Optimizer returned ${response.routes.length} routes, total cost: ${response.totalCost}`,
+      `Optimizer returned ${routesCount} routes, code: ${response.code} | correlationId: ${effectiveCorrelationId}`,
     );
 
     return response;

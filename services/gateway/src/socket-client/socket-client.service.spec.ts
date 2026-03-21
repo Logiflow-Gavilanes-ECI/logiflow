@@ -29,13 +29,18 @@ describe('SocketClientService', () => {
     expect(service.isConnected()).toBe(false);
   });
 
-  it('should not throw when emitting while disconnected', () => {
+  it('should throw when emitting while disconnected', () => {
     const mockRoutes = {
+      code: '0',
+      error: '',
       routes: [],
-      totalCost: 0,
-      solvedAt: '2026-03-06T00:00:00.000Z',
+      unassigned: [],
+      routingDistance: '0',
+      routingDuration: '0',
     };
 
-    expect(() => service.emitRouteUpdate('traffic_jam', mockRoutes)).not.toThrow();
+    expect(() => service.emitRouteUpdate('traffic_jam', mockRoutes)).toThrow(
+      'Socket.io server not connected',
+    );
   });
 });

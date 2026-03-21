@@ -1,18 +1,14 @@
 <div align="center">
 
-# 🚛 LogiFlow Core Backend
+# LogiFlow Core Backend
 
-**AI-Powered Real-Time Dynamic Fleet Routing Platform**
+NestJS service that orchestrates webhook events, gRPC route optimization, real-time socket updates, and CRUD APIs for vehicles/stops.
 
 [![NestJS](https://img.shields.io/badge/NestJS-11.x-ea2845?logo=nestjs&logoColor=white)](https://nestjs.com/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-3178c6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-22+-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
-[![Jest](https://img.shields.io/badge/Tests-Jest_30-c21325?logo=jest&logoColor=white)](https://jestjs.io/)
-[![gRPC](https://img.shields.io/badge/gRPC-Protocol_Buffers-244c5a?logo=google&logoColor=white)](https://grpc.io/)
-[![Socket.io](https://img.shields.io/badge/Socket.io-Client-010101?logo=socket.io&logoColor=white)](https://socket.io/)
-
-
-NestJS core backend that orchestrates n8n automation workflows, a gRPC route optimizer (VROOM), and a Socket.io real-time gateway for dynamic fleet routing.
+[![Prisma](https://img.shields.io/badge/Prisma-7.5-2d3748?logo=prisma&logoColor=white)](https://www.prisma.io/)
+[![Jest](https://img.shields.io/badge/Tests-62%20passing-c21325?logo=jest&logoColor=white)](https://jestjs.io/)
 
 </div>
 
@@ -28,16 +24,14 @@ NestJS core backend that orchestrates n8n automation workflows, a gRPC route opt
   - [Prerequisites](#prerequisites)
   - [Installation](#installation)
   - [Environment Variables](#environment-variables)
-  - [Running the Application](#running-the-application)
+  - [Database Setup (Prisma)](#database-setup-prisma)
+  - [Run the App](#run-the-app)
 - [API Endpoints](#api-endpoints)
   - [Health Check](#health-check)
   - [Webhook](#webhook)
   - [Vehicles CRUD](#vehicles-crud)
   - [Stops CRUD](#stops-crud)
-- [Integrations](#integrations)
-  - [gRPC — Route Optimizer](#grpc--route-optimizer)
-  - [Socket.io — Real-Time Gateway](#socketio--real-time-gateway)
-  - [n8n — Workflow Automation](#n8n--workflow-automation)
+- [Reliability and Traceability](#reliability-and-traceability)
 - [Testing](#testing)
 - [Team](#team)
 
@@ -45,58 +39,43 @@ NestJS core backend that orchestrates n8n automation workflows, a gRPC route opt
 
 ## Overview
 
-**LogiFlow** is a university project for the subject ARSW — Software Architecture that solves the Vehicle Routing Problem (VRP) in real time. When a logistics event occurs (new order, traffic jam, vehicle breakdown, weather change), the system re-optimizes delivery routes dynamically and pushes updates to connected map clients instantly.
+LogiFlow is an ARSW - Software Architecture university project that solves dynamic fleet routing in real time. When logistics events occur (new orders, traffic changes, vehicle incidents), this gateway:
 
-This repository contains the **Core Backend** — the central NestJS service that:
-
-1. **Receives events** from n8n automation via a webhook endpoint.
-2. **Requests route optimization** from a Python/VROOM gRPC microservice.
-3. **Pushes optimized routes** to a Socket.io real-time gateway for live map rendering.
-4. **Exposes a REST API** for managing vehicles and stops (delivery points).
+1. Receives events from n8n via webhook.
+2. Calls a gRPC optimizer service (VROOM).
+3. Emits route updates to a Socket.io real-time service.
+4. Exposes REST APIs for vehicles and stops.
+5. Persists vehicle/stop data in PostgreSQL through Prisma.
 
 ---
 
 ## Architecture
 
-```
-┌─────────────┐       POST /webhook       ┌──────────────────────┐
-│   n8n       │ ───────────────────────▶  │  NestJS Core Backend │
-│             │                           │                      │
-└─────────────┘                           │                      │
-                                           │  ┌───────────────┐  │
-                                           │  │ WebhookModule │  │
-                                           │  └───────┬───────┘  │
-                                           │          │          │
-                                           │          ▼          │
-                                           │  ┌───────────────┐  │
-                                           │  │ GrpcClient     │──┼──▶ gRPC   :50051
-                                           │  └───────┬───────┘  │
-                                           │          │          │
-                                           │          ▼          │
-                                           │  ┌───────────────┐  │
-                                           │  │ SocketClient   │──┼──▶ Socket.io :3001
-                                           │  │ Module         │  │    
-                                           │  └───────────────┘  │
-                                           │                     │
-                                           │  ┌───────────────┐  │
-                                           │  │ VehiclesModule │ │   REST CRUD
-                                           │  ├───────────────┤  │   /api/v1/vehicles
-                                           │  │ StopsModule    │ │   /api/v1/stops
-                                           │  └───────────────┘  │
-                                           └─────────────────────┘
+```text
+n8n (HTTP webhook)
+        |
+        v
+NestJS Gateway (api/v1)
+  - CorrelationId middleware
+  - Webhook module
+  - Retry service (exponential backoff + jitter)
+  - Prisma repositories (vehicles/stops)
+        |
+        +--> gRPC Optimizer (RouteOptimizer.OptimizeRoutes)
+        |
+        +--> Socket.io Realtime Gateway (route-update)
 ```
 
-### Data Flow
+### Event Data Flow
 
-```
-Event (n8n) → Webhook → Build gRPC Request → Call Optimizer → Receive Routes
-                                                                    │
-                                     ┌──────────────────────────────┘
-                                     ▼
-                              Emit to Socket.io → Map UI
-                                     │
-                                     ▼
-                              Return HTTP Response to n8n
+```text
+POST /webhook
+  -> validate payload (DTO + ValidationPipe)
+  -> ensure correlation id
+  -> retry grpc.optimizeRoutes (max 3)
+  -> fallback mock route if optimizer unavailable
+  -> retry socket.emitRouteUpdate (max 5)
+  -> return HTTP response with fallback metadata
 ```
 
 ---
@@ -105,86 +84,58 @@ Event (n8n) → Webhook → Build gRPC Request → Call Optimizer → Receive Ro
 
 | Technology | Purpose | Version |
 |---|---|---|
-| **NestJS** | Backend framework (modules, DI, decorators) | 11.x |
-| **TypeScript** | Type-safe development | 5.7 |
-| **Express** | HTTP platform under NestJS | 5.x |
-| **class-validator** | DTO validation with decorators | 0.15 |
-| **class-transformer** | DTO transformation (nested objects) | 0.5 |
-| **@grpc/grpc-js** | gRPC client for VROOM optimizer | 1.14 |
-| **@grpc/proto-loader** | Load .proto files at runtime | 0.8 |
-| **socket.io-client** | Socket.io client to Elizabeth's gateway | 4.8 |
-| **@nestjs/config** | Environment variable management | 4.x |
-| **Jest** | Unit & E2E testing | 30.x |
-| **Supertest** | HTTP assertion for E2E tests | 7.x |
+| NestJS | Modular backend framework | 11.x |
+| TypeScript | Type-safe development | 5.7 |
+| Prisma | ORM and DB access | 7.5 |
+| PostgreSQL | Persistent storage | 15+ |
+| @grpc/grpc-js | gRPC client for optimizer | 1.14 |
+| socket.io-client | Real-time route emission | 4.8 |
+| class-validator / class-transformer | DTO validation and transformation | 0.15 / 0.5 |
+| Jest + ts-jest | Unit/integration/e2e tests | 30.x |
 
 ---
 
 ## Project Structure
 
-```
-logiflow-core-backend/
-├── .env                              # Environment variables (not committed)
-├── .env.example                      # Template for environment setup
-├── nest-cli.json                     # NestJS CLI config (proto assets)
-├── package.json                      # Dependencies & scripts
-├── tsconfig.json                     # TypeScript configuration
-├── tsconfig.build.json               # Build-specific TS config
-│
+```text
+services/gateway/
+├── prisma/
+│   ├── schema.prisma
+│   └── migrations/
 ├── src/
-│   ├── main.ts                       # Bootstrap: CORS, prefix, ValidationPipe
-│   ├── app.module.ts                 # Root module (imports all feature modules)
-│   ├── app.controller.ts             # GET /health endpoint
-│   ├── app.service.ts                # Health check logic
-│   ├── app.controller.spec.ts        # Health endpoint unit test
-│   │
-│   ├── webhook/                      # n8n webhook integration
-│   │   ├── webhook.controller.ts     # POST /webhook
-│   │   ├── webhook.service.ts        # Core: gRPC call → Socket.io emit
-│   │   ├── webhook.module.ts         # Module definition
-│   │   ├── webhook.controller.spec.ts
+│   ├── app.module.ts
+│   ├── main.ts
+│   ├── common/
+│   │   ├── constants/
+│   │   │   └── correlation-id.constant.ts
+│   │   ├── middleware/
+│   │   │   └── correlation-id.middleware.ts
+│   │   └── retry/
+│   │       ├── retry.module.ts
+│   │       ├── retry.service.ts
+│   │       ├── retry.options.ts
+│   │       └── retry-exhausted.exception.ts
+│   ├── prisma/
+│   │   ├── prisma.module.ts
+│   │   └── prisma.service.ts
+│   ├── generated/prisma/
+│   │   └── client.ts
+│   ├── webhook/
+│   │   ├── webhook.controller.ts
+│   │   ├── webhook.service.ts
 │   │   ├── webhook.service.spec.ts
-│   │   └── dto/
-│   │       ├── vehicle.dto.ts        # Vehicle validation (lat, lng, capacity)
-│   │       ├── stop.dto.ts           # Stop validation (lat, lng, demand)
-│   │       └── webhook-event.dto.ts  # Event envelope (eventType, vehicles, stops)
-│   │
-│   ├── grpc-client/                  # gRPC client for VROOM optimizer
-│   │   ├── grpc-client.service.ts    # solveRoute() → Promise<SolveRouteResponse>
-│   │   ├── grpc-client.module.ts     # ClientsModule.registerAsync (Transport.GRPC)
-│   │   ├── grpc-client.service.spec.ts
-│   │   ├── interfaces/
-│   │   │   └── route-optimizer.interface.ts  # TypeScript interfaces
-│   │   └── proto/
-│   │       └── (shared at ../../shared/proto/route-optimizer.proto)
-│   │
-│   ├── socket-client/                # Socket.io client to Elizabeth's gateway
-│   │   ├── socket-client.service.ts  # io() connection, emitRouteUpdate()
-│   │   ├── socket-client.module.ts   # Module wrapper
-│   │   └── socket-client.service.spec.ts
-│   │
-│   ├── vehicles/                     # Vehicles REST API
-│   │   ├── vehicles.controller.ts    # CRUD endpoints: GET, POST, PUT, DELETE
-│   │   ├── vehicles.service.ts       # In-memory Map storage + VehicleEntity
-│   │   ├── vehicles.module.ts
-│   │   ├── vehicles.controller.spec.ts
-│   │   ├── vehicles.service.spec.ts
-│   │   └── dto/
-│   │       ├── create-vehicle.dto.ts # Validated create payload
-│   │       └── update-vehicle.dto.ts # Partial update payload
-│   │
-│   └── stops/                        # Stops/Orders REST API
-│       ├── stops.controller.ts       # CRUD endpoints: GET, POST, PUT, DELETE
-│       ├── stops.service.ts          # In-memory Map storage + StopEntity
-│       ├── stops.module.ts
-│       ├── stops.controller.spec.ts
-│       ├── stops.service.spec.ts
-│       └── dto/
-│           ├── create-stop.dto.ts    # Validated create payload
-│           └── update-stop.dto.ts    # Partial update payload
-│
+│   │   └── webhook-retry.spec.ts
+│   ├── grpc-client/
+│   ├── socket-client/
+│   ├── vehicles/
+│   │   ├── vehicles.repository.ts
+│   │   └── vehicles.service.ts
+│   └── stops/
+│       ├── stops.repository.ts
+│       └── stops.service.ts
 └── test/
-    ├── app.e2e-spec.ts               # E2E tests (health, webhook, CRUD)
-    └── jest-e2e.json                 # Jest E2E configuration
+    ├── app.e2e-spec.ts
+    └── jest-e2e.json
 ```
 
 ---
@@ -193,231 +144,201 @@ logiflow-core-backend/
 
 ### Prerequisites
 
-- **Node.js** >= 22.x
-- **npm** >= 10.x
+- Node.js 22+
+- npm 10+
+- PostgreSQL instance
 
 ### Installation
 
 ```bash
-git clone https://github.com/<your-org>/logiflow-core-backend.git
-cd logiflow-core-backend
+cd services/gateway
 npm install
 ```
 
 ### Environment Variables
 
-Copy the template and adjust values as needed:
-
-```bash
-cp .env.example .env
-```
+Create a `.env` file in `services/gateway`.
 
 | Variable | Default | Description |
 |---|---|---|
-| `PORT` | `3000` | HTTP server port |
-| `GRPC_OPTIMIZER_HOST` | `localhost` | gRPC optimizer hostname |
-| `GRPC_OPTIMIZER_PORT` | `50051` | gRPC optimizer port |
-| `SOCKETIO_SERVER_HOST` | `localhost` | Socket.io gateway hostname |
-| `SOCKETIO_SERVER_PORT` | `3001` | Socket.io gateway port |
+| PORT | `3002` | HTTP server port |
+| DATABASE_URL | none | Prisma PostgreSQL connection string |
+| GRPC_OPTIMIZER_HOST | `localhost` | Optimizer host |
+| GRPC_OPTIMIZER_PORT | `50051` | Optimizer port |
+| GRPC_OPTIMIZER_PROTO_PATH | `../../shared/proto/optimizer.proto` | Shared optimizer proto path |
+| SOCKETIO_SERVER_HOST | `localhost` | Socket.io host |
+| SOCKETIO_SERVER_PORT | `3001` | Socket.io port |
 
-### Running the Application
+Example:
+
+```env
+PORT=3002
+DATABASE_URL="postgresql://postgres:postgres@localhost:5432/logiflow?schema=public"
+GRPC_OPTIMIZER_HOST=localhost
+GRPC_OPTIMIZER_PORT=50051
+GRPC_OPTIMIZER_PROTO_PATH=../../shared/proto/optimizer.proto
+SOCKETIO_SERVER_HOST=localhost
+SOCKETIO_SERVER_PORT=3001
+```
+
+### Database Setup (Prisma)
 
 ```bash
-# Development (hot-reload)
+# apply migrations
+npx prisma migrate deploy
+
+# for local development, you can also create a dev migration
+# npx prisma migrate dev --name init_gateway_models
+
+# regenerate prisma client if schema changes
+npx prisma generate
+```
+
+### Run the App
+
+```bash
+# development
 npm run start:dev
 
-# Production build
+# production
 npm run build
 npm run start:prod
 ```
 
-The server starts at `http://localhost:3000/api/v1`.
+Base URL: `http://localhost:3002/api/v1`
 
 ---
 
 ## API Endpoints
 
-All endpoints are prefixed with `/api/v1`. Validation is enforced globally via `ValidationPipe` (whitelist mode).
+All routes are prefixed with `/api/v1`.
 
 ### Health Check
 
-| Method | Endpoint | Description |
-|---|---|---|
-| `GET` | `/api/v1/health` | Returns service status |
-
-**Response:**
-```json
-{
-  "status": "ok",
-  "service": "logiflow-core-backend",
-  "timestamp": "2026-03-06T12:00:00.000Z"
-}
-```
+| Method | Endpoint |
+|---|---|
+| GET | `/health` |
 
 ### Webhook
 
-| Method | Endpoint | Description |
-|---|---|---|
-| `POST` | `/api/v1/webhook` | Receive logistics events from n8n |
-
-**Request Body:**
-```json
-{
-  "eventType": "new_order",
-  "vehicles": [
-    { "id": "v1", "lat": 4.711, "lng": -74.072, "capacity": 100 }
-  ],
-  "stops": [
-    { "id": "s1", "lat": 4.609, "lng": -74.081, "demand": 20 }
-  ]
-}
-```
+| Method | Endpoint |
+|---|---|
+| POST | `/webhook` |
 
 Valid `eventType` values: `traffic_jam`, `new_order`, `vehicle_breakdown`, `weather_change`.
 
-**Response:**
+Request body:
+
+```json
+{
+  "eventType": "new_order",
+  "vehicles": [{ "id": "v1", "start": { "lat": 4.711, "lon": -74.072 }, "capacity": 100 }],
+  "jobs": [{ "id": "j1", "location": { "lat": 4.609, "lon": -74.081 }, "amount": 20 }],
+  "options": { "metric": "duration", "optimize": true, "algorithm": "greedy" }
+}
+```
+
+Compatibility note: legacy `stops` payloads with `lat/lng/demand` are still accepted and internally mapped to `jobs`.
+
+Example response:
+
 ```json
 {
   "received": true,
   "eventType": "new_order",
   "vehicleCount": 1,
-  "stopCount": 1,
-  "optimizedRoutes": { "routes": [...], "totalCost": 100, "solvedAt": "..." },
-  "socketConnected": false,
-  "timestamp": "2026-03-06T12:00:00.000Z"
+  "stopCount": 0,
+  "jobCount": 1,
+  "correlationId": "2bf53f08-34d6-4203-bf79-f524e44bbf3a",
+  "optimizedRoutes": { "code": "0", "error": "", "routes": [], "routingDistance": "0", "routingDuration": "0" },
+  "fallback": false,
+  "socketConnected": true,
+  "timestamp": "2026-03-14T00:00:00.000Z"
 }
 ```
+
+Note: `fallbackReason` is returned only when `fallback` is `true`.
 
 ### Vehicles CRUD
 
-| Method | Endpoint | Description | Status |
-|---|---|---|---|
-| `GET` | `/api/v1/vehicles` | List all vehicles | 200 |
-| `GET` | `/api/v1/vehicles/:id` | Get vehicle by ID | 200 / 404 |
-| `POST` | `/api/v1/vehicles` | Create a vehicle | 201 |
-| `PUT` | `/api/v1/vehicles/:id` | Update a vehicle | 200 / 404 |
-| `DELETE` | `/api/v1/vehicles/:id` | Delete a vehicle | 204 / 404 |
-
-**Create body:**
-```json
-{
-  "id": "v1",        // optional — auto-generated UUID if omitted
-  "lat": 4.711,      // required — range: -90 to 90
-  "lng": -74.072,    // required — range: -180 to 180
-  "capacity": 100    // required — min: 0
-}
-```
+| Method | Endpoint |
+|---|---|
+| GET | `/vehicles` |
+| GET | `/vehicles/:id` |
+| POST | `/vehicles` |
+| PUT | `/vehicles/:id` |
+| DELETE | `/vehicles/:id` |
 
 ### Stops CRUD
 
-| Method | Endpoint | Description | Status |
-|---|---|---|---|
-| `GET` | `/api/v1/stops` | List all stops | 200 |
-| `GET` | `/api/v1/stops/:id` | Get stop by ID | 200 / 404 |
-| `POST` | `/api/v1/stops` | Create a stop | 201 |
-| `PUT` | `/api/v1/stops/:id` | Update a stop | 200 / 404 |
-| `DELETE` | `/api/v1/stops/:id` | Delete a stop | 204 / 404 |
-
-**Create body:**
-```json
-{
-  "id": "s1",       // optional — auto-generated UUID if omitted
-  "lat": 4.609,     // required — range: -90 to 90
-  "lng": -74.081,   // required — range: -180 to 180
-  "demand": 20,     // required — min: 0
-  "priority": 5     // optional — default: 0
-}
-```
+| Method | Endpoint |
+|---|---|
+| GET | `/stops` |
+| GET | `/stops/:id` |
+| POST | `/stops` |
+| PUT | `/stops/:id` |
+| DELETE | `/stops/:id` |
 
 ---
 
-## Integrations
+## Reliability and Traceability
 
-### gRPC — Route Optimizer
+### Correlation Id
 
-Connects to Python/VROOM optimizer via gRPC (Protocol Buffers).
+- Header used: `x-correlation-id`.
+- If missing, middleware generates a UUID.
+- The same id is propagated to:
+  - webhook logs,
+  - gRPC metadata,
+  - socket emission payload,
+  - webhook HTTP response.
 
-- **Proto file:** [`../../shared/proto/route-optimizer.proto`](../../shared/proto/route-optimizer.proto)
-- **Service:** `RouteOptimizer.SolveRoute`
-- **Fallback:** When the optimizer is unavailable, the backend generates a **mock response** (round-robin stop assignment per vehicle) so development isn't blocked.
+### Retry Policy
 
-```protobuf
-service RouteOptimizer {
-  rpc SolveRoute (SolveRouteRequest) returns (SolveRouteResponse);
-}
-```
-
-### Socket.io — Real-Time Gateway
-
-Acts as a **Socket.io client** connecting to Socket.io server (gateway).
-
-- **Event emitted:** `route-update`
-- **Reconnection:** Auto-reconnect up to 10 attempts, 2s delay
-- **Payload:**
-```json
-{
-  "eventType": "new_order",
-  "routes": [...],
-  "totalCost": 100,
-  "solvedAt": "2026-03-06T...",
-  "emittedAt": "2026-03-06T..."
-}
-```
-
-### n8n — Workflow Automation
-
-n8n workflows send HTTP POST requests to `/api/v1/webhook` with logistics events. The backend processes them through the full pipeline (optimize → emit → respond).
+- Generic retry engine: `RetryService.execute()`.
+- Backoff strategy: exponential + jitter.
+- Optimizer retries: `maxAttempts = 3`.
+- Socket retries: `maxAttempts = 5`.
+- Exhaustion behavior:
+  - optimizer: activates fallback route generation,
+  - socket: logs error but still returns successful webhook response.
 
 ---
 
 ## Testing
 
 ```bash
-# Unit tests (46 tests across 9 suites)
+# all unit + integration specs under src/**/*.spec.ts
 npm test
 
-# E2E tests (19 tests — health, webhook, vehicles CRUD, stops CRUD)
+# e2e
 npm run test:e2e
 
-# Watch mode
-npm run test:watch
-
-# Coverage report
+# coverage
 npm run test:cov
 ```
 
-### Test Coverage
+Current status (latest run):
 
-| Suite | Tests | What it covers |
-|---|---|---|
-| `app.controller.spec` | 1 | Health endpoint |
-| `webhook.controller.spec` | 3 | Webhook routing & delegation |
-| `webhook.service.spec` | 3 | gRPC call, mock fallback, Socket.io emit |
-| `grpc-client.service.spec` | 2 | gRPC client initialization & solveRoute |
-| `socket-client.service.spec` | 3 | Connection status, emit behavior |
-| `vehicles.controller.spec` | 5 | Vehicles CRUD via controller |
-| `vehicles.service.spec` | 8 | Vehicles CRUD logic + 404 handling |
-| `stops.controller.spec` | 5 | Stops CRUD via controller |
-| `stops.service.spec` | 8 | Stops CRUD logic + 404 handling |
-| **E2E** | **19** | Full HTTP pipeline with validation |
+- 12 test suites passing.
+- 62 tests passing.
+- Includes retry integration coverage in `webhook-retry.spec.ts`.
 
 ---
 
 ## Team
 
-**Los Gavilanes del Código** — ARSW, Escuela Colombiana de Ingeniería
+Los Gavilanes del Codigo - ARSW, Escuela Colombiana de Ingenieria
 
-| Member | Responsibility |
-|---|---|
-| **Juan Sebastian Ortega** | NestJS Core Backend + Simple Map (this repo) |
-| **Cristian** | VROOM Route Optimizer (Python, gRPC server) |
-| **Elizabeth** | Socket.io Real-Time Gateway (Node.js) |
-| **Andersson** | n8n Workflow Automation |
+- Juan Sebastian Ortega - NestJS Core Backend + Simple Map
+- Cristian - VROOM Route Optimizer (Python, gRPC server)
+- Elizabeth - Socket.io Real-Time Gateway (Node.js)
+- Andersson - n8n Workflow Automation
 
 ---
 
 <div align="center">
 
-*Sprint 1 — March 2026*
+Sprint 2 - March 2026
 
 </div>

@@ -1,0 +1,15 @@
+# Dependencies
+node_modules/
+
+# OSRM map data (never commit — ~200MB+)
+services/optimizer/osrm-data/
+
+# Environment files
+.env
+.env.local
+
+# Logs
+*.log
+
+# OS
+.DS_Store

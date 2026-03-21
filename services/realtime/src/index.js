@@ -63,25 +63,26 @@ async function main() {
       const routes = Array.isArray(incoming?.routes) ? incoming.routes : [];
 
       routes.forEach((route) => {
-        const vehicleId = route.vehicleId;
+        const vehicleId = route.vehicleId || route.vehicle_id;
         if (!vehicleId) return;
 
         const routeData = {
           stops: (route.steps || []).map((s) => ({
-            id: s.stopId,
-            lat: s.lat,
-            lng: s.lng,
-            order: s.arrivalOrder,
+            id: s.id || s.stopId,
+            lat: s.lat ?? s.location?.lat,
+            lng: s.lng ?? s.lon ?? s.location?.lon,
+            order: s.arrivalOrder || s.arrival,
+            type: s.type,
           })),
           polyline: [],
-          estimatedTime: route.estimatedTime,
-          totalDistance: route.totalDistance,
+          estimatedTime: route.estimatedTime ?? route.duration,
+          totalDistance: route.totalDistance ?? route.distance,
         };
 
         emitRouteUpdate(io, vehicleId, routeData, {
           eventType: incoming.eventType,
-          totalCost: incoming.totalCost,
-          solvedAt: incoming.solvedAt,
+          totalCost: incoming.totalCost ?? incoming.routingDistance,
+          solvedAt: incoming.solvedAt ?? incoming.emittedAt,
         });
       });
     });

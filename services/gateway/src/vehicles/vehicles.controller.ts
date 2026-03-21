@@ -40,6 +40,6 @@ export class VehiclesController {
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   remove(@Param('id') id: string) {
-    this.vehiclesService.remove(id);
+    return this.vehiclesService.remove(id);
   }
 }
