@@ -1,0 +1,61 @@
+name: CI — LogiFlow Monorepo
+
+on:
+  push:
+    branches: [main, develop, 'feature/**']
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  quality:
+    name: ${{ matrix.service }} — lint & test
+    runs-on: ubuntu-latest
+
+    strategy:
+      # Keep independent outcomes across services.
+      fail-fast: false
+      matrix:
+        service: [automation, gateway, realtime, optimizer]
+
+    defaults:
+      run:
+        working-directory: services/${{ matrix.service }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          # Isolate npm cache by service lockfile.
+          cache-dependency-path: services/${{ matrix.service }}/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test with coverage
+        # Safety net for services that still have no test files.
+        run: npm test -- --coverage --coverageReporters=lcov --passWithNoTests
+
+      - name: SonarCloud Scan
+        # Only automation has sonar-project.properties today.
+        if: matrix.service == 'automation'
+        uses: SonarSource/sonarcloud-github-action@master
+        with:
+          projectBaseDir: services/automation
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
