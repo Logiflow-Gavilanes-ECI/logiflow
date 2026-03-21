@@ -8,7 +8,13 @@
   },
   "scripts": {
     "lint": "echo \"No linter configured yet\" && exit 0",
-    "test": "echo \"No tests configured yet\" && exit 0"
+    "test": "jest --passWithNoTests",
+    "test:watch": "jest --watch",
+    "test:cov": "jest --coverage"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "testMatch": ["**/test/**/*.test.js"]
   },
   "keywords": [],
   "author": "",
@@ -21,5 +27,8 @@
     "express": "^5.2.1",
     "ioredis": "^5.10.0",
     "socket.io": "^4.8.3"
+  },
+  "devDependencies": {
+    "jest": "^30.3.0"
   }
 }
