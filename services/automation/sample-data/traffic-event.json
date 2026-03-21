@@ -1,12 +1,28 @@
 {
-  "eventType": "TRAFFIC_JAM",
-  "severity": "HIGH",
-  "location": {
-    "lat": 4.6889,
-    "lng": -74.0669,
-    "description": "Autopista Norte - Calle 100, Bogotá"
+  "eventType": "road_closure",
+  "severity": "CRITICAL",
+  "locationDescription": "Autopista Norte - Calle 100, Bogotá",
+  "vehicles": [
+    { "id": "v-001", "lat": 4.711, "lng": -74.0721, "capacity": 12 },
+    { "id": "v-002", "lat": 4.695, "lng": -74.063, "capacity": 8 }
+  ],
+  "stops": [
+    { "id": "s-101", "lat": 4.705, "lng": -74.068, "demand": 2, "priority": 1 },
+    { "id": "s-102", "lat": 4.688, "lng": -74.056, "demand": 3, "priority": 2 }
+  ],
+  "risk": {
+    "riskLevel": "HIGH",
+    "recommendedAction": "Reroute immediately and notify operations/driver"
   },
-  "affectedVehicles": ["V001", "V003", "V005"],
-  "timestamp": "2026-03-02T10:00:00Z",
-  "detourRecommended": true
+  "maps": {
+    "incidentAddress": "Autopista Norte, Bogotá, Colombia",
+    "incidentLat": 4.711,
+    "incidentLng": -74.0721,
+    "detourRecommended": true,
+    "alternativeRoutes": 2,
+    "bestRoute": {
+      "durationInTrafficSec": 1320
+    }
+  },
+  "timestamp": "2026-03-20T10:00:00Z"
 }
