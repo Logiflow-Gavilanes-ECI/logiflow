@@ -2,6 +2,7 @@ const { httpServer, io, initializeServer, app } = require('./server');
 const { registerRooms } = require('./rooms');
 const { startPositionBroadcast } = require('./events/position');
 const { emitRouteUpdate } = require('./events/routeUpdate');
+const { checkHeartbeats } = require('./heartbeat');
 require('dotenv').config();
 
 const vehicleHeartbeats = {};
@@ -66,15 +67,22 @@ async function main() {
         const vehicleId = route.vehicleId || route.vehicle_id;
         if (!vehicleId) return;
 
+        const steps = (route.steps || []).map((s) => ({
+          id: s.id || s.stopId,
+          lat: s.lat ?? s.location?.lat,
+          lng: s.lng ?? s.lon ?? s.location?.lon,
+          order: s.arrivalOrder || s.arrival,
+          type: s.type,
+        }));
+
+        const polyline = steps
+          .filter((s) => s.lat != null && s.lng != null)
+          .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+          .map((s) => ({ lat: s.lat, lng: s.lng }));
+
         const routeData = {
-          stops: (route.steps || []).map((s) => ({
-            id: s.id || s.stopId,
-            lat: s.lat ?? s.location?.lat,
-            lng: s.lng ?? s.lon ?? s.location?.lon,
-            order: s.arrivalOrder || s.arrival,
-            type: s.type,
-          })),
-          polyline: [],
+          stops: steps,
+          polyline,
           estimatedTime: route.estimatedTime ?? route.duration,
           totalDistance: route.totalDistance ?? route.distance,
         };
@@ -89,26 +97,7 @@ async function main() {
   });
 
   setInterval(() => {
-    const now = Date.now();
-    //console.log(`Checker corriendo. Vehículos en mapa: ${Object.keys(vehicleHeartbeats)}`);
-
-    Object.entries(vehicleHeartbeats).forEach(([vehicleId, lastSeen]) => {
-      const inactivoMs = now - lastSeen;
-      //console.log(`${vehicleId} → inactivo ${inactivoMs}ms, offline: ${offlineVehicles.has(vehicleId)}`);
-
-      if (inactivoMs > OFFLINE_THRESHOLD_MS && !offlineVehicles.has(vehicleId)) {
-      
-        offlineVehicles.add(vehicleId);
-        io.to('fleet').emit('vehicle:offline', { vehicleId });
-        console.log(`vehicle:offline emitido → ${vehicleId}`);
-
-      } else if (inactivoMs <= OFFLINE_THRESHOLD_MS && offlineVehicles.has(vehicleId)) {
-       
-        offlineVehicles.delete(vehicleId);
-        io.to('fleet').emit('vehicle:online', { vehicleId });
-        console.log(`vehicle:online emitido → ${vehicleId}`);
-      }
-    });
+    checkHeartbeats(io, vehicleHeartbeats, offlineVehicles, OFFLINE_THRESHOLD_MS);
   }, CHECK_INTERVAL_MS);
 
   httpServer.listen(PORT, () => {

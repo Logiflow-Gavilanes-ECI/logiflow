@@ -13,3 +13,5 @@ services/optimizer/osrm-data/
 
 # OS
 .DS_Store
+
+CLAUDE.md
