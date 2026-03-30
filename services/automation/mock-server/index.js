@@ -91,32 +91,23 @@ function buildMissingDetourResponse() {
 }
 
 function logEventReceived(payload) {
-  console.log(
-    `${LOG_PREFIX} Event received: ${payload[FIELD_EVENT_TYPE]} | Severity: ${payload[FIELD_SEVERITY]} | Risk: ${payload[FIELD_RISK][FIELD_RISK_LEVEL]}`,
-  );
+  void payload;
+  console.log(`${LOG_PREFIX} Event received and validated`);
 }
 
 function logMapsContext(payload) {
-  const maps = payload[FIELD_MAPS] || {};
-  const alternatives = maps[FIELD_ALTERNATIVE_ROUTES] ?? 0;
-  const detour = maps[FIELD_DETOUR_RECOMMENDED];
-  const address = maps[FIELD_INCIDENT_ADDRESS] || 'Unknown address';
-
-  console.log(
-    `${LOG_PREFIX} Maps: ${address} — ${alternatives} alternatives, detour: ${detour}`,
-  );
+  void payload;
+  console.log(`${LOG_PREFIX} Maps enrichment section present`);
 }
 
 function logVehiclesStops(payload) {
-  const vehiclesCount = Array.isArray(payload[FIELD_VEHICLES]) ? payload[FIELD_VEHICLES].length : 0;
-  const stopsCount = Array.isArray(payload[FIELD_STOPS]) ? payload[FIELD_STOPS].length : 0;
-
-  console.log(`${LOG_PREFIX} Vehicles: ${vehiclesCount} | Stops: ${stopsCount}`);
+  void payload;
+  console.log(`${LOG_PREFIX} Vehicles and stops sections present`);
 }
 
 function logRecommendedAction(payload) {
-  const action = payload?.[FIELD_RISK]?.[FIELD_RECOMMENDED_ACTION] || 'No action provided';
-  console.log(`${LOG_PREFIX} Action: ${action}`);
+  void payload;
+  console.log(`${LOG_PREFIX} Risk action section present`);
 }
 
 function buildNotifySuccessResponse(payload, preview) {
