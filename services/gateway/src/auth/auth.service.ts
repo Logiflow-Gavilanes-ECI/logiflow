@@ -32,9 +32,15 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
+    const demoRole = this.configService.get<'admin' | 'conductor'>(
+      'AUTH_DEMO_ROLE',
+      'conductor',
+    );
+
     const payload = {
       sub: 'demo-user',
       username,
+      role: demoRole,
     };
 
     return {

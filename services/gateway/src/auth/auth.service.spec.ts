@@ -2,14 +2,24 @@ import { BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { AuthService } from './auth.service';
+import { PrismaService } from '../prisma/prisma.service';
 
 describe('AuthService', () => {
   let authService: AuthService;
+  type PrismaServiceMock = PrismaService & {
+    user: {
+      create: jest.Mock;
+    };
+  };
 
   const configService = {
     get: jest.fn((key: string, defaultValue?: string) => {
       if (key === 'JWT_EXPIRES_IN') {
         return '1h';
+      }
+
+      if (key === 'AUTH_DEMO_ROLE') {
+        return 'conductor';
       }
 
       return defaultValue;
@@ -22,20 +32,30 @@ describe('AuthService', () => {
 
   const prismaService = {
     user: {
-      create: jest.fn(async ({ data }: { data: { role: 'admin' | 'conductor' } }) => ({
-        id: 'user-1',
-        role: data.role,
-      })),
+      create: jest.fn(
+        async ({ data }: { data: { role: 'admin' | 'conductor' } }) => ({
+          id: 'user-1',
+          role: data.role,
+        }),
+      ),
     },
-  } as never;
+  } as PrismaServiceMock;
 
   beforeEach(() => {
     jest.clearAllMocks();
-    authService = new AuthService(configService, jwtService, prismaService);
+    authService = new AuthService(
+      configService,
+      jwtService,
+      prismaService as unknown as PrismaService,
+    );
   });
 
   it('creates a user and returns a signed token for a valid role', async () => {
-    const result = await authService.register('driver@example.com', 'secret123', 'conductor');
+    const result = await authService.register(
+      'driver@example.com',
+      'secret123',
+      'conductor',
+    );
 
     expect(prismaService.user.create).toHaveBeenCalledWith({
       data: { role: 'conductor' },
@@ -66,5 +86,22 @@ describe('AuthService', () => {
 
     expect(prismaService.user.create).not.toHaveBeenCalled();
     expect(jwtService.signAsync).not.toHaveBeenCalled();
+  });
+
+  it('includes the configured demo role in the login token payload', async () => {
+    const loginResult = await authService.login('demo', 'demo123');
+
+    expect(jwtService.signAsync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sub: 'demo-user',
+        username: 'demo',
+        role: 'conductor',
+      }),
+    );
+    expect(loginResult).toEqual({
+      accessToken: 'signed-token',
+      tokenType: 'Bearer',
+      expiresIn: '1h',
+    });
   });
 });
