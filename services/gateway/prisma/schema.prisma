@@ -11,6 +11,16 @@ datasource db {
   provider = "postgresql"
 }
 
+enum Role {
+  admin
+  conductor
+}
+
+model User {
+  id    String @id @default(uuid())
+  role  Role
+}
+
 model Vehicle {
   id        String   @id @default(uuid())
   lat       Float
