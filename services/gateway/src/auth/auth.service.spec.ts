@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaClient } from '@prisma/client';
@@ -13,7 +13,10 @@ describe('AuthService', () => {
     };
     refreshToken: {
       create: jest.Mock;
+      findUnique: jest.Mock;
+      updateMany: jest.Mock;
     };
+    $transaction: jest.Mock;
   };
 
   const configService = {
@@ -59,17 +62,32 @@ describe('AuthService', () => {
     },
     refreshToken: {
       create: jest.fn(
-        async ({ data }: { data: { userId: string; tokenHash: string } }) => ({
+        async ({
+          data,
+        }: {
+          data: { userId: string; tokenHash: string; expiresAt: Date };
+        }) => ({
           id: 'rt-1',
           userId: data.userId,
           tokenHash: data.tokenHash,
+          expiresAt: data.expiresAt,
+          createdAt: new Date(),
+          consumedAt: null,
         }),
       ),
+      findUnique: jest.fn(),
+      updateMany: jest.fn(),
     },
+    $transaction: jest.fn(
+      async (callback: (tx: PrismaClientMock) => Promise<unknown>) =>
+        callback(prismaService as PrismaClientMock),
+    ),
   } as PrismaClientMock;
 
   beforeEach(() => {
     jest.clearAllMocks();
+    prismaService.refreshToken.findUnique.mockResolvedValue(null);
+    prismaService.refreshToken.updateMany.mockResolvedValue({ count: 0 });
     authService = new AuthService(
       configService,
       jwtService,
@@ -144,5 +162,91 @@ describe('AuthService', () => {
       tokenType: 'Bearer',
       expiresIn: '1h',
     });
+  });
+
+  it('rotates a valid refresh token and issues a new token pair', async () => {
+    prismaService.refreshToken.findUnique.mockResolvedValueOnce({
+      id: 'rt-old',
+      userId: 'demo-user',
+      expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+      consumedAt: null,
+      user: {
+        id: 'demo-user',
+        role: 'conductor',
+      },
+    });
+    prismaService.refreshToken.updateMany.mockResolvedValueOnce({ count: 1 });
+
+    const refreshResult = await authService.refresh('incoming-refresh-token');
+
+    expect(prismaService.$transaction).toHaveBeenCalledTimes(1);
+    expect(prismaService.refreshToken.findUnique).toHaveBeenCalledWith({
+      where: {
+        tokenHash: expect.any(String),
+      },
+      include: {
+        user: true,
+      },
+    });
+    expect(prismaService.refreshToken.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: 'rt-old',
+        consumedAt: null,
+      },
+      data: {
+        consumedAt: expect.any(Date),
+      },
+    });
+    expect(prismaService.refreshToken.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        userId: 'demo-user',
+        tokenHash: expect.any(String),
+        expiresAt: expect.any(Date),
+      }),
+    });
+    expect(jwtService.signAsync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sub: 'demo-user',
+        username: 'demo',
+        role: 'conductor',
+      }),
+    );
+    expect(refreshResult).toEqual({
+      accessToken: 'signed-token',
+      refreshToken: expect.any(String),
+      refreshTokenExpiresAt: expect.any(String),
+      tokenType: 'Bearer',
+      expiresIn: '1h',
+    });
+  });
+
+  it('rejects refresh when token does not exist', async () => {
+    prismaService.refreshToken.findUnique.mockResolvedValueOnce(null);
+
+    await expect(
+      authService.refresh('non-existent-refresh-token'),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+
+    expect(prismaService.refreshToken.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('rejects refresh when token is expired', async () => {
+    prismaService.refreshToken.findUnique.mockResolvedValueOnce({
+      id: 'rt-expired',
+      userId: 'demo-user',
+      expiresAt: new Date(Date.now() - 60 * 1000),
+      consumedAt: null,
+      user: {
+        id: 'demo-user',
+        role: 'conductor',
+      },
+    });
+
+    await expect(authService.refresh('expired-token')).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+
+    expect(prismaService.refreshToken.updateMany).not.toHaveBeenCalled();
+    expect(prismaService.refreshToken.create).not.toHaveBeenCalled();
   });
 });
