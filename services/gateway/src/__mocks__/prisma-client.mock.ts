@@ -17,9 +17,15 @@ type StopEntity = {
   updatedAt: Date;
 };
 
+type UserEntity = {
+  id: string;
+  role: 'admin' | 'conductor';
+};
+
 export class PrismaClient {
   private readonly vehicleStore = new Map<string, VehicleEntity>();
   private readonly stopStore = new Map<string, StopEntity>();
+  private readonly userStore = new Map<string, UserEntity>();
 
   private nextId(prefix: 'v' | 's', size: number): string {
     return `${prefix}-${size + 1}`;
@@ -155,6 +161,25 @@ export class PrismaClient {
       this.stopStore.delete(where.id);
       return existing;
     }),
+  };
+
+  user = {
+    create: jest.fn(
+      ({
+        data,
+      }: {
+        data: { id?: string; role: 'admin' | 'conductor' };
+      }) => {
+        const id = data.id ?? `u-${this.userStore.size + 1}`;
+        const created: UserEntity = {
+          id,
+          role: data.role,
+        };
+
+        this.userStore.set(id, created);
+        return created;
+      },
+    ),
   };
 
   $connect = jest.fn(() => Promise.resolve(undefined));
