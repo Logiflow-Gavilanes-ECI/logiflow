@@ -1,6 +1,5 @@
 import { IsEmail, IsIn, IsString, MinLength } from 'class-validator';
-
-const ALLOWED_ROLES = ['admin', 'conductor'] as const;
+import { AUTH_ROLES } from '../auth-roles';
 
 export class RegisterDto {
   @IsEmail()
@@ -11,6 +10,6 @@ export class RegisterDto {
   password!: string;
 
   @IsString()
-  @IsIn(ALLOWED_ROLES)
-  role!: (typeof ALLOWED_ROLES)[number];
+  @IsIn(AUTH_ROLES)
+  role!: (typeof AUTH_ROLES)[number];
 }

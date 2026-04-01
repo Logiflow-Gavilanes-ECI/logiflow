@@ -1,12 +1,12 @@
 import { BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
+import { PrismaClient } from '@prisma/client';
 import { AuthService } from './auth.service';
-import { PrismaService } from '../prisma/prisma.service';
 
 describe('AuthService', () => {
   let authService: AuthService;
-  type PrismaServiceMock = PrismaService & {
+  type PrismaClientMock = PrismaClient & {
     user: {
       create: jest.Mock;
     };
@@ -39,14 +39,14 @@ describe('AuthService', () => {
         }),
       ),
     },
-  } as PrismaServiceMock;
+  } as PrismaClientMock;
 
   beforeEach(() => {
     jest.clearAllMocks();
     authService = new AuthService(
       configService,
       jwtService,
-      prismaService as unknown as PrismaService,
+      prismaService,
     );
   });
 

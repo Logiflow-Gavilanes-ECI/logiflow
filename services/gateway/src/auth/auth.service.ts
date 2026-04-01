@@ -5,17 +5,15 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
-import { PrismaService } from '../prisma/prisma.service';
-
-const ALLOWED_ROLES = ['admin', 'conductor'] as const;
-type AllowedRole = (typeof ALLOWED_ROLES)[number];
+import { PrismaClient } from '@prisma/client';
+import { AUTH_ROLES, type AuthRole } from './auth-roles';
 
 @Injectable()
 export class AuthService {
   constructor(
     private readonly configService: ConfigService,
     private readonly jwtService: JwtService,
-    private readonly prismaService: PrismaService,
+    private readonly prismaService: PrismaClient,
   ) {}
 
   async login(username: string, password: string) {
@@ -32,10 +30,14 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    const demoRole = this.configService.get<'admin' | 'conductor'>(
+    const demoRole = this.configService.get<AuthRole>(
       'AUTH_DEMO_ROLE',
       'conductor',
     );
+
+    if (!AUTH_ROLES.includes(demoRole)) {
+      throw new BadRequestException('Invalid role');
+    }
 
     const payload = {
       sub: 'demo-user',
@@ -51,13 +53,13 @@ export class AuthService {
   }
 
   async register(email: string, password: string, role: string) {
-    if (!ALLOWED_ROLES.includes(role as AllowedRole)) {
+    if (!AUTH_ROLES.includes(role as AuthRole)) {
       throw new BadRequestException('Invalid role');
     }
 
     const user = await this.prismaService.user.create({
       data: {
-        role: role as AllowedRole,
+        role: role as AuthRole,
       },
     });
 
