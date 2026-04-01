@@ -244,7 +244,71 @@ export class PrismaClient {
         return created;
       },
     ),
+    findUnique: jest.fn(
+      ({
+        where,
+      }: {
+        where: {
+          tokenHash: string;
+        };
+        include?: {
+          user: true;
+        };
+      }) => {
+        const found = Array.from(this.refreshTokenStore.values()).find(
+          (token) => token.tokenHash === where.tokenHash,
+        );
+
+        if (!found) {
+          return null;
+        }
+
+        const user = this.userStore.get(found.userId);
+
+        if (!user) {
+          return null;
+        }
+
+        return {
+          ...found,
+          consumedAt: found.consumedAt ?? null,
+          user,
+        };
+      },
+    ),
+    updateMany: jest.fn(
+      ({
+        where,
+        data,
+      }: {
+        where: {
+          id: string;
+          consumedAt: null;
+        };
+        data: {
+          consumedAt: Date;
+        };
+      }) => {
+        const current = this.refreshTokenStore.get(where.id);
+
+        if (!current || current.consumedAt) {
+          return { count: 0 };
+        }
+
+        const updated: RefreshTokenEntity = {
+          ...current,
+          consumedAt: data.consumedAt,
+        };
+
+        this.refreshTokenStore.set(where.id, updated);
+        return { count: 1 };
+      },
+    ),
   };
+
+  $transaction = jest.fn(async (callback: (tx: PrismaClient) => unknown) => {
+    return callback(this);
+  });
 
   $connect = jest.fn(() => Promise.resolve(undefined));
   $disconnect = jest.fn(() => Promise.resolve(undefined));
