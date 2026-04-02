@@ -45,6 +45,7 @@ services:
     environment:
       GRPC_PORT: 50051
       VROOM_URL: http://vroom:3000
+      REDIS_URL: redis://redis:6379
       OPTIMIZER_PROTO_PATH: /app/shared/proto/optimizer.proto
       MATRIX_SOURCE: request
       GOOGLE_ROUTES_ENABLED: "false"
@@ -55,6 +56,8 @@ services:
     depends_on:
       vroom:
         condition: service_started
+      redis:
+        condition: service_healthy
       ai-predictor:
         condition: service_started
 

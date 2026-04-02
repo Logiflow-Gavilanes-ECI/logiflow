@@ -28,6 +28,10 @@ const MAX_GOOGLE_MATRIX_LOCATIONS = Number(process.env.MAX_GOOGLE_MATRIX_LOCATIO
 const AI_PREDICTOR_ENABLED = process.env.AI_PREDICTOR_ENABLED === 'true';
 const AI_PREDICTOR_URL = process.env.AI_PREDICTOR_URL || 'http://ai-predictor:5001/adjust';
 const AI_PREDICTOR_TIMEOUT_MS = Number(process.env.AI_PREDICTOR_TIMEOUT_MS || 5000);
+const REDIS_URL = process.env.REDIS_URL;
+const REDIS_ROUTE_TTL_SECONDS = Number(process.env.REDIS_ROUTE_TTL_SECONDS || 3600);
+
+let redisClient;
 
 const googleRoutesClient = new GoogleRoutesClient({
   apiKey: process.env.GOOGLE_MAPS_API_KEY,
@@ -47,6 +51,77 @@ const packageDefinition = protoLoader.loadSync(PROTO_PATH, {
 });
 
 const proto = grpc.loadPackageDefinition(packageDefinition).logiflow;
+
+function getRedisClient() {
+  if (!REDIS_URL) {
+    return null;
+  }
+
+  if (redisClient) {
+    return redisClient;
+  }
+
+  const Redis = require('ioredis');
+  redisClient = new Redis(REDIS_URL, {
+    lazyConnect: true,
+    maxRetriesPerRequest: 1,
+    enableOfflineQueue: false,
+  });
+
+  redisClient.on('error', (error) => {
+    console.warn(`Redis client error: ${error.message}`);
+  });
+
+  return redisClient;
+}
+
+function buildRouteRedisKey(vehicleId) {
+  return `route:vehicle:${vehicleId}`;
+}
+
+function getCorrelationId(call) {
+  const rawHeader = call?.metadata?.get?.('x-correlation-id')?.[0];
+  return rawHeader ? String(rawHeader) : 'unknown';
+}
+
+async function persistRoutesToRedis(grpcResponse, call, clientOverride) {
+  const routes = grpcResponse?.routes || [];
+  if (routes.length === 0) {
+    return;
+  }
+
+  const client = clientOverride || getRedisClient();
+  if (!client) {
+    return;
+  }
+
+  try {
+    if (client.status === 'wait' && typeof client.connect === 'function') {
+      await client.connect();
+    }
+
+    const correlationId = getCorrelationId(call);
+    const persistedAt = new Date().toISOString();
+
+    for (const route of routes) {
+      const vehicleId = String(route.vehicleId || '').trim();
+      if (!vehicleId) {
+        continue;
+      }
+
+      const key = buildRouteRedisKey(vehicleId);
+      const value = JSON.stringify({
+        vehicleId,
+        route,
+        correlationId,
+        persistedAt,
+      });
+      await client.set(key, value, 'EX', REDIS_ROUTE_TTL_SECONDS);
+    }
+  } catch (error) {
+    console.warn(`Route persistence to Redis skipped: ${error.message}`);
+  }
+}
 
 function mapProfile(profile) {
   const profileMap = {
@@ -417,6 +492,8 @@ async function optimizeRoutes(call, callback) {
     if (matrixResult?.source) {
       grpcResponse.matrixSource = matrixResult.source;
     }
+
+    await persistRoutesToRedis(grpcResponse, call);
     callback(null, grpcResponse);
   } catch (error) {
     const upstreamDetails = typeof error.response?.data === 'string'
@@ -463,5 +540,7 @@ module.exports = {
   buildMatrixLocations,
   maybeAttachGoogleMatrix,
   callAIPredictor,
+  buildRouteRedisKey,
+  persistRoutesToRedis,
   optimizeRoutes,
 };
