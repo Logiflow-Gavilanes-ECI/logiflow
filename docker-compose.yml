@@ -50,9 +50,23 @@ services:
       GOOGLE_ROUTES_ENABLED: "false"
       GOOGLE_ROUTES_ALLOW_CALLS: "false"
       GOOGLE_ROUTES_MOCK: "true"
+      AI_PREDICTOR_ENABLED: "false"
+      AI_PREDICTOR_URL: http://ai-predictor:5001/adjust
     depends_on:
       vroom:
         condition: service_started
+      ai-predictor:
+        condition: service_started
+
+  ai-predictor:
+    image: python:3.12-alpine
+    container_name: logiflow-ai-predictor
+    working_dir: /workspace/services/ai-predictor
+    command: sh -c "pip install -r requirements.txt && python predictor.py"
+    volumes:
+      - .:/workspace
+    ports:
+      - "5001:5001"
 
   realtime:
     image: node:22-alpine
