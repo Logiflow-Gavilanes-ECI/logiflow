@@ -7,7 +7,7 @@
     "start": "node src/server.js",
     "start:dev": "node --watch src/server.js",
     "lint": "echo \"No linter configured yet\" && exit 0",
-    "test": "echo \"No tests specified\" && exit 0"
+    "test": "jest"
   },
   "dependencies": {
     "@grpc/grpc-js": "^1.11.0",
@@ -16,7 +16,8 @@
     "google-protobuf": "^3.21.4"
   },
   "devDependencies": {
-    "eslint": "^8.57.0"
+    "eslint": "^8.57.0",
+    "jest": "^30.2.0"
   },
   "engines": {
     "node": ">=20.0.0"

@@ -188,46 +188,56 @@ class GoogleRoutesClient {
       requestBody.departureTime = departureTime;
     }
 
-    const response = await axios.post(this.endpoint, requestBody, {
-      timeout: this.timeoutMs,
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Goog-Api-Key': this.apiKey,
-        'X-Goog-FieldMask': [
-          'originIndex',
-          'destinationIndex',
-          'distanceMeters',
-          'duration',
-          'status',
-          'condition',
-        ].join(','),
-      },
-    });
+    try {
+      const response = await axios.post(this.endpoint, requestBody, {
+        timeout: this.timeoutMs,
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Goog-Api-Key': this.apiKey,
+          'X-Goog-FieldMask': [
+            'originIndex',
+            'destinationIndex',
+            'distanceMeters',
+            'duration',
+            'status',
+            'condition',
+          ].join(','),
+        },
+      });
 
-    const originCount = locations.length;
-    const distances = new Array(originCount * originCount).fill(0);
-    const durations = new Array(originCount * originCount).fill(0);
+      const originCount = locations.length;
+      const distances = new Array(originCount * originCount).fill(0);
+      const durations = new Array(originCount * originCount).fill(0);
 
-    for (const row of response.data || []) {
-      const i = Number(row.originIndex);
-      const j = Number(row.destinationIndex);
-      if (!Number.isInteger(i) || !Number.isInteger(j) || i < 0 || j < 0) {
-        continue;
+      for (const row of response.data || []) {
+        const i = Number(row.originIndex);
+        const j = Number(row.destinationIndex);
+        if (!Number.isInteger(i) || !Number.isInteger(j) || i < 0 || j < 0) {
+          continue;
+        }
+
+        const offset = (i * originCount) + j;
+        distances[offset] = Math.round(Number(row.distanceMeters || 0));
+        durations[offset] = parseDurationSeconds(row.duration);
       }
 
-      const offset = (i * originCount) + j;
-      distances[offset] = Math.round(Number(row.distanceMeters || 0));
-      durations[offset] = parseDurationSeconds(row.duration);
+      const result = {
+        distances,
+        durations,
+        locations,
+        source: 'google',
+      };
+
+      this.setCache(cacheKey, result);
+      return result;
+    } catch (error) {
+      const fallbackResult = {
+        ...this.buildMockMatrix({ locations, travelMode }),
+        source: 'fallback',
+      };
+      this.setCache(cacheKey, fallbackResult);
+      return fallbackResult;
     }
-
-    const result = {
-      distances,
-      durations,
-      locations,
-    };
-
-    this.setCache(cacheKey, result);
-    return result;
   }
 }
 
