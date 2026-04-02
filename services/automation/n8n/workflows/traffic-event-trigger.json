@@ -115,6 +115,22 @@
     {
       "parameters": {
         "method": "POST",
+        "url": "={{ ($env.WEBHOOK_TARGET || '').replace('/api/v1/webhook', '/api/v1/auth/login') }}",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ ({ username: $env.AUTH_DEMO_USERNAME || 'demo', password: $env.AUTH_DEMO_PASSWORD || 'demo123' }) }}",
+        "options": {}
+      },
+      "id": "a1b2c3d4-0017-0017-0017-000000000017",
+      "name": "Login for Gateway JWT",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1240, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
         "url": "={{ $env.WEBHOOK_TARGET }}",
         "sendBody": true,
         "contentType": "json",
@@ -490,12 +506,23 @@
       "main": [
         [
           {
-            "node": "POST to Webhook",
+            "node": "Login for Gateway JWT",
             "type": "main",
             "index": 0
           },
           {
             "node": "Risk Matrix Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Login for Gateway JWT": {
+      "main": [
+        [
+          {
+            "node": "POST to Webhook",
             "type": "main",
             "index": 0
           }
