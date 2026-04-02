@@ -7,6 +7,7 @@ import {
   IsOptional,
   ArrayMinSize,
   IsObject,
+  IsDateString,
 } from 'class-validator';
 import { VehicleDto } from './vehicle.dto';
 import { StopDto } from './stop.dto';
@@ -53,6 +54,10 @@ export class WebhookEventDto {
   @ValidateNested()
   @Type(() => OptionsDto)
   options?: OptionsDto;
+
+  @IsOptional()
+  @IsDateString()
+  departureTime?: string;
 
   @IsOptional()
   @IsString()
