@@ -1,5 +1,7 @@
 'use strict';
 
+const jwt = require('jsonwebtoken');
+
 /**
  * Socket.io JWT middleware.
  * Reads the token from socket.handshake.auth.token and attaches
@@ -13,14 +15,14 @@ function authMiddleware(socket, next) {
   }
 
   try {
-    const jwt = require('jsonwebtoken');
     const payload = jwt.verify(token, process.env.JWT_SECRET);
 
     socket.userId = payload.sub;
     socket.role   = payload.role;
 
     next();
-  } catch (_err) {
+  } catch (err) {
+    console.error('[auth] JWT verification failed:', err.message);
     next(new Error('Unauthorized'));
   }
 }
