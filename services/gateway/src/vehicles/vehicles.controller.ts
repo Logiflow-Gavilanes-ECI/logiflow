@@ -14,9 +14,11 @@ import { VehiclesService } from './vehicles.service';
 import { CreateVehicleDto } from './dto/create-vehicle.dto';
 import { UpdateVehicleDto } from './dto/update-vehicle.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { ApiBearerAuth } from '@nestjs/swagger';
 
 @Controller('vehicles')
 @UseGuards(JwtAuthGuard)
+@ApiBearerAuth()
 export class VehiclesController {
   constructor(private readonly vehiclesService: VehiclesService) {}
 
