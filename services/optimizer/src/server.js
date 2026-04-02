@@ -54,7 +54,31 @@ function mapProfile(profile) {
   return profileMap[profile] || 'car';
 }
 
-function grpcToVroomRequest(req) {
+function createVroomIdMapper() {
+  let nextId = 1;
+  const toVroomMap = new Map();
+  const fromVroomMap = new Map();
+
+  return {
+    toVroomId(originalId) {
+      const safeOriginalId = String(originalId || '').trim();
+      if (toVroomMap.has(safeOriginalId)) {
+        return toVroomMap.get(safeOriginalId);
+      }
+
+      const assigned = nextId;
+      nextId += 1;
+      toVroomMap.set(safeOriginalId, assigned);
+      fromVroomMap.set(String(assigned), safeOriginalId);
+      return assigned;
+    },
+    fromVroomId(vroomId) {
+      return fromVroomMap.get(String(vroomId));
+    },
+  };
+}
+
+function grpcToVroomRequest(req, idMapper) {
   const vroomReq = {
     jobs: [],
     shipments: [],
@@ -63,7 +87,7 @@ function grpcToVroomRequest(req) {
 
   if (req.jobs && req.jobs.length > 0) {
     vroomReq.jobs = req.jobs.map((job) => ({
-      id: parseInt(job.id, 10) || 0,
+      id: idMapper.toVroomId(job.id),
       location: [job.location.lon, job.location.lat],
       service: job.service || 0,
       amount: job.amount ? [job.amount] : [0],
@@ -77,9 +101,9 @@ function grpcToVroomRequest(req) {
 
   if (req.shipments && req.shipments.length > 0) {
     vroomReq.shipments = req.shipments.map((shipment) => ({
-      id: parseInt(shipment.id, 10) || 0,
+      id: idMapper.toVroomId(shipment.id),
       pickup: {
-        id: parseInt(shipment.pickup.id, 10) || 0,
+        id: idMapper.toVroomId(shipment.pickup.id),
         location: [shipment.pickup.location.lon, shipment.pickup.location.lat],
         service: shipment.pickup.service || 0,
         amount: shipment.pickup.amount ? [shipment.pickup.amount] : [0],
@@ -89,7 +113,7 @@ function grpcToVroomRequest(req) {
         skills: shipment.pickup.skills || [],
       },
       delivery: {
-        id: parseInt(shipment.delivery.id, 10) || 0,
+        id: idMapper.toVroomId(shipment.delivery.id),
         location: [shipment.delivery.location.lon, shipment.delivery.location.lat],
         service: shipment.delivery.service || 0,
         amount: shipment.delivery.amount ? [shipment.delivery.amount] : [0],
@@ -105,7 +129,7 @@ function grpcToVroomRequest(req) {
 
   if (req.vehicles && req.vehicles.length > 0) {
     vroomReq.vehicles = req.vehicles.map((vehicle) => ({
-      id: parseInt(vehicle.id, 10) || 0,
+      id: idMapper.toVroomId(vehicle.id),
       profile: mapProfile(vehicle.profile),
       start: vehicle.start ? [vehicle.start.lon, vehicle.start.lat] : null,
       end: vehicle.end ? [vehicle.end.lon, vehicle.end.lat] : null,
@@ -131,7 +155,16 @@ function grpcToVroomRequest(req) {
   return vroomReq;
 }
 
-function vroomToGrpcResponse(vroomRes) {
+function mapEntityId(value, idMapper) {
+  if (!idMapper) {
+    return String(value || '');
+  }
+
+  const originalId = idMapper.fromVroomId(value);
+  return originalId !== undefined ? originalId : String(value || '');
+}
+
+function vroomToGrpcResponse(vroomRes, idMapper) {
   const response = {
     code: vroomRes.code || 0,
     error: vroomRes.error || '',
@@ -141,13 +174,13 @@ function vroomToGrpcResponse(vroomRes) {
 
   if (vroomRes.routes && vroomRes.routes.length > 0) {
     response.routes = vroomRes.routes.map((route) => ({
-      vehicleId: String(route.vehicle_id || ''),
+      vehicleId: mapEntityId(route.vehicle_id, idMapper),
       cost: route.cost || 0,
       distance: BigInt(route.distance || 0),
       duration: BigInt(route.duration || 0),
       steps: route.steps.map((step) => ({
         type: step.type || '',
-        id: String(step.id || ''),
+        id: mapEntityId(step.id, idMapper),
         location: {
           lat: step.location ? step.location[1] : 0,
           lon: step.location ? step.location[0] : 0,
@@ -166,11 +199,11 @@ function vroomToGrpcResponse(vroomRes) {
 
   if (vroomRes.unassigned && vroomRes.unassigned.length > 0) {
     response.unassigned = vroomRes.unassigned.map((unassigned) => ({
-      id: String(unassigned.id || ''),
-      vehicleId: String(unassigned.vehicle_id || ''),
+      id: mapEntityId(unassigned.id, idMapper),
+      vehicleId: mapEntityId(unassigned.vehicle_id, idMapper),
       steps: (unassigned.steps || []).map((step) => ({
         type: step.type || '',
-        id: String(step.id || ''),
+        id: mapEntityId(step.id, idMapper),
         location: {
           lat: step.location ? step.location[1] : 0,
           lon: step.location ? step.location[0] : 0,
@@ -300,7 +333,8 @@ async function maybeAttachGoogleMatrix(req, vroomRequest) {
 
 async function optimizeRoutes(call, callback) {
   try {
-    const vroomRequest = grpcToVroomRequest(call.request);
+    const idMapper = createVroomIdMapper();
+    const vroomRequest = grpcToVroomRequest(call.request, idMapper);
     const matrixResult = await maybeAttachGoogleMatrix(call.request, vroomRequest);
 
     if (OPTIMIZER_VALIDATE_MATRIX_ONLY && matrixResult) {
@@ -326,7 +360,7 @@ async function optimizeRoutes(call, callback) {
       timeout: 30000,
     });
 
-    const grpcResponse = vroomToGrpcResponse(vroomRes.data);
+    const grpcResponse = vroomToGrpcResponse(vroomRes.data, idMapper);
     callback(null, grpcResponse);
   } catch (error) {
     const upstreamDetails = typeof error.response?.data === 'string'
