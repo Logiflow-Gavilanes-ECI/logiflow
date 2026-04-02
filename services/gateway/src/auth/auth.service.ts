@@ -5,9 +5,9 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
-import { PrismaClient } from '@prisma/client';
 import { createHash, randomBytes } from 'crypto';
 import { AUTH_ROLES, type AuthRole } from './auth-roles';
+import { PrismaService } from '../prisma/prisma.service';
 
 type RefreshTokenWriteClient = {
   refreshToken: {
@@ -55,7 +55,7 @@ export class AuthService {
   constructor(
     private readonly configService: ConfigService,
     private readonly jwtService: JwtService,
-    private readonly prismaService: PrismaClient,
+    private readonly prismaService: PrismaService,
   ) {}
 
   async login(username: string, password: string) {
