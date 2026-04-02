@@ -132,6 +132,15 @@
       "parameters": {
         "method": "POST",
         "url": "={{ $env.WEBHOOK_TARGET }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ 'Bearer ' + $('Login for Gateway JWT').item.json.accessToken }}"
+            }
+          ]
+        },
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
