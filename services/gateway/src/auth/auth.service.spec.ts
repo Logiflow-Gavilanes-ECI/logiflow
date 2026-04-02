@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaClient } from '@prisma/client';
 import { AuthService } from './auth.service';
+import { PrismaService } from '../prisma/prisma.service';
 
 describe('AuthService', () => {
   let authService: AuthService;
@@ -91,7 +92,7 @@ describe('AuthService', () => {
     authService = new AuthService(
       configService,
       jwtService,
-      prismaService,
+      prismaService as unknown as PrismaService,
     );
   });
 

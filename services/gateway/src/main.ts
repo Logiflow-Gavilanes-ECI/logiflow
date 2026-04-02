@@ -10,7 +10,8 @@ async function bootstrap() {
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
 
   const port = process.env.PORT ?? 3002;
-  await app.listen(port);
+  const host = process.env.HOST ?? '0.0.0.0';
+  await app.listen(port, host);
 
   Logger.log(
     `LogiFlow Core Backend running on http://localhost:${port}/api/v1`,
