@@ -249,4 +249,25 @@ describe('AuthService', () => {
     expect(prismaService.refreshToken.updateMany).not.toHaveBeenCalled();
     expect(prismaService.refreshToken.create).not.toHaveBeenCalled();
   });
+
+  it('rejects refresh token replay after it has already been consumed', async () => {
+    const consumedAt = new Date();
+    prismaService.refreshToken.findUnique.mockResolvedValueOnce({
+      id: 'rt-consumed',
+      userId: 'demo-user',
+      expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+      consumedAt,
+      user: {
+        id: 'demo-user',
+        role: 'conductor',
+      },
+    });
+
+    await expect(authService.refresh('replayed-token')).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+
+    expect(prismaService.refreshToken.updateMany).not.toHaveBeenCalled();
+    expect(prismaService.refreshToken.create).not.toHaveBeenCalled();
+  });
 });
