@@ -25,6 +25,9 @@ const GOOGLE_ROUTES_ENABLED = process.env.GOOGLE_ROUTES_ENABLED === 'true';
 const GOOGLE_ROUTES_ALLOW_CALLS = process.env.GOOGLE_ROUTES_ALLOW_CALLS === 'true';
 const GOOGLE_ROUTES_MOCK = process.env.GOOGLE_ROUTES_MOCK === 'true';
 const MAX_GOOGLE_MATRIX_LOCATIONS = Number(process.env.MAX_GOOGLE_MATRIX_LOCATIONS || 10);
+const AI_PREDICTOR_ENABLED = process.env.AI_PREDICTOR_ENABLED === 'true';
+const AI_PREDICTOR_URL = process.env.AI_PREDICTOR_URL || 'http://ai-predictor:5001/adjust';
+const AI_PREDICTOR_TIMEOUT_MS = Number(process.env.AI_PREDICTOR_TIMEOUT_MS || 5000);
 
 const googleRoutesClient = new GoogleRoutesClient({
   apiKey: process.env.GOOGLE_MAPS_API_KEY,
@@ -335,11 +338,56 @@ async function maybeAttachGoogleMatrix(req, vroomRequest) {
   return matrixResult;
 }
 
+async function callAIPredictor(matrix, departureTime) {
+  const response = await axios.post(
+    AI_PREDICTOR_URL,
+    {
+      matrix,
+      departure_time: departureTime,
+    },
+    {
+      timeout: AI_PREDICTOR_TIMEOUT_MS,
+      headers: { 'Content-Type': 'application/json' },
+    },
+  );
+
+  return response.data;
+}
+
 async function optimizeRoutes(call, callback) {
   try {
     const idMapper = createVroomIdMapper();
     const vroomRequest = grpcToVroomRequest(call.request, idMapper);
-    const matrixResult = await maybeAttachGoogleMatrix(call.request, vroomRequest);
+    let matrixResult = await maybeAttachGoogleMatrix(call.request, vroomRequest);
+
+    if (AI_PREDICTOR_ENABLED && vroomRequest.matrix) {
+      try {
+        const aiResponse = await callAIPredictor(
+          {
+            distances: vroomRequest.matrix.distances,
+            durations: vroomRequest.matrix.durations,
+            locations: matrixResult?.locations || buildMatrixLocations(call.request),
+          },
+          resolveDepartureTime(call.request),
+        );
+
+        if (aiResponse?.matrix?.durations && aiResponse?.matrix?.distances) {
+          vroomRequest.matrix = {
+            distances: aiResponse.matrix.distances,
+            durations: aiResponse.matrix.durations,
+          };
+
+          matrixResult = {
+            distances: aiResponse.matrix.distances,
+            durations: aiResponse.matrix.durations,
+            locations: aiResponse.matrix.locations || matrixResult?.locations || buildMatrixLocations(call.request),
+            source: 'ai-adjusted',
+          };
+        }
+      } catch (error) {
+        console.warn(`AI predictor unavailable, using base matrix: ${error.message}`);
+      }
+    }
 
     if (OPTIMIZER_VALIDATE_MATRIX_ONLY && matrixResult) {
       callback(null, {
@@ -352,6 +400,7 @@ async function optimizeRoutes(call, callback) {
           durations: matrixResult.durations,
           locations: matrixResult.locations,
         },
+        matrixSource: matrixResult.source || 'google',
         routingDistance: 0,
         routingDuration: 0,
       });
@@ -365,6 +414,9 @@ async function optimizeRoutes(call, callback) {
     });
 
     const grpcResponse = vroomToGrpcResponse(vroomRes.data, idMapper);
+    if (matrixResult?.source) {
+      grpcResponse.matrixSource = matrixResult.source;
+    }
     callback(null, grpcResponse);
   } catch (error) {
     const upstreamDetails = typeof error.response?.data === 'string'
@@ -410,5 +462,6 @@ module.exports = {
   vroomToGrpcResponse,
   buildMatrixLocations,
   maybeAttachGoogleMatrix,
+  callAIPredictor,
   optimizeRoutes,
 };
