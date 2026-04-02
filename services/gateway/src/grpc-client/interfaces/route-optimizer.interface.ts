@@ -122,6 +122,7 @@ export interface OptimizeResponse {
   matrix?: Matrix;
   routingDistance: Int64Value;
   routingDuration: Int64Value;
+  matrixSource?: string;
 }
 
 export interface RouteOptimizerGrpcService {
