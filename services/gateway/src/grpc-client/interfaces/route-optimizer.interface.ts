@@ -76,6 +76,7 @@ export interface OptimizeRequest {
   shipments: Shipment[];
   matrix?: Matrix;
   options?: Options;
+  departureTime?: string;
 }
 
 export interface RouteStep {

@@ -12,6 +12,7 @@ message OptimizeRequest {
   repeated Shipment shipments = 3;
   Matrix matrix = 4;
   Options options = 5;
+  string departure_time = 6;
 }
 
 message OptimizeResponse {

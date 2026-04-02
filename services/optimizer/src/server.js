@@ -234,6 +234,10 @@ function shouldComputeGoogleMatrix(req) {
   return MATRIX_SOURCE === 'google';
 }
 
+function resolveDepartureTime(req) {
+  return req?.departureTime || new Date().toISOString();
+}
+
 function isValidCoordinate(coordinate) {
   if (!coordinate) {
     return false;
@@ -320,7 +324,7 @@ async function maybeAttachGoogleMatrix(req, vroomRequest) {
   const matrixResult = await googleRoutesClient.computeRouteMatrix({
     locations,
     travelMode,
-    departureTime: process.env.GOOGLE_ROUTES_DEPARTURE_TIME,
+    departureTime: resolveDepartureTime(req),
   });
 
   vroomRequest.matrix = {
