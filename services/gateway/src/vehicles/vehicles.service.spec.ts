@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { VehiclesService } from './vehicles.service';
 import { VehiclesRepository, VehicleRecord } from './vehicles.repository';
 import { NotFoundException } from '@nestjs/common';
+import { StopsService } from '../stops/stops.service';
 
 const mockVehicle: VehicleRecord = {
   id: 'v1',
@@ -28,6 +29,12 @@ describe('VehiclesService', () => {
             create: jest.fn(),
             update: jest.fn(),
             remove: jest.fn(),
+          },
+        },
+        {
+          provide: StopsService,
+          useValue: {
+            findAll: jest.fn(),
           },
         },
       ],

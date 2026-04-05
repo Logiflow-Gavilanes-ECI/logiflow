@@ -70,7 +70,8 @@
   },
   "jest": {
     "moduleNameMapper": {
-      "^@prisma/client$": "<rootDir>/__mocks__/prisma-client.mock.ts"
+      "^@prisma/client$": "<rootDir>/__mocks__/prisma-client.mock.ts",
+      "^@nestjs/swagger$": "<rootDir>/__mocks__/nestjs-swagger.mock.ts"
     },
     "moduleFileExtensions": [
       "js",
