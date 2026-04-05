@@ -36,7 +36,9 @@ type RefreshTokenWriteClient = {
       };
     }) => Promise<{ count: number }>;
   };
-  $transaction: <T>(callback: (tx: RefreshTokenWriteClient) => Promise<T>) => Promise<T>;
+  $transaction: <T>(
+    callback: (tx: RefreshTokenWriteClient) => Promise<T>,
+  ) => Promise<T>;
 };
 
 type StoredRefreshToken = {
@@ -47,6 +49,22 @@ type StoredRefreshToken = {
   user: {
     id: string;
     role: AuthRole;
+  };
+};
+
+type AuthUserRecord = {
+  id: string;
+  role: AuthRole;
+};
+
+type UserWriteClient = {
+  user: {
+    upsert: (args: {
+      where: { id: string };
+      update: { role: AuthRole };
+      create: { id: string; role: AuthRole };
+    }) => Promise<AuthUserRecord>;
+    create: (args: { data: { role: AuthRole } }) => Promise<AuthUserRecord>;
   };
 };
 
@@ -81,7 +99,8 @@ export class AuthService {
       throw new BadRequestException('Invalid role');
     }
 
-    const demoUser = await this.prismaService.user.upsert({
+    const userClient = this.prismaService as unknown as UserWriteClient;
+    const demoUser = await userClient.user.upsert({
       where: {
         id: 'demo-user',
       },
@@ -118,7 +137,8 @@ export class AuthService {
       throw new BadRequestException('Invalid role');
     }
 
-    const user = await this.prismaService.user.create({
+    const userClient = this.prismaService as unknown as UserWriteClient;
+    const user = await userClient.user.create({
       data: {
         role: role as AuthRole,
       },
@@ -149,8 +169,8 @@ export class AuthService {
       throw new UnauthorizedException('Invalid refresh token');
     }
 
-    const refreshTokenClient =
-      this.prismaService as unknown as RefreshTokenWriteClient;
+    const refreshTokenClient = this
+      .prismaService as unknown as RefreshTokenWriteClient;
     const incomingTokenHash = this.hashRefreshToken(refreshToken);
     const now = new Date();
 
@@ -164,7 +184,11 @@ export class AuthService {
         },
       });
 
-      if (!storedToken || storedToken.consumedAt || storedToken.expiresAt <= now) {
+      if (
+        !storedToken ||
+        storedToken.consumedAt ||
+        storedToken.expiresAt <= now
+      ) {
         throw new UnauthorizedException('Invalid refresh token');
       }
 
@@ -222,8 +246,7 @@ export class AuthService {
     const expiresAtDate = new Date(Date.now() + ttlMinutes * 60 * 1000);
 
     const refreshTokenClient =
-      client ??
-      (this.prismaService as unknown as RefreshTokenWriteClient);
+      client ?? (this.prismaService as unknown as RefreshTokenWriteClient);
 
     await refreshTokenClient.refreshToken.create({
       data: {

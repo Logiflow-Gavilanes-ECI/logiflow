@@ -175,11 +175,7 @@ export class PrismaClient {
 
   user = {
     create: jest.fn(
-      ({
-        data,
-      }: {
-        data: { id?: string; role: 'admin' | 'conductor' };
-      }) => {
+      ({ data }: { data: { id?: string; role: 'admin' | 'conductor' } }) => {
         const id = data.id ?? `u-${this.userStore.size + 1}`;
         const created: UserEntity = {
           id,
@@ -306,7 +302,7 @@ export class PrismaClient {
     ),
   };
 
-  $transaction = jest.fn(async (callback: (tx: PrismaClient) => unknown) => {
+  $transaction = jest.fn((callback: (tx: PrismaClient) => Promise<unknown>) => {
     return callback(this);
   });
 

@@ -12,14 +12,17 @@ async function bootstrap() {
 
   const swaggerConfig = new DocumentBuilder()
     .setTitle('LogiFlow Gateway API')
-    .setDescription('Core backend API documentation for LogiFlow gateway service.')
+    .setDescription(
+      'Core backend API documentation for LogiFlow gateway service.',
+    )
     .setVersion('1.0')
     .addBearerAuth(
       {
         type: 'http',
         scheme: 'bearer',
         bearerFormat: 'JWT',
-        description: 'Paste a valid access token to authorize protected endpoints.',
+        description:
+          'Paste a valid access token to authorize protected endpoints.',
       },
       'bearer',
     )
