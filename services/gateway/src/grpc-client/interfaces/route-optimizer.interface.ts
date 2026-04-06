@@ -76,6 +76,7 @@ export interface OptimizeRequest {
   shipments: Shipment[];
   matrix?: Matrix;
   options?: Options;
+  departureTime?: string;
 }
 
 export interface RouteStep {
@@ -121,6 +122,7 @@ export interface OptimizeResponse {
   matrix?: Matrix;
   routingDistance: Int64Value;
   routingDuration: Int64Value;
+  matrixSource?: string;
 }
 
 export interface RouteOptimizerGrpcService {

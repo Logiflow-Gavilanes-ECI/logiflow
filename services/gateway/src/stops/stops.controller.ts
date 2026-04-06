@@ -14,9 +14,11 @@ import { StopsService } from './stops.service';
 import { CreateStopDto } from './dto/create-stop.dto';
 import { UpdateStopDto } from './dto/update-stop.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { ApiBearerAuth } from '@nestjs/swagger';
 
 @Controller('stops')
 @UseGuards(JwtAuthGuard)
+@ApiBearerAuth()
 export class StopsController {
   constructor(private readonly stopsService: StopsService) {}
 

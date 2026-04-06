@@ -25,6 +25,13 @@ const GOOGLE_ROUTES_ENABLED = process.env.GOOGLE_ROUTES_ENABLED === 'true';
 const GOOGLE_ROUTES_ALLOW_CALLS = process.env.GOOGLE_ROUTES_ALLOW_CALLS === 'true';
 const GOOGLE_ROUTES_MOCK = process.env.GOOGLE_ROUTES_MOCK === 'true';
 const MAX_GOOGLE_MATRIX_LOCATIONS = Number(process.env.MAX_GOOGLE_MATRIX_LOCATIONS || 10);
+const AI_PREDICTOR_ENABLED = process.env.AI_PREDICTOR_ENABLED === 'true';
+const AI_PREDICTOR_URL = process.env.AI_PREDICTOR_URL || 'http://ai-predictor:5001/adjust';
+const AI_PREDICTOR_TIMEOUT_MS = Number(process.env.AI_PREDICTOR_TIMEOUT_MS || 5000);
+const REDIS_URL = process.env.REDIS_URL;
+const REDIS_ROUTE_TTL_SECONDS = Number(process.env.REDIS_ROUTE_TTL_SECONDS || 3600);
+
+let redisClient;
 
 const googleRoutesClient = new GoogleRoutesClient({
   apiKey: process.env.GOOGLE_MAPS_API_KEY,
@@ -45,6 +52,77 @@ const packageDefinition = protoLoader.loadSync(PROTO_PATH, {
 
 const proto = grpc.loadPackageDefinition(packageDefinition).logiflow;
 
+function getRedisClient() {
+  if (!REDIS_URL) {
+    return null;
+  }
+
+  if (redisClient) {
+    return redisClient;
+  }
+
+  const Redis = require('ioredis');
+  redisClient = new Redis(REDIS_URL, {
+    lazyConnect: true,
+    maxRetriesPerRequest: 1,
+    enableOfflineQueue: false,
+  });
+
+  redisClient.on('error', (error) => {
+    console.warn(`Redis client error: ${error.message}`);
+  });
+
+  return redisClient;
+}
+
+function buildRouteRedisKey(vehicleId) {
+  return `route:vehicle:${vehicleId}`;
+}
+
+function getCorrelationId(call) {
+  const rawHeader = call?.metadata?.get?.('x-correlation-id')?.[0];
+  return rawHeader ? String(rawHeader) : 'unknown';
+}
+
+async function persistRoutesToRedis(grpcResponse, call, clientOverride) {
+  const routes = grpcResponse?.routes || [];
+  if (routes.length === 0) {
+    return;
+  }
+
+  const client = clientOverride || getRedisClient();
+  if (!client) {
+    return;
+  }
+
+  try {
+    if (client.status === 'wait' && typeof client.connect === 'function') {
+      await client.connect();
+    }
+
+    const correlationId = getCorrelationId(call);
+    const persistedAt = new Date().toISOString();
+
+    for (const route of routes) {
+      const vehicleId = String(route.vehicleId || '').trim();
+      if (!vehicleId) {
+        continue;
+      }
+
+      const key = buildRouteRedisKey(vehicleId);
+      const value = JSON.stringify({
+        vehicleId,
+        route,
+        correlationId,
+        persistedAt,
+      });
+      await client.set(key, value, 'EX', REDIS_ROUTE_TTL_SECONDS);
+    }
+  } catch (error) {
+    console.warn(`Route persistence to Redis skipped: ${error.message}`);
+  }
+}
+
 function mapProfile(profile) {
   const profileMap = {
     0: 'car',
@@ -54,7 +132,31 @@ function mapProfile(profile) {
   return profileMap[profile] || 'car';
 }
 
-function grpcToVroomRequest(req) {
+function createVroomIdMapper() {
+  let nextId = 1;
+  const toVroomMap = new Map();
+  const fromVroomMap = new Map();
+
+  return {
+    toVroomId(originalId) {
+      const safeOriginalId = String(originalId || '').trim();
+      if (toVroomMap.has(safeOriginalId)) {
+        return toVroomMap.get(safeOriginalId);
+      }
+
+      const assigned = nextId;
+      nextId += 1;
+      toVroomMap.set(safeOriginalId, assigned);
+      fromVroomMap.set(String(assigned), safeOriginalId);
+      return assigned;
+    },
+    fromVroomId(vroomId) {
+      return fromVroomMap.get(String(vroomId));
+    },
+  };
+}
+
+function grpcToVroomRequest(req, idMapper) {
   const vroomReq = {
     jobs: [],
     shipments: [],
@@ -63,7 +165,7 @@ function grpcToVroomRequest(req) {
 
   if (req.jobs && req.jobs.length > 0) {
     vroomReq.jobs = req.jobs.map((job) => ({
-      id: parseInt(job.id, 10) || 0,
+      id: idMapper.toVroomId(job.id),
       location: [job.location.lon, job.location.lat],
       service: job.service || 0,
       amount: job.amount ? [job.amount] : [0],
@@ -77,9 +179,9 @@ function grpcToVroomRequest(req) {
 
   if (req.shipments && req.shipments.length > 0) {
     vroomReq.shipments = req.shipments.map((shipment) => ({
-      id: parseInt(shipment.id, 10) || 0,
+      id: idMapper.toVroomId(shipment.id),
       pickup: {
-        id: parseInt(shipment.pickup.id, 10) || 0,
+        id: idMapper.toVroomId(shipment.pickup.id),
         location: [shipment.pickup.location.lon, shipment.pickup.location.lat],
         service: shipment.pickup.service || 0,
         amount: shipment.pickup.amount ? [shipment.pickup.amount] : [0],
@@ -89,7 +191,7 @@ function grpcToVroomRequest(req) {
         skills: shipment.pickup.skills || [],
       },
       delivery: {
-        id: parseInt(shipment.delivery.id, 10) || 0,
+        id: idMapper.toVroomId(shipment.delivery.id),
         location: [shipment.delivery.location.lon, shipment.delivery.location.lat],
         service: shipment.delivery.service || 0,
         amount: shipment.delivery.amount ? [shipment.delivery.amount] : [0],
@@ -105,7 +207,7 @@ function grpcToVroomRequest(req) {
 
   if (req.vehicles && req.vehicles.length > 0) {
     vroomReq.vehicles = req.vehicles.map((vehicle) => ({
-      id: parseInt(vehicle.id, 10) || 0,
+      id: idMapper.toVroomId(vehicle.id),
       profile: mapProfile(vehicle.profile),
       start: vehicle.start ? [vehicle.start.lon, vehicle.start.lat] : null,
       end: vehicle.end ? [vehicle.end.lon, vehicle.end.lat] : null,
@@ -131,7 +233,16 @@ function grpcToVroomRequest(req) {
   return vroomReq;
 }
 
-function vroomToGrpcResponse(vroomRes) {
+function mapEntityId(value, idMapper) {
+  if (!idMapper) {
+    return String(value || '');
+  }
+
+  const originalId = idMapper.fromVroomId(value);
+  return originalId !== undefined ? originalId : String(value || '');
+}
+
+function vroomToGrpcResponse(vroomRes, idMapper) {
   const response = {
     code: vroomRes.code || 0,
     error: vroomRes.error || '',
@@ -141,13 +252,13 @@ function vroomToGrpcResponse(vroomRes) {
 
   if (vroomRes.routes && vroomRes.routes.length > 0) {
     response.routes = vroomRes.routes.map((route) => ({
-      vehicleId: String(route.vehicle_id || ''),
+      vehicleId: mapEntityId(route.vehicle_id, idMapper),
       cost: route.cost || 0,
       distance: BigInt(route.distance || 0),
       duration: BigInt(route.duration || 0),
       steps: route.steps.map((step) => ({
         type: step.type || '',
-        id: String(step.id || ''),
+        id: mapEntityId(step.id, idMapper),
         location: {
           lat: step.location ? step.location[1] : 0,
           lon: step.location ? step.location[0] : 0,
@@ -166,11 +277,11 @@ function vroomToGrpcResponse(vroomRes) {
 
   if (vroomRes.unassigned && vroomRes.unassigned.length > 0) {
     response.unassigned = vroomRes.unassigned.map((unassigned) => ({
-      id: String(unassigned.id || ''),
-      vehicleId: String(unassigned.vehicle_id || ''),
+      id: mapEntityId(unassigned.id, idMapper),
+      vehicleId: mapEntityId(unassigned.vehicle_id, idMapper),
       steps: (unassigned.steps || []).map((step) => ({
         type: step.type || '',
-        id: String(step.id || ''),
+        id: mapEntityId(step.id, idMapper),
         location: {
           lat: step.location ? step.location[1] : 0,
           lon: step.location ? step.location[0] : 0,
@@ -199,6 +310,10 @@ function vroomToGrpcResponse(vroomRes) {
 
 function shouldComputeGoogleMatrix(req) {
   return MATRIX_SOURCE === 'google';
+}
+
+function resolveDepartureTime(req) {
+  return req?.departureTime || new Date().toISOString();
 }
 
 function isValidCoordinate(coordinate) {
@@ -287,7 +402,7 @@ async function maybeAttachGoogleMatrix(req, vroomRequest) {
   const matrixResult = await googleRoutesClient.computeRouteMatrix({
     locations,
     travelMode,
-    departureTime: process.env.GOOGLE_ROUTES_DEPARTURE_TIME,
+    departureTime: resolveDepartureTime(req),
   });
 
   vroomRequest.matrix = {
@@ -298,10 +413,56 @@ async function maybeAttachGoogleMatrix(req, vroomRequest) {
   return matrixResult;
 }
 
+async function callAIPredictor(matrix, departureTime) {
+  const response = await axios.post(
+    AI_PREDICTOR_URL,
+    {
+      matrix,
+      departure_time: departureTime,
+    },
+    {
+      timeout: AI_PREDICTOR_TIMEOUT_MS,
+      headers: { 'Content-Type': 'application/json' },
+    },
+  );
+
+  return response.data;
+}
+
 async function optimizeRoutes(call, callback) {
   try {
-    const vroomRequest = grpcToVroomRequest(call.request);
-    const matrixResult = await maybeAttachGoogleMatrix(call.request, vroomRequest);
+    const idMapper = createVroomIdMapper();
+    const vroomRequest = grpcToVroomRequest(call.request, idMapper);
+    let matrixResult = await maybeAttachGoogleMatrix(call.request, vroomRequest);
+
+    if (AI_PREDICTOR_ENABLED && vroomRequest.matrix) {
+      try {
+        const aiResponse = await callAIPredictor(
+          {
+            distances: vroomRequest.matrix.distances,
+            durations: vroomRequest.matrix.durations,
+            locations: matrixResult?.locations || buildMatrixLocations(call.request),
+          },
+          resolveDepartureTime(call.request),
+        );
+
+        if (aiResponse?.matrix?.durations && aiResponse?.matrix?.distances) {
+          vroomRequest.matrix = {
+            distances: aiResponse.matrix.distances,
+            durations: aiResponse.matrix.durations,
+          };
+
+          matrixResult = {
+            distances: aiResponse.matrix.distances,
+            durations: aiResponse.matrix.durations,
+            locations: aiResponse.matrix.locations || matrixResult?.locations || buildMatrixLocations(call.request),
+            source: 'ai-adjusted',
+          };
+        }
+      } catch (error) {
+        console.warn(`AI predictor unavailable, using base matrix: ${error.message}`);
+      }
+    }
 
     if (OPTIMIZER_VALIDATE_MATRIX_ONLY && matrixResult) {
       callback(null, {
@@ -314,6 +475,7 @@ async function optimizeRoutes(call, callback) {
           durations: matrixResult.durations,
           locations: matrixResult.locations,
         },
+        matrixSource: matrixResult.source || 'google',
         routingDistance: 0,
         routingDuration: 0,
       });
@@ -326,7 +488,12 @@ async function optimizeRoutes(call, callback) {
       timeout: 30000,
     });
 
-    const grpcResponse = vroomToGrpcResponse(vroomRes.data);
+    const grpcResponse = vroomToGrpcResponse(vroomRes.data, idMapper);
+    if (matrixResult?.source) {
+      grpcResponse.matrixSource = matrixResult.source;
+    }
+
+    await persistRoutesToRedis(grpcResponse, call);
     callback(null, grpcResponse);
   } catch (error) {
     const upstreamDetails = typeof error.response?.data === 'string'
@@ -362,4 +529,18 @@ function main() {
   });
 }
 
-main();
+if (require.main === module) {
+  main();
+}
+
+module.exports = {
+  createVroomIdMapper,
+  grpcToVroomRequest,
+  vroomToGrpcResponse,
+  buildMatrixLocations,
+  maybeAttachGoogleMatrix,
+  callAIPredictor,
+  buildRouteRedisKey,
+  persistRoutesToRedis,
+  optimizeRoutes,
+};

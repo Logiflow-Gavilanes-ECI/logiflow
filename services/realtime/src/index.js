@@ -3,6 +3,7 @@ const { registerRooms } = require('./rooms');
 const { startPositionBroadcast } = require('./events/position');
 const { emitRouteUpdate } = require('./events/routeUpdate');
 const { checkHeartbeats } = require('./heartbeat');
+const { authMiddleware } = require('./middleware/auth');
 require('dotenv').config();
 
 const vehicleHeartbeats = {};
@@ -21,6 +22,8 @@ const PORT = process.env.PORT || 3001;
 
 async function main() {
   await initializeServer();
+
+  io.use(authMiddleware);
 
   registerRooms(io);
   startPositionBroadcast(io, vehicleHeartbeats);

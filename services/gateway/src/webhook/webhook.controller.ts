@@ -13,9 +13,11 @@ import {
   UNKNOWN_CORRELATION_ID,
 } from '../common/constants/correlation-id.constant';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { ApiBearerAuth } from '@nestjs/swagger';
 
 @Controller('webhook')
 @UseGuards(JwtAuthGuard)
+@ApiBearerAuth()
 export class WebhookController {
   private readonly logger = new Logger(WebhookController.name);
 

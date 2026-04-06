@@ -45,14 +45,31 @@ services:
     environment:
       GRPC_PORT: 50051
       VROOM_URL: http://vroom:3000
+      REDIS_URL: redis://redis:6379
       OPTIMIZER_PROTO_PATH: /app/shared/proto/optimizer.proto
       MATRIX_SOURCE: request
       GOOGLE_ROUTES_ENABLED: "false"
       GOOGLE_ROUTES_ALLOW_CALLS: "false"
       GOOGLE_ROUTES_MOCK: "true"
+      AI_PREDICTOR_ENABLED: "false"
+      AI_PREDICTOR_URL: http://ai-predictor:5001/adjust
     depends_on:
       vroom:
         condition: service_started
+      redis:
+        condition: service_healthy
+      ai-predictor:
+        condition: service_started
+
+  ai-predictor:
+    image: python:3.12-alpine
+    container_name: logiflow-ai-predictor
+    working_dir: /workspace/services/ai-predictor
+    command: sh -c "pip install -r requirements.txt && python predictor.py"
+    volumes:
+      - .:/workspace
+    ports:
+      - "5001:5001"
 
   realtime:
     image: node:22-alpine
@@ -74,7 +91,7 @@ services:
     image: node:22-alpine
     container_name: logiflow-gateway
     working_dir: /workspace/services/gateway
-    command: sh -c "npm install && npx prisma generate && npx prisma migrate deploy && npm run start:dev"
+    command: sh -c "npm install && npx prisma generate && npx prisma migrate deploy && npx tsc -p tsconfig.build.json && node dist/src/main.js"
     volumes:
       - .:/workspace
     environment:

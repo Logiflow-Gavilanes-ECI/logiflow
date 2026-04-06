@@ -17,9 +17,25 @@ type StopEntity = {
   updatedAt: Date;
 };
 
+type UserEntity = {
+  id: string;
+  role: 'admin' | 'conductor';
+};
+
+type RefreshTokenEntity = {
+  id: string;
+  tokenHash: string;
+  userId: string;
+  expiresAt: Date;
+  createdAt: Date;
+  consumedAt?: Date;
+};
+
 export class PrismaClient {
   private readonly vehicleStore = new Map<string, VehicleEntity>();
   private readonly stopStore = new Map<string, StopEntity>();
+  private readonly userStore = new Map<string, UserEntity>();
+  private readonly refreshTokenStore = new Map<string, RefreshTokenEntity>();
 
   private nextId(prefix: 'v' | 's', size: number): string {
     return `${prefix}-${size + 1}`;
@@ -156,6 +172,139 @@ export class PrismaClient {
       return existing;
     }),
   };
+
+  user = {
+    create: jest.fn(
+      ({ data }: { data: { id?: string; role: 'admin' | 'conductor' } }) => {
+        const id = data.id ?? `u-${this.userStore.size + 1}`;
+        const created: UserEntity = {
+          id,
+          role: data.role,
+        };
+
+        this.userStore.set(id, created);
+        return created;
+      },
+    ),
+    upsert: jest.fn(
+      ({
+        where,
+        update,
+        create,
+      }: {
+        where: { id: string };
+        update: { role: 'admin' | 'conductor' };
+        create: { id: string; role: 'admin' | 'conductor' };
+      }) => {
+        const existing = this.userStore.get(where.id);
+
+        if (existing) {
+          const updated: UserEntity = {
+            ...existing,
+            ...update,
+          };
+          this.userStore.set(where.id, updated);
+          return updated;
+        }
+
+        const created: UserEntity = {
+          id: create.id,
+          role: create.role,
+        };
+        this.userStore.set(create.id, created);
+        return created;
+      },
+    ),
+  };
+
+  refreshToken = {
+    create: jest.fn(
+      ({
+        data,
+      }: {
+        data: {
+          userId: string;
+          tokenHash: string;
+          expiresAt: Date;
+        };
+      }) => {
+        const created: RefreshTokenEntity = {
+          id: `rt-${this.refreshTokenStore.size + 1}`,
+          userId: data.userId,
+          tokenHash: data.tokenHash,
+          expiresAt: data.expiresAt,
+          createdAt: new Date(),
+        };
+
+        this.refreshTokenStore.set(created.id, created);
+        return created;
+      },
+    ),
+    findUnique: jest.fn(
+      ({
+        where,
+      }: {
+        where: {
+          tokenHash: string;
+        };
+        include?: {
+          user: true;
+        };
+      }) => {
+        const found = Array.from(this.refreshTokenStore.values()).find(
+          (token) => token.tokenHash === where.tokenHash,
+        );
+
+        if (!found) {
+          return null;
+        }
+
+        const user = this.userStore.get(found.userId);
+
+        if (!user) {
+          return null;
+        }
+
+        return {
+          ...found,
+          consumedAt: found.consumedAt ?? null,
+          user,
+        };
+      },
+    ),
+    updateMany: jest.fn(
+      ({
+        where,
+        data,
+      }: {
+        where: {
+          id: string;
+          consumedAt: null;
+        };
+        data: {
+          consumedAt: Date;
+        };
+      }) => {
+        const current = this.refreshTokenStore.get(where.id);
+
+        if (!current || current.consumedAt) {
+          return { count: 0 };
+        }
+
+        const updated: RefreshTokenEntity = {
+          ...current,
+          consumedAt: data.consumedAt,
+        };
+
+        this.refreshTokenStore.set(where.id, updated);
+        return { count: 1 };
+      },
+    ),
+  };
+
+  $transaction = jest.fn((callback: (tx: PrismaClient) => Promise<unknown>) => {
+    return callback(this);
+  });
 
   $connect = jest.fn(() => Promise.resolve(undefined));
   $disconnect = jest.fn(() => Promise.resolve(undefined));

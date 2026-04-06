@@ -209,6 +209,7 @@ export class WebhookService {
       vehicles,
       jobs,
       shipments,
+      departureTime: event.departureTime,
       options: {
         geometry: event.options?.geometry ?? false,
         metric: event.options?.metric ?? 'duration',
