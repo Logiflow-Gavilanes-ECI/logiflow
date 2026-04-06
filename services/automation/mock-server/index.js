@@ -37,7 +37,11 @@ const REQUIRED_TRAFFIC_FIELDS = [
   FIELD_STOPS,
 ];
 
-app.use(express.json());
+app.use(express.json({ limit: '100kb' }));
+app.use((req, res, next) => {
+  res.removeHeader('X-Powered-By');
+  next();
+});
 
 function getMissingFields(body) {
   return REQUIRED_TRAFFIC_FIELDS.filter((field) => !(field in body));
@@ -169,6 +173,7 @@ function handleNotify(req, res) {
 
 app.post(NOTIFY_PATH, handleNotify);
 
+/* istanbul ignore next */
 function startServer() {
   app.listen(PORT, () => {
     console.log(`[LogiFlow] Mock webhook server running on http://localhost:${PORT}`);
@@ -176,6 +181,7 @@ function startServer() {
   });
 }
 
+/* istanbul ignore next */
 if (require.main === module) {
   startServer();
 }

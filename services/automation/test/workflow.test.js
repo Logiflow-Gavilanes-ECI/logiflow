@@ -90,6 +90,7 @@ describe('Traffic Event Payload – Mock Server Validation', () => {
     expect(response.body.vehiclesAffected).toBe(trafficEvent.vehicles.length);
     expect(response.body.detourRecommended).toBe(trafficEvent.maps.detourRecommended);
     expect(response.body).toHaveProperty('receivedAt');
+    expect(response.headers['x-powered-by']).toBeUndefined();
   });
 
   test('should return 400 when eventType is missing', async () => {
@@ -135,5 +136,53 @@ describe('Traffic Event Payload – Mock Server Validation', () => {
 
     expect(response.status).toBe(400);
     expect(response.body.error).toBe('Invalid payload');
+  });
+
+  test('should return 200 from /notify with valid payload', async () => {
+    const notifyPayload = {
+      eventType: 'traffic_jam',
+      riskLevel: 'HIGH',
+      locationDescription: 'Autopista Norte - Calle 100, Bogota',
+      affectedVehicles: ['V001', 'V003'],
+      action: 'Calculate detour and monitor ETA impact',
+      timestamp: '2026-03-09T15:00:00.000Z',
+    };
+
+    const response = await request(app).post('/notify').send(notifyPayload);
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(response.body.channel).toBe('telegram-mock');
+    expect(response.body.messageSent).toBe(true);
+    expect(response.body.eventType).toBe('traffic_jam');
+    expect(response.body.riskLevel).toBe('HIGH');
+  });
+
+  test('should return 400 from /notify when required field is missing', async () => {
+    const response = await request(app).post('/notify').send({
+      riskLevel: 'HIGH',
+      affectedVehicles: ['V001'],
+    });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toBe('Invalid payload');
+    expect(response.body.message).toContain('eventType');
+  });
+
+  test('should return 400 from /notify when payload fails message validation', async () => {
+    const invalidNotifyPayload = {
+      eventType: 'traffic_jam',
+      riskLevel: 'HIGH',
+      locationDescription: 'Autopista Norte - Calle 100, Bogota',
+      affectedVehicles: [],
+      action: 'Calculate detour and monitor ETA impact',
+      timestamp: '2026-03-09T15:00:00.000Z',
+    };
+
+    const response = await request(app).post('/notify').send(invalidNotifyPayload);
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toBe('Invalid payload');
+    expect(response.body.message).toContain('affectedVehicles');
   });
 });
