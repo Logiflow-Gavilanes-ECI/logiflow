@@ -1,5 +1,8 @@
 name: CI — LogiFlow Monorepo
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 on:
   push:
     branches: [main, develop, 'feature/**']
@@ -50,10 +53,10 @@ jobs:
         # Safety net for services that still have no test files.
         run: npm test -- --coverage --coverageReporters=lcov --passWithNoTests
 
-      - name: SonarCloud Scan
+      - name: SonarQube Cloud Scan
         # Only automation has sonar-project.properties today.
         if: matrix.service == 'automation'
-        uses: SonarSource/sonarcloud-github-action@master
+        uses: SonarSource/sonarqube-scan-action@v5
         with:
           projectBaseDir: services/automation
         env:
