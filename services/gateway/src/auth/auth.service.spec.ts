@@ -119,6 +119,14 @@ describe('AuthService', () => {
       return 'conductor';
     }
 
+    if (key === 'AUTH_DEMO_USERNAME') {
+      return 'demo-user-name';
+    }
+
+    if (key === 'AUTH_DEMO_PASSWORD') {
+      return 'demo-user-password';
+    }
+
     if (key === 'REFRESH_TOKEN_TTL_MINUTES') {
       return '60';
     }
@@ -220,8 +228,8 @@ describe('AuthService', () => {
 
   it('includes the configured demo role in the login token payload', async () => {
     const loginResult = (await authService.login(
-      'demo',
-      'demo123',
+      'demo-user-name',
+      'demo-user-password',
     )) as TokenPairResponse;
 
     expect(loginResult.accessToken).toBe('signed-token');
@@ -238,7 +246,7 @@ describe('AuthService', () => {
     expect(signAsyncMock).toHaveBeenCalledWith(
       expect.objectContaining({
         sub: 'demo-user',
-        username: 'demo',
+        username: 'demo-user-name',
         role: 'conductor',
       }),
     );
@@ -301,7 +309,7 @@ describe('AuthService', () => {
     expect(signAsyncMock).toHaveBeenCalledWith(
       expect.objectContaining({
         sub: 'demo-user',
-        username: 'demo',
+        username: 'demo-user-name',
         role: 'conductor',
       }),
     );

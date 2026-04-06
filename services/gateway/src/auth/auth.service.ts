@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  InternalServerErrorException,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -77,14 +78,8 @@ export class AuthService {
   ) {}
 
   async login(username: string, password: string) {
-    const demoUsername = this.configService.get<string>(
-      'AUTH_DEMO_USERNAME',
-      'demo',
-    );
-    const demoPassword = this.configService.get<string>(
-      'AUTH_DEMO_PASSWORD',
-      'demo123',
-    );
+    const demoUsername = this.getRequiredConfig('AUTH_DEMO_USERNAME');
+    const demoPassword = this.getRequiredConfig('AUTH_DEMO_PASSWORD');
 
     if (username !== demoUsername || password !== demoPassword) {
       throw new UnauthorizedException('Invalid credentials');
@@ -268,9 +263,21 @@ export class AuthService {
 
   private resolveUsername(userId: string) {
     if (userId === 'demo-user') {
-      return this.configService.get<string>('AUTH_DEMO_USERNAME', 'demo');
+      return this.getRequiredConfig('AUTH_DEMO_USERNAME');
     }
 
     return userId;
+  }
+
+  private getRequiredConfig(key: string): string {
+    const value = this.configService.get<string>(key);
+
+    if (!value || value.trim().length === 0) {
+      throw new InternalServerErrorException(
+        `Missing required configuration: ${key}`,
+      );
+    }
+
+    return value;
   }
 }
