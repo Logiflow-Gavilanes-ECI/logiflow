@@ -15,20 +15,7 @@ RUN cat <<'EOF' > /usr/local/bin/vroom
 #!/usr/bin/env node
 const fs = require('fs');
 
-let input = '';
-process.stdin.on('data', (chunk) => {
-	input += chunk;
-});
-
-process.stdin.on('end', () => {
-	let payload = {};
-	try {
-		payload = JSON.parse(input || '{}');
-	} catch {
-		process.stderr.write('Invalid JSON input');
-		process.exit(2);
-	}
-
+function buildResponse(payload) {
 	const vehicles = Array.isArray(payload.vehicles) ? payload.vehicles : [];
 	const jobs = Array.isArray(payload.jobs) ? payload.jobs : [];
 
@@ -52,6 +39,7 @@ process.stdin.on('end', () => {
 			service: Number(job.service || 0),
 			waiting_time: 0,
 			arrival: order + 1,
+			departure: order + 1,
 			duration: 0,
 			setup: 0,
 			load: [Number(job.amount?.[0] || job.amount || 0)],
@@ -60,7 +48,7 @@ process.stdin.on('end', () => {
 		}));
 
 		return {
-			vehicle: Number(vehicle.id) || vehicleIndex + 1,
+			vehicle_id: Number(vehicle.id) || vehicleIndex + 1,
 			cost: 0,
 			setup: 0,
 			service: steps.reduce((acc, step) => acc + Number(step.service || 0), 0),
@@ -68,14 +56,14 @@ process.stdin.on('end', () => {
 			waiting_time: 0,
 			priority: 0,
 			distance: 0,
-			delivery: [0],
-			pickup: [0],
+			delivery: 0,
+			pickup: 0,
 			violations: [],
 			steps,
 		};
 	});
 
-	const response = {
+	return {
 		code: 0,
 		summary: {
 			cost: 0,
@@ -92,8 +80,31 @@ process.stdin.on('end', () => {
 		unassigned: [],
 		routes,
 	};
+}
 
-	process.stdout.write(JSON.stringify(response));
+function parsePayload(rawInput) {
+	try {
+		return JSON.parse(rawInput || '{}');
+	} catch {
+		process.stderr.write('Invalid JSON input');
+		process.exit(2);
+	}
+}
+
+const inputFile = process.argv[process.argv.length - 1];
+if (inputFile && inputFile !== '-' && fs.existsSync(inputFile)) {
+	const rawInput = fs.readFileSync(inputFile, 'utf8');
+	process.stdout.write(JSON.stringify(buildResponse(parsePayload(rawInput))));
+	process.exit(0);
+}
+
+let input = '';
+process.stdin.on('data', (chunk) => {
+	input += chunk;
+});
+
+process.stdin.on('end', () => {
+	process.stdout.write(JSON.stringify(buildResponse(parsePayload(input))));
 });
 EOF
 
