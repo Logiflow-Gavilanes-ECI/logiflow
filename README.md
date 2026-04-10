@@ -515,6 +515,17 @@ erDiagram
     }
 ```
 
+## 🎬 Backend-Only Demo
+
+For a full manual backend demo flow (without frontend), including:
+
+- service bring-up
+- authenticated webhook execution
+- optimizer/realtime validation
+- Redis route persistence checks
+
+See: [docs/backend-demo-runbook.md](docs/backend-demo-runbook.md)
+
 ---
 
 ## 👥 Team
