@@ -515,6 +515,8 @@ erDiagram
     }
 ```
 
+---
+
 ## 🎬 Backend-Only Demo
 
 For a full manual backend demo flow (without frontend), including:
