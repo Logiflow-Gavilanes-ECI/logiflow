@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
-import { createHash, randomBytes } from 'crypto';
+import { createHash, randomBytes, scryptSync } from 'node:crypto';
 import { AUTH_ROLES, type AuthRole } from './auth-roles';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -65,7 +65,7 @@ type UserWriteClient = {
       update: { role: AuthRole };
       create: { id: string; role: AuthRole };
     }) => Promise<AuthUserRecord>;
-    create: (args: { data: { role: AuthRole } }) => Promise<AuthUserRecord>;
+    create: (args: { data: { role: AuthRole; passwordHash?: string } }) => Promise<AuthUserRecord>;
   };
 };
 
@@ -132,10 +132,13 @@ export class AuthService {
       throw new BadRequestException('Invalid role');
     }
 
+    const passwordHash = this.hashPassword(password);
+
     const userClient = this.prismaService as unknown as UserWriteClient;
     const user = await userClient.user.create({
       data: {
         role: role as AuthRole,
+        passwordHash,
       },
     });
 
@@ -145,8 +148,6 @@ export class AuthService {
       email,
       role: user.role,
     };
-
-    void password;
 
     return {
       accessToken: await this.jwtService.signAsync(payload),
@@ -279,5 +280,11 @@ export class AuthService {
     }
 
     return value;
+  }
+
+  private hashPassword(password: string): string {
+    const salt = randomBytes(16).toString('hex');
+    const hash = scryptSync(password, salt, 64).toString('hex');
+    return `${salt}:${hash}`;
   }
 }

@@ -16,10 +16,35 @@ enum Role {
   conductor
 }
 
+enum AuthProvider {
+  local
+  google
+}
+
 model User {
   id            String         @id @default(uuid())
+  email         String?        @unique
+  name          String?
   role          Role
+  passwordHash  String?
+  provider      AuthProvider   @default(local)
+  googleId      String?        @unique
+  avatar        String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
   refreshTokens RefreshToken[]
+  deviceTokens  DeviceToken[]
+}
+
+model DeviceToken {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  platform  String
+  createdAt DateTime @default(now())
+
+  @@index([userId])
 }
 
 model RefreshToken {

@@ -196,7 +196,7 @@ describe('AuthService', () => {
     )) as RegisterResponse;
 
     expect(prismaService.user.create).toHaveBeenCalledWith({
-      data: { role: 'conductor' },
+      data: { role: 'conductor', passwordHash: expect.any(String) },
     });
     expect(signAsyncMock).toHaveBeenCalledWith(
       expect.objectContaining({

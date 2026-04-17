@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List, Tuple
 
 from flask import Flask, jsonify, request
@@ -39,13 +39,13 @@ CORRIDORS = [
 
 def parse_departure_time(value: str) -> datetime:
     if not value:
-        return datetime.utcnow()
+        return datetime.now(timezone.utc)
 
     normalized = value.strip().replace("Z", "+00:00")
     try:
         return datetime.fromisoformat(normalized)
     except ValueError:
-        return datetime.utcnow()
+        return datetime.now(timezone.utc)
 
 
 def in_peak_window(hour: int, peak_windows: List[Tuple[int, int]]) -> bool:
