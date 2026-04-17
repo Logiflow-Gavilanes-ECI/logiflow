@@ -55,18 +55,31 @@ type StoredRefreshToken = {
 
 type AuthUserRecord = {
   id: string;
+  email: string | null;
+  name: string | null;
   role: AuthRole;
+  provider: string;
+  googleId: string | null;
+  avatar: string | null;
 };
 
 type UserWriteClient = {
   user: {
+    findUnique: (args: { where: { googleId?: string; email?: string; id?: string } }) => Promise<AuthUserRecord | null>;
     upsert: (args: {
-      where: { id: string };
-      update: { role: AuthRole };
-      create: { id: string; role: AuthRole };
+      where: { id?: string; googleId?: string };
+      update: Record<string, unknown>;
+      create: Record<string, unknown>;
     }) => Promise<AuthUserRecord>;
-    create: (args: { data: { role: AuthRole; passwordHash?: string } }) => Promise<AuthUserRecord>;
+    create: (args: { data: Record<string, unknown> }) => Promise<AuthUserRecord>;
   };
+};
+
+type GoogleProfile = {
+  googleId: string;
+  email: string;
+  name: string;
+  avatar?: string;
 };
 
 @Injectable()
@@ -156,6 +169,51 @@ export class AuthService {
       user: {
         id: user.id,
         role: user.role,
+      },
+    };
+  }
+
+  async googleLogin(profile: GoogleProfile) {
+    const userClient = this.prismaService as unknown as UserWriteClient;
+
+    const user = await userClient.user.upsert({
+      where: { googleId: profile.googleId },
+      update: {
+        email: profile.email,
+        name: profile.name,
+        avatar: profile.avatar ?? null,
+      },
+      create: {
+        email: profile.email,
+        name: profile.name,
+        role: 'conductor' as AuthRole,
+        provider: 'google',
+        googleId: profile.googleId,
+        avatar: profile.avatar ?? null,
+      },
+    });
+
+    const refreshTokenData = await this.generateRefreshTokenWithTtl(user.id);
+
+    const payload = {
+      sub: user.id,
+      username: profile.email,
+      email: profile.email,
+      role: user.role,
+    };
+
+    return {
+      accessToken: await this.jwtService.signAsync(payload),
+      refreshToken: refreshTokenData.refreshToken,
+      refreshTokenExpiresAt: refreshTokenData.expiresAt,
+      tokenType: 'Bearer',
+      expiresIn: this.configService.get<string>('JWT_EXPIRES_IN', '1h'),
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+        avatar: user.avatar,
       },
     };
   }

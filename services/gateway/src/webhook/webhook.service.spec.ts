@@ -3,6 +3,13 @@ import { WebhookService } from './webhook.service';
 import { GrpcClientService } from '../grpc-client/grpc-client.service';
 import { SocketClientService } from '../socket-client/socket-client.service';
 import { RetryService } from '../common/retry/retry.service';
+import { NotificationsService } from '../notifications/notifications.service';
+
+const mockNotificationsService = {
+  sendRouteUpdate: jest.fn().mockResolvedValue(undefined),
+  registerDeviceToken: jest.fn().mockResolvedValue(undefined),
+  sendToUsers: jest.fn().mockResolvedValue(undefined),
+};
 
 const mockSocketClientService = {
   emitRouteUpdate: jest.fn(),
@@ -58,6 +65,7 @@ describe('WebhookService', () => {
         { provide: GrpcClientService, useValue: mockGrpcClientService },
         { provide: SocketClientService, useValue: mockSocketClientService },
         { provide: RetryService, useValue: mockRetryService },
+        { provide: NotificationsService, useValue: mockNotificationsService },
       ],
     }).compile();
 

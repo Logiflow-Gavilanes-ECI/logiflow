@@ -11,6 +11,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { RetryModule } from './common/retry/retry.module';
 import { CorrelationIdMiddleware } from './common/middleware/correlation-id.middleware';
 import { AuthModule } from './auth/auth.module';
+import { NotificationsModule } from './notifications/notifications.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { AuthModule } from './auth/auth.module';
     WebhookModule,
     VehiclesModule,
     StopsModule,
+    NotificationsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

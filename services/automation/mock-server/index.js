@@ -2,6 +2,7 @@
 
 const express = require('express');
 const { buildMessage } = require('./message-builder');
+const { dispatchToAllChannels, summarizeResults } = require('../openclaw/channels');
 
 const app = express();
 app.disable('x-powered-by');
@@ -149,7 +150,7 @@ function handleTrafficEvent(req, res) {
 
 app.post(WEBHOOK_PATH, handleTrafficEvent);
 
-function handleNotify(req, res) {
+async function handleNotify(req, res) {
   const payload = req.body;
   const missingFields = getMissingNotifyFields(payload);
 
@@ -159,10 +160,18 @@ function handleNotify(req, res) {
 
   try {
     const preview = buildMessage(payload);
-    console.log(`${LOG_NOTIFY_PREFIX} Telegram mock preview:`);
+    console.log(`${LOG_NOTIFY_PREFIX} Multi-channel dispatch:`);
     console.log(preview);
 
-    return res.status(HTTP_STATUS_OK).json(buildNotifySuccessResponse(payload, preview));
+    const channelResults = await dispatchToAllChannels(req, preview, payload);
+    const summary = summarizeResults(channelResults);
+
+    console.log(`${LOG_NOTIFY_PREFIX} Channels: ${summary.sent}/${summary.totalChannels} sent`);
+
+    return res.status(HTTP_STATUS_OK).json({
+      ...buildNotifySuccessResponse(payload, preview),
+      channels: summary,
+    });
   } catch (error) {
     return res.status(HTTP_STATUS_BAD_REQUEST).json({
       error: ERROR_INVALID_PAYLOAD,

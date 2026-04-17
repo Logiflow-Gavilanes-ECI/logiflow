@@ -5,7 +5,14 @@ import { WebhookEventDto } from './dto/webhook-event.dto';
 import { GrpcClientService } from '../grpc-client/grpc-client.service';
 import { SocketClientService } from '../socket-client/socket-client.service';
 import { RetryService } from '../common/retry/retry.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { UNKNOWN_CORRELATION_ID } from '../common/constants/correlation-id.constant';
+
+const mockNotificationsService = {
+  sendRouteUpdate: jest.fn().mockResolvedValue(undefined),
+  registerDeviceToken: jest.fn().mockResolvedValue(undefined),
+  sendToUsers: jest.fn().mockResolvedValue(undefined),
+};
 
 const mockGrpcClientService = {
   optimizeRoutes: jest.fn().mockResolvedValue({
@@ -47,6 +54,7 @@ describe('WebhookController', () => {
         { provide: GrpcClientService, useValue: mockGrpcClientService },
         { provide: SocketClientService, useValue: mockSocketClientService },
         { provide: RetryService, useValue: mockRetryService },
+        { provide: NotificationsService, useValue: mockNotificationsService },
       ],
     }).compile();
 

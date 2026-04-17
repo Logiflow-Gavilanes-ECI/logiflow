@@ -3,6 +3,13 @@ import { WebhookService } from './webhook.service';
 import { GrpcClientService } from '../grpc-client/grpc-client.service';
 import { SocketClientService } from '../socket-client/socket-client.service';
 import { RetryService } from '../common/retry/retry.service';
+import { NotificationsService } from '../notifications/notifications.service';
+
+const mockNotificationsService = {
+  sendRouteUpdate: jest.fn().mockResolvedValue(undefined),
+  registerDeviceToken: jest.fn().mockResolvedValue(undefined),
+  sendToUsers: jest.fn().mockResolvedValue(undefined),
+};
 
 const BASE_EVENT = {
   eventType: 'new_order' as const,
@@ -67,6 +74,7 @@ describe('WebhookService — retry integration (Task 194)', () => {
             isConnected: jest.fn().mockReturnValue(true),
           },
         },
+        { provide: NotificationsService, useValue: mockNotificationsService },
       ],
     }).compile();
 

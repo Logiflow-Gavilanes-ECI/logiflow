@@ -1,38 +1,68 @@
-# Shared Contracts
+<div align="center">
 
-This directory stores cross-service contracts used by multiple services.
+# LogiFlow Shared Contracts
+
+Cross-service contracts, protocol definitions, and canonical formats shared across all LogiFlow services.
+
+[![gRPC](https://img.shields.io/badge/gRPC-Proto3-244c5a?logo=google&logoColor=white)](https://grpc.io/)
+
+</div>
+
+---
+
+## Contents
+
+```text
+shared/
+├── proto/
+│   └── optimizer.proto    ← gRPC contract for RouteOptimizer service
+└── README.md
+```
+
+---
 
 ## Canonical Vehicle ID Format
 
-Use `v-001` as the canonical vehicle identifier format across the platform:
+All services **must** use the following format for vehicle identifiers:
 
-- lowercase prefix: `v`
-- hyphen separator: `-`
-- zero-padded numeric suffix: `001`, `002`, ...
+| Component | Format | Example |
+|-----------|--------|---------|
+| Prefix | lowercase `v` | `v` |
+| Separator | hyphen `-` | `-` |
+| Suffix | zero-padded number | `001` |
 
-Examples:
+**Examples:** `v-001`, `v-027`, `v-120`
 
-- `v-001`
-- `v-027`
-- `v-120`
+### Why Consistency Matters
 
-## Why It Matters
+The vehicle ID format is used end-to-end across the entire platform:
 
-A consistent string vehicle ID is required for end-to-end routing and tracking:
+| Service | Usage |
+|---------|-------|
+| **Optimizer** | `vehicle_id` in optimization responses |
+| **Gateway** | Payload handling and route assignment |
+| **Realtime** | Socket.io channel naming (`vehicle:v-001`) |
+| **Redis** | Key consistency (`route:vehicle:v-001`) |
 
-- optimizer route mapping (`vehicle_id` in optimization responses)
-- gateway payload handling and route assignment
-- realtime channel naming (for example `vehicle:v-001`)
-- Redis key consistency (for example `route:vehicle:v-001`)
+> **Do not coerce vehicle IDs to numbers.** Keep IDs as strings in all services.
 
-Do not coerce vehicle IDs to numbers. Keep IDs as strings in all services.
+---
 
 ## Proto Contract
 
-`shared/proto/optimizer.proto` defines the gRPC contract shared by gateway and optimizer.
+`shared/proto/optimizer.proto` defines the gRPC contract shared by the Gateway and Optimizer services.
 
-When this proto changes:
+```protobuf
+service RouteOptimizer {
+  rpc OptimizeRoutes (OptimizeRequest) returns (OptimizeResponse);
+}
+```
 
-1. update gateway interfaces that mirror request/response shapes
-2. verify optimizer can load the proto path
-3. verify gateway can connect to optimizer without proto loader errors
+See the full `.proto` file for complete message definitions including `Vehicle`, `Job`, `Shipment`, `Matrix`, and `Options`.
+
+### When the Proto Changes
+
+1. Update Gateway interfaces that mirror request/response shapes.
+2. Verify the Optimizer can load the proto path.
+3. Verify the Gateway can connect to the Optimizer without proto loader errors.
+4. Run integration tests in both services.

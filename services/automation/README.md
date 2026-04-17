@@ -5,7 +5,7 @@
 [![Node.js 20](https://img.shields.io/badge/node-20-brightgreen?logo=nodedotjs&logoColor=white)](https://nodejs.org/)
 [![n8n 2.10.3](https://img.shields.io/badge/n8n-2.10.3-ff6d5a?logo=n8n&logoColor=white)](https://n8n.io/)
 [![Sprint 2](https://img.shields.io/badge/Sprint-2-229ED9?logo=azuredevops&logoColor=white)](#)
-[![Telegram Alerts](https://img.shields.io/badge/alerts-Telegram-26A5E4?logo=telegram&logoColor=white)](#-telegram-notifications)
+[![Multi-Channel Alerts](https://img.shields.io/badge/alerts-Multi--Channel-26A5E4?logo=telegram&logoColor=white)](#-multi-channel-notifications)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ```
@@ -49,7 +49,7 @@ When a traffic event occurs — a road closure, a jam, a weather alert — this 
 2. **Classifies** its risk level using a deterministic Risk Matrix
 3. **Enriches** the incident with real geolocation and detour data (Google Maps)
 4. **Triggers** route re-optimization by notifying the gateway
-5. **Alerts** the operations team via Telegram when impact is HIGH or CRITICAL
+5. **Alerts** the operations team via **multiple channels** (Telegram, Discord, Slack, Email, Firebase Push) when impact is HIGH or CRITICAL
 
 This service does not run the optimization itself — that is the responsibility of the VROOM microservice called via gRPC. This service is purely the automation and alerting layer.
 
@@ -59,7 +59,7 @@ This service does not run the optimization itself — that is the responsibility
 | Classify risk | Risk Matrix (severity + eventType) |
 | Enrich with map data | Google Geocoding + Directions API |
 | Trigger re-optimization | HTTP POST to `WEBHOOK_TARGET` |
-| Notify operations | Telegram Bot API via n8n |
+| Notify operations | Multi-channel via OpenClaw (Telegram, Discord, Slack, Email, Firebase Push) |
 | Enforce code quality | ESLint + Jest + SonarCloud |
 
 ---
@@ -78,7 +78,7 @@ graph TD
     F --> G[Assess Detour + Fallback]
     G --> H[POST to Gateway - WEBHOOK_TARGET]
     G --> I{Risk HIGH or CRITICAL?}
-    I -->|Yes| J[🔔 Notify via Telegram]
+    I -->|Yes| J[🔔 Multi-Channel Alert]
     I -->|No| K[Log only - monitoring path]
     H --> L{Gateway acknowledged?}
     L -->|Yes| M[✅ Route re-optimization triggered]
@@ -220,40 +220,54 @@ Two Google Maps API calls enrich the raw event payload before it reaches the gat
 
 ---
 
-## 🔔 Telegram Notifications
+## 🔔 Multi-Channel Notifications
 
-Alerts are sent directly from n8n to the Telegram Bot API. No external notification service is required.
+Alerts are dispatched simultaneously to **all configured channels** via the OpenClaw `logiflow-notify` skill. Each channel degrades gracefully — unconfigured channels are silently skipped, and failures in one channel don't block the others.
 
-### Message format
+### Supported Channels
 
+| Channel | Transport | Config Variable |
+|---|---|---|
+| 💬 **Telegram** | Bot API | `TELEGRAM_BOT_TOKEN` |
+| 🎮 **Discord** | Webhook (rich embeds with risk color) | `DISCORD_WEBHOOK_URL` |
+| 📢 **Slack** | Incoming Webhook (attachments) | `SLACK_WEBHOOK_URL` |
+| 📧 **Email** | SMTP/Webhook relay (HTML template) | `EMAIL_WEBHOOK_URL` + `EMAIL_RECIPIENTS` |
+| 🔥 **Firebase Push** | Gateway API (mobile driver push) | `GATEWAY_URL` + `GATEWAY_INTERNAL_KEY` |
+
+### Message format (all text channels)
+
+```text
+🟠 HIGH ALERT - LogiFlow
+━━━━━━━━━━━━━━━━━━━━━━━
+📍 Autopista Norte - Calle 100, Bogota
+⚠️ Event: ROAD_CLOSURE (Severity: HIGH)
+🚛 Affected vehicles: V001, V003, V005
+🔁 Action: Reroute immediately and notify operations/driver
+🕐 03/13/2026, 07:00 AM (Bogota)
+━━━━━━━━━━━━━━━━━━━━━━━
+Sent by LogiFlow Automation · OpenClaw
 ```
-LogiFlow Alert 🚨
-─────────────────────────
-Risk:      HIGH
-Event:     ROAD_CLOSURE
-Severity:  CRITICAL
-Address:   Autopista Norte - Calle 100, Bogotá, Colombia
-Detour alternatives: 2
-Detour recommended:  Yes
-Action:    Reroute immediately and notify operations/driver
-Timestamp: 2026-03-13T12:00:00.000Z
-```
 
-### Bot setup (BotFather)
+### Telegram Bot setup
 
 1. Open Telegram → search `@BotFather` → send `/newbot`
 2. Choose a display name: `LogiFlow Alerts`
-3. Choose a username: `logiflow_alerts_bot`
-4. Copy the token → add to `.env` as `TELEGRAM_BOT_TOKEN`
-5. Open a chat with your new bot and send any message to activate it
-6. Get your `TELEGRAM_CHAT_ID`:
+3. Copy the token → add to `.env` as `TELEGRAM_BOT_TOKEN`
+4. Get your `TELEGRAM_CHAT_ID`:
 
 ```bash
 curl https://api.telegram.org/bot<YOUR_TOKEN>/getUpdates
-# Look for "chat": { "id": 123456789 } in the response
 ```
 
-7. Add that ID to `.env` as `TELEGRAM_CHAT_ID`
+### Discord Webhook setup
+
+1. Server Settings → Integrations → Webhooks → New Webhook
+2. Copy the URL → add to `.env` as `DISCORD_WEBHOOK_URL`
+
+### Slack Webhook setup
+
+1. [Slack API → Incoming Webhooks](https://api.slack.com/messaging/webhooks) → Activate
+2. Add New Webhook to Workspace → copy URL → `SLACK_WEBHOOK_URL`
 
 Alerts only fire for `HIGH` and `CRITICAL` risk levels. `MEDIUM` and `LOW` events are logged internally but do not produce a notification.
 

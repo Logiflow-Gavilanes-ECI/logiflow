@@ -17,6 +17,7 @@ import {
   SOCKET_RETRY_OPTIONS,
 } from '../common/retry/retry.options';
 import { RetryExhaustedException } from '../common/retry/retry-exhausted.exception';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class WebhookService {
@@ -26,6 +27,7 @@ export class WebhookService {
     private readonly grpcClient: GrpcClientService,
     private readonly socketClient: SocketClientService,
     private readonly retryService: RetryService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async handleEvent(event: WebhookEventDto, correlationId?: string) {
@@ -98,6 +100,21 @@ export class WebhookService {
             `Error: ${error instanceof Error ? error.message : String(error)}`,
         );
       }
+    }
+
+    try {
+      const vehicleIds = event.vehicles.map((v) => v.id);
+      const stopsCount = event.stops?.length ?? 0;
+      for (const vehicleId of vehicleIds) {
+        await this.notificationsService.sendRouteUpdate(vehicleId, vehicleIds, {
+          stops: stopsCount,
+        });
+      }
+    } catch (error) {
+      this.logger.warn(
+        `Push notification failed | correlationId: ${effectiveCorrelationId}. ` +
+          `Error: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
 
     return {

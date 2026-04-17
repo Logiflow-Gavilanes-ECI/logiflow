@@ -1,6 +1,7 @@
 'use strict';
 
 const { buildMessage } = require('../../mock-server/message-builder');
+const { dispatchToAllChannels, summarizeResults } = require('../channels');
 
 function extractPayload(input) {
   if (input && input.body && typeof input.body === 'object') {
@@ -35,37 +36,21 @@ function validatePayload(payload) {
   }
 }
 
-async function dispatchTelegramMessage(context, message) {
-  if (context && typeof context.sendMessage === 'function') {
-    await context.sendMessage(message);
-    return;
-  }
-
-  if (
-    context &&
-    context.telegram &&
-    typeof context.telegram.sendMessage === 'function' &&
-    (context.chatId || context.payload?.chatId)
-  ) {
-    const chatId = context.chatId || context.payload.chatId;
-    await context.telegram.sendMessage(chatId, message);
-    return;
-  }
-
-  throw new Error('Telegram transport is not available in OpenClaw context');
-}
-
 async function handler(context) {
   try {
     const payload = extractPayload(context);
     validatePayload(payload);
 
     const message = buildMessage(payload);
-    await dispatchTelegramMessage(context, message);
+    const results = await dispatchToAllChannels(context, message, payload);
+    const summary = summarizeResults(results);
 
     return {
-      success: true,
-      messageSent: true,
+      success: summary.sent > 0,
+      messageSent: summary.sent > 0,
+      channelsSent: summary.sent,
+      channelsFailed: summary.failed,
+      channels: summary.channels,
     };
   } catch (error) {
     return {
@@ -77,7 +62,7 @@ async function handler(context) {
 
 module.exports = {
   name: 'logiflow-notify',
-  description: 'Compose and send LogiFlow risk alerts to Telegram through OpenClaw',
+  description: 'Compose and send LogiFlow risk alerts across multiple channels (Telegram, Discord, Slack, Email, Firebase Push) through OpenClaw',
   webhookPath: '/skills/logiflow-notify',
   handler,
 };

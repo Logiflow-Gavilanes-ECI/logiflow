@@ -1,24 +1,49 @@
-# AI Traffic Predictor
+<div align="center">
 
-This service adjusts a base travel-time matrix with congestion multipliers before optimization.
+# LogiFlow AI Traffic Predictor
 
-## Run
+Python microservice that adjusts travel-time matrices with corridor-based congestion multipliers.
 
-```bash
-cd services/ai-predictor
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-python predictor.py
+[![Python](https://img.shields.io/badge/Python-3.11+-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![Flask](https://img.shields.io/badge/Flask-3.x-000000?logo=flask&logoColor=white)](https://flask.palletsprojects.com/)
+
+</div>
+
+---
+
+## Overview
+
+The AI Traffic Predictor sits between the Gateway and the Optimizer. Before route optimization runs, this service adjusts the travel-time matrix based on real-world Bogotá traffic patterns — applying corridor-specific congestion multipliers that vary by time of day and day of week.
+
+```text
+Gateway → POST /adjust → AI Predictor → adjusted matrix → Optimizer (VROOM)
 ```
 
-Service listens on `http://localhost:5001`.
+---
+
+## Congestion Model
+
+The predictor uses corridor-based multipliers calibrated to Bogotá peak-hour patterns.
+
+| Corridor | Peak Hours | Multiplier |
+|----------|-----------|------------|
+| **Autopista Norte** | 07:00–09:00, 17:00–19:00 | `1.8×` |
+| **Calle 80** | 07:00–09:00 | `1.6×` |
+| **Carrera 7** | 12:00–14:00, 17:00–19:00 | `1.5×` |
+
+- Multipliers apply **only on weekdays**.
+- For each origin-destination pair, the **maximum** applicable multiplier is used.
+- **Distances remain unchanged** — only durations are adjusted.
+
+---
 
 ## API
 
 ### `POST /adjust`
 
-Request body:
+Receives a travel-time matrix and departure time, returns the congestion-adjusted matrix.
+
+**Request:**
 
 ```json
 {
@@ -34,7 +59,7 @@ Request body:
 }
 ```
 
-Response body:
+**Response:**
 
 ```json
 {
@@ -51,17 +76,32 @@ Response body:
 }
 ```
 
-## Congestion Model
+---
 
-The predictor applies corridor-based multipliers on weekdays.
+## Quick Start
 
-- `autopista_norte`: peak 07:00-09:00 and 17:00-19:00, multiplier `1.8`
-- `calle_80`: peak 07:00-09:00, multiplier `1.6`
-- `carrera_7`: peak 12:00-14:00 and 17:00-19:00, multiplier `1.5`
+```bash
+cd services/ai-predictor
+python -m venv .venv
+source .venv/bin/activate   # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+python predictor.py
+```
 
-For each origin-destination pair, the maximum applicable multiplier is used.
+Service listens on `http://localhost:5001`.
+
+---
+
+## Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PORT` | `5001` | HTTP server port |
+
+---
 
 ## Notes
 
-- If `departure_time` is missing or invalid, the service uses current UTC time.
-- Distances are left unchanged; only durations are adjusted.
+- If `departure_time` is missing or invalid, the service defaults to current UTC time.
+- The service is stateless — no database required.
+- In Docker Compose, runs as the `ai-predictor` container.
