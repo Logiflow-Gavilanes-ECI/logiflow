@@ -23,7 +23,7 @@ import { RegisterDto } from './dto/register.dto';
 import { RefreshDto } from './dto/refresh.dto';
 import { GoogleAuthGuard } from './google-auth.guard';
 
-type GoogleFrontendTarget = 'web' | 'admin';
+type GoogleFrontendTarget = 'web' | 'admin' | 'mobile';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -158,9 +158,9 @@ export class AuthController {
   @ApiQuery({
     name: 'app',
     required: false,
-    enum: ['web', 'admin'],
+    enum: ['web', 'admin', 'mobile'],
     description:
-      'Optional frontend target. admin uses GOOGLE_REDIRECT_FRONTEND_ADMIN; otherwise defaults to GOOGLE_REDIRECT_FRONTEND.',
+      'Optional frontend target. admin uses GOOGLE_REDIRECT_FRONTEND_ADMIN; mobile uses GOOGLE_REDIRECT_FRONTEND_MOBILE; otherwise defaults to GOOGLE_REDIRECT_FRONTEND.',
   })
   @Get('google')
   @UseGuards(GoogleAuthGuard)
@@ -229,7 +229,9 @@ export class AuthController {
   }
 
   private parseFrontendTarget(value: unknown): GoogleFrontendTarget {
-    return value === 'admin' ? 'admin' : 'web';
+    if (value === 'admin') return 'admin';
+    if (value === 'mobile') return 'mobile';
+    return 'web';
   }
 
   private resolveFrontendRedirectBase(target: GoogleFrontendTarget): string {
@@ -245,7 +247,16 @@ export class AuthController {
       this.configService.get<string>('GOOGLE_REDIRECT_FRONTEND_ADMIN') ?? '';
     const adminFrontend = rawAdminFrontend.trim() || webFrontend;
 
-    const selectedFrontend = target === 'admin' ? adminFrontend : webFrontend;
+    const defaultMobileFrontend = 'http://localhost:8100';
+    const rawMobileFrontend =
+      this.configService.get<string>('GOOGLE_REDIRECT_FRONTEND_MOBILE') ?? '';
+    const mobileFrontend = rawMobileFrontend.trim() || defaultMobileFrontend;
+
+    let selectedFrontend: string;
+    if (target === 'admin') selectedFrontend = adminFrontend;
+    else if (target === 'mobile') selectedFrontend = mobileFrontend;
+    else selectedFrontend = webFrontend;
+
     return selectedFrontend.endsWith('/')
       ? selectedFrontend.slice(0, -1)
       : selectedFrontend;

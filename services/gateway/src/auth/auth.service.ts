@@ -176,6 +176,19 @@ export class AuthService {
   async googleLogin(profile: GoogleProfile) {
     const userClient = this.prismaService as unknown as UserWriteClient;
 
+    const adminEmails = (
+      this.configService.get<string>('GOOGLE_ADMIN_EMAILS', '') ?? ''
+    )
+      .split(',')
+      .map((e) => e.trim().toLowerCase())
+      .filter(Boolean);
+
+    const roleForNewUser: AuthRole = adminEmails.includes(
+      profile.email.toLowerCase(),
+    )
+      ? 'admin'
+      : 'conductor';
+
     const user = await userClient.user.upsert({
       where: { googleId: profile.googleId },
       update: {
@@ -186,7 +199,7 @@ export class AuthService {
       create: {
         email: profile.email,
         name: profile.name,
-        role: 'conductor' as AuthRole,
+        role: roleForNewUser,
         provider: 'google',
         googleId: profile.googleId,
         avatar: profile.avatar ?? null,
