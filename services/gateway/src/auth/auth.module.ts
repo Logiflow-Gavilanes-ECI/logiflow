@@ -41,7 +41,13 @@ const googleStrategyProvider: Provider = {
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, googleStrategyProvider, JwtAuthGuard, GoogleAuthGuard],
+  providers: [
+    AuthService,
+    JwtStrategy,
+    googleStrategyProvider,
+    JwtAuthGuard,
+    GoogleAuthGuard,
+  ],
   exports: [PassportModule, JwtModule, JwtAuthGuard],
 })
 export class AuthModule {}

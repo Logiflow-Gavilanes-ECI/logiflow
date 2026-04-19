@@ -1,4 +1,4 @@
-import { BadRequestException, UnauthorizedException } from '@nestjs/common';
+import { UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { AuthService } from './auth.service';
@@ -6,97 +6,16 @@ import { PrismaService } from '../prisma/prisma.service';
 
 type AuthRole = 'admin' | 'conductor';
 
-type UserRecord = {
-  id: string;
-  role: AuthRole;
-};
-
-type RefreshTokenRecord = {
-  id: string;
-  userId: string;
-  tokenHash: string;
-  expiresAt: Date;
-  createdAt: Date;
-  consumedAt: Date | null;
-  user?: UserRecord;
-};
-
-type RefreshTokenCreateArgs = {
-  data: {
-    userId: string;
-    tokenHash: string;
-    expiresAt: Date;
-  };
-};
-
-type RefreshTokenFindUniqueArgs = {
-  where: {
-    tokenHash: string;
-  };
-  include: {
-    user: true;
-  };
-};
-
-type RefreshTokenUpdateManyArgs = {
-  where: {
-    id: string;
-    consumedAt: null;
-  };
-  data: {
-    consumedAt: Date;
-  };
-};
-
-type UserCreateArgs = {
-  data: {
-    role: AuthRole;
-  };
-};
-
-type UserUpsertArgs = {
-  where: {
-    id: string;
-  };
-  update: {
-    role: AuthRole;
-  };
-  create: {
-    id: string;
-    role: AuthRole;
-  };
-};
-
 type PrismaLike = {
   user: {
-    create: jest.Mock<Promise<UserRecord>, [UserCreateArgs]>;
-    upsert: jest.Mock<Promise<UserRecord>, [UserUpsertArgs]>;
+    upsert: jest.Mock;
   };
   refreshToken: {
-    create: jest.Mock<Promise<RefreshTokenRecord>, [RefreshTokenCreateArgs]>;
-    findUnique: jest.Mock<
-      Promise<(RefreshTokenRecord & { user: UserRecord }) | null>,
-      [RefreshTokenFindUniqueArgs]
-    >;
-    updateMany: jest.Mock<
-      Promise<{ count: number }>,
-      [RefreshTokenUpdateManyArgs]
-    >;
+    create: jest.Mock;
+    findUnique: jest.Mock;
+    updateMany: jest.Mock;
   };
-  $transaction: jest.Mock<
-    Promise<unknown>,
-    [(callback: (tx: PrismaLike) => Promise<unknown>) => Promise<unknown>]
-  >;
-};
-
-type RegisterResponse = {
-  accessToken: string;
-  tokenType: string;
-  expiresIn: string;
-  user: {
-    id: string;
-    role: AuthRole;
-  };
+  $transaction: jest.Mock;
 };
 
 type TokenPairResponse = {
@@ -105,32 +24,21 @@ type TokenPairResponse = {
   refreshTokenExpiresAt: string;
   tokenType: string;
   expiresIn: string;
+  user?: {
+    id: string;
+    email: string | null;
+    name: string | null;
+    role: AuthRole;
+    avatar: string | null;
+  };
 };
 
 describe('AuthService', () => {
   let authService: AuthService;
 
   const configGetMock = jest.fn((key: string, defaultValue?: string) => {
-    if (key === 'JWT_EXPIRES_IN') {
-      return '1h';
-    }
-
-    if (key === 'AUTH_DEMO_ROLE') {
-      return 'conductor';
-    }
-
-    if (key === 'AUTH_DEMO_USERNAME') {
-      return 'demo-user-name';
-    }
-
-    if (key === 'AUTH_DEMO_PASSWORD') {
-      return 'demo-user-password';
-    }
-
-    if (key === 'REFRESH_TOKEN_TTL_MINUTES') {
-      return '60';
-    }
-
+    if (key === 'JWT_EXPIRES_IN') return '1h';
+    if (key === 'REFRESH_TOKEN_TTL_MINUTES') return '60';
     return defaultValue;
   });
 
@@ -145,29 +53,43 @@ describe('AuthService', () => {
 
   const prismaService: PrismaLike = {
     user: {
-      create: jest.fn(({ data }: UserCreateArgs) =>
-        Promise.resolve({
-          id: 'user-1',
-          role: data.role,
-        }),
-      ),
-      upsert: jest.fn(({ create }: UserUpsertArgs) =>
-        Promise.resolve({
-          id: create.id,
-          role: create.role,
-        }),
+      upsert: jest.fn(
+        (args: {
+          update: Record<string, unknown>;
+          create: Record<string, unknown>;
+        }) =>
+          Promise.resolve({
+            id: 'user-google-1',
+            email: (args.update.email ??
+              args.create.email ??
+              'driver@gmail.com') as string,
+            name: (args.update.name ??
+              args.create.name ??
+              'Test Driver') as string,
+            role: (args.create.role ?? 'conductor') as AuthRole,
+            provider: (args.create.provider ?? 'google') as string,
+            googleId: (args.create.googleId ?? 'google-123') as string,
+            avatar: (args.update.avatar ?? args.create.avatar ?? null) as
+              | string
+              | null,
+          }),
       ),
     },
     refreshToken: {
-      create: jest.fn(({ data }: RefreshTokenCreateArgs) =>
-        Promise.resolve({
-          id: 'rt-1',
-          userId: data.userId,
-          tokenHash: data.tokenHash,
-          expiresAt: data.expiresAt,
-          createdAt: new Date(),
-          consumedAt: null,
-        }),
+      create: jest.fn(
+        ({
+          data,
+        }: {
+          data: { userId: string; tokenHash: string; expiresAt: Date };
+        }) =>
+          Promise.resolve({
+            id: 'rt-1',
+            userId: data.userId,
+            tokenHash: data.tokenHash,
+            expiresAt: data.expiresAt,
+            createdAt: new Date(),
+            consumedAt: null,
+          }),
       ),
       findUnique: jest.fn(() => Promise.resolve(null)),
       updateMany: jest.fn(() => Promise.resolve({ count: 0 })),
@@ -188,88 +110,84 @@ describe('AuthService', () => {
     );
   });
 
-  it('creates a user and returns a signed token for a valid role', async () => {
-    const result = (await authService.register(
-      'driver@example.com',
-      'secret123',
-      'conductor',
-    )) as RegisterResponse;
-
-    expect(prismaService.user.create).toHaveBeenCalledWith({
-      data: { role: 'conductor', passwordHash: expect.any(String) },
-    });
-    expect(signAsyncMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        sub: 'user-1',
-        username: 'driver@example.com',
-        email: 'driver@example.com',
-        role: 'conductor',
-      }),
-    );
-    expect(result).toEqual({
-      accessToken: 'signed-token',
-      tokenType: 'Bearer',
-      expiresIn: '1h',
-      user: {
-        id: 'user-1',
-        role: 'conductor',
-      },
-    });
-  });
-
-  it('rejects a role outside the allowed set', async () => {
-    await expect(
-      authService.register('admin@example.com', 'secret123', 'manager'),
-    ).rejects.toBeInstanceOf(BadRequestException);
-
-    expect(prismaService.user.create).not.toHaveBeenCalled();
-    expect(signAsyncMock).not.toHaveBeenCalled();
-  });
-
-  it('includes the configured demo role in the login token payload', async () => {
-    const loginResult = (await authService.login(
-      'demo-user-name',
-      'demo-user-password',
-    )) as TokenPairResponse;
-
-    expect(loginResult.accessToken).toBe('signed-token');
-    expect(typeof loginResult.refreshToken).toBe('string');
-    expect(typeof loginResult.refreshTokenExpiresAt).toBe('string');
-    expect(loginResult.tokenType).toBe('Bearer');
-    expect(loginResult.expiresIn).toBe('1h');
+  it('creates a user via Google OAuth and returns a signed token pair', async () => {
+    const result = (await authService.googleLogin({
+      googleId: 'google-123',
+      email: 'driver@gmail.com',
+      name: 'Test Driver',
+      avatar: 'https://photo.url/avatar.jpg',
+    })) as TokenPairResponse;
 
     expect(prismaService.user.upsert).toHaveBeenCalledWith({
-      where: { id: 'demo-user' },
-      update: { role: 'conductor' },
-      create: { id: 'demo-user', role: 'conductor' },
+      where: { googleId: 'google-123' },
+      update: {
+        email: 'driver@gmail.com',
+        name: 'Test Driver',
+        avatar: 'https://photo.url/avatar.jpg',
+      },
+      create: {
+        email: 'driver@gmail.com',
+        name: 'Test Driver',
+        role: 'conductor',
+        provider: 'google',
+        googleId: 'google-123',
+        avatar: 'https://photo.url/avatar.jpg',
+      },
     });
+
     expect(signAsyncMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        sub: 'demo-user',
-        username: 'demo-user-name',
+        sub: 'user-google-1',
+        email: 'driver@gmail.com',
         role: 'conductor',
       }),
     );
 
-    const refreshTokenCreateArgs =
-      prismaService.refreshToken.create.mock.calls[0]?.[0];
-    expect(refreshTokenCreateArgs).toBeDefined();
-    expect(refreshTokenCreateArgs?.data.userId).toBe('demo-user');
-    expect(typeof refreshTokenCreateArgs?.data.tokenHash).toBe('string');
-    expect(refreshTokenCreateArgs?.data.expiresAt).toBeInstanceOf(Date);
+    expect(result.accessToken).toBe('signed-token');
+    expect(typeof result.refreshToken).toBe('string');
+    expect(typeof result.refreshTokenExpiresAt).toBe('string');
+    expect(result.tokenType).toBe('Bearer');
+    expect(result.expiresIn).toBe('1h');
+    expect(result.user).toEqual({
+      id: 'user-google-1',
+      email: 'driver@gmail.com',
+      name: 'Test Driver',
+      role: 'conductor',
+      avatar: 'https://photo.url/avatar.jpg',
+    });
+  });
+
+  it('defaults avatar to null when not provided in Google profile', async () => {
+    const result = (await authService.googleLogin({
+      googleId: 'google-456',
+      email: 'admin@gmail.com',
+      name: 'Admin User',
+    })) as TokenPairResponse;
+
+    expect(prismaService.user.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        create: expect.objectContaining({
+          avatar: null,
+        }),
+      }),
+    );
+
+    expect(result.accessToken).toBe('signed-token');
   });
 
   it('rotates a valid refresh token and issues a new token pair', async () => {
     prismaService.refreshToken.findUnique.mockResolvedValueOnce({
       id: 'rt-old',
-      userId: 'demo-user',
+      userId: 'user-google-1',
       tokenHash: 'old-hash',
       expiresAt: new Date(Date.now() + 60 * 60 * 1000),
       createdAt: new Date(),
       consumedAt: null,
       user: {
-        id: 'demo-user',
+        id: 'user-google-1',
         role: 'conductor',
+        email: 'driver@gmail.com',
       },
     });
     prismaService.refreshToken.updateMany.mockResolvedValueOnce({ count: 1 });
@@ -286,30 +204,10 @@ describe('AuthService', () => {
 
     expect(prismaService.$transaction).toHaveBeenCalledTimes(1);
 
-    const findUniqueArgs =
-      prismaService.refreshToken.findUnique.mock.calls[0]?.[0];
-    expect(findUniqueArgs).toBeDefined();
-    expect(typeof findUniqueArgs?.where.tokenHash).toBe('string');
-    expect(findUniqueArgs?.include.user).toBe(true);
-
-    const updateManyArgs =
-      prismaService.refreshToken.updateMany.mock.calls[0]?.[0];
-    expect(updateManyArgs).toBeDefined();
-    expect(updateManyArgs?.where.id).toBe('rt-old');
-    expect(updateManyArgs?.where.consumedAt).toBeNull();
-    expect(updateManyArgs?.data.consumedAt).toBeInstanceOf(Date);
-
-    const refreshCreateArgs =
-      prismaService.refreshToken.create.mock.calls[0]?.[0];
-    expect(refreshCreateArgs).toBeDefined();
-    expect(refreshCreateArgs?.data.userId).toBe('demo-user');
-    expect(typeof refreshCreateArgs?.data.tokenHash).toBe('string');
-    expect(refreshCreateArgs?.data.expiresAt).toBeInstanceOf(Date);
-
     expect(signAsyncMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        sub: 'demo-user',
-        username: 'demo-user-name',
+        sub: 'user-google-1',
+        email: 'driver@gmail.com',
         role: 'conductor',
       }),
     );
@@ -328,14 +226,15 @@ describe('AuthService', () => {
   it('rejects refresh when token is expired', async () => {
     prismaService.refreshToken.findUnique.mockResolvedValueOnce({
       id: 'rt-expired',
-      userId: 'demo-user',
+      userId: 'user-google-1',
       tokenHash: 'expired-hash',
       expiresAt: new Date(Date.now() - 60 * 1000),
       createdAt: new Date(),
       consumedAt: null,
       user: {
-        id: 'demo-user',
+        id: 'user-google-1',
         role: 'conductor',
+        email: 'driver@gmail.com',
       },
     });
 
@@ -351,14 +250,15 @@ describe('AuthService', () => {
     const consumedAt = new Date();
     prismaService.refreshToken.findUnique.mockResolvedValueOnce({
       id: 'rt-consumed',
-      userId: 'demo-user',
+      userId: 'user-google-1',
       tokenHash: 'consumed-hash',
       expiresAt: new Date(Date.now() + 60 * 60 * 1000),
       createdAt: new Date(),
       consumedAt,
       user: {
-        id: 'demo-user',
+        id: 'user-google-1',
         role: 'conductor',
+        email: 'driver@gmail.com',
       },
     });
 

@@ -7,14 +7,17 @@ import {
   Req,
 } from '@nestjs/common';
 import { ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { Request } from 'express';
 import { NotificationsService } from './notifications.service';
+
+interface AuthenticatedRequest extends Request {
+  user: { userId: string };
+}
 
 @ApiTags('notifications')
 @Controller('notifications')
 export class NotificationsController {
-  constructor(
-    private readonly notificationsService: NotificationsService,
-  ) {}
+  constructor(private readonly notificationsService: NotificationsService) {}
 
   @ApiOperation({
     summary: 'Register device token for push notifications',
@@ -39,7 +42,7 @@ export class NotificationsController {
   @Post('register-device')
   @HttpCode(HttpStatus.OK)
   async registerDevice(
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
     @Body() body: { token: string; platform: string },
   ) {
     await this.notificationsService.registerDeviceToken(

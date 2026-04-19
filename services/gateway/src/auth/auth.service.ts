@@ -1,13 +1,12 @@
 import {
   BadRequestException,
-  InternalServerErrorException,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
-import { createHash, randomBytes, scryptSync } from 'node:crypto';
-import { AUTH_ROLES, type AuthRole } from './auth-roles';
+import { createHash, randomBytes } from 'node:crypto';
+import type { AuthRole } from './auth-roles';
 import { PrismaService } from '../prisma/prisma.service';
 
 type RefreshTokenWriteClient = {
@@ -50,6 +49,7 @@ type StoredRefreshToken = {
   user: {
     id: string;
     role: AuthRole;
+    email?: string | null;
   };
 };
 
@@ -65,13 +65,14 @@ type AuthUserRecord = {
 
 type UserWriteClient = {
   user: {
-    findUnique: (args: { where: { googleId?: string; email?: string; id?: string } }) => Promise<AuthUserRecord | null>;
+    findUnique: (args: {
+      where: { googleId?: string; email?: string; id?: string };
+    }) => Promise<AuthUserRecord | null>;
     upsert: (args: {
       where: { id?: string; googleId?: string };
       update: Record<string, unknown>;
       create: Record<string, unknown>;
     }) => Promise<AuthUserRecord>;
-    create: (args: { data: Record<string, unknown> }) => Promise<AuthUserRecord>;
   };
 };
 
@@ -89,89 +90,6 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly prismaService: PrismaService,
   ) {}
-
-  async login(username: string, password: string) {
-    const demoUsername = this.getRequiredConfig('AUTH_DEMO_USERNAME');
-    const demoPassword = this.getRequiredConfig('AUTH_DEMO_PASSWORD');
-
-    if (username !== demoUsername || password !== demoPassword) {
-      throw new UnauthorizedException('Invalid credentials');
-    }
-
-    const demoRole = this.configService.get<AuthRole>(
-      'AUTH_DEMO_ROLE',
-      'conductor',
-    );
-
-    if (!AUTH_ROLES.includes(demoRole)) {
-      throw new BadRequestException('Invalid role');
-    }
-
-    const userClient = this.prismaService as unknown as UserWriteClient;
-    const demoUser = await userClient.user.upsert({
-      where: {
-        id: 'demo-user',
-      },
-      update: {
-        role: demoRole,
-      },
-      create: {
-        id: 'demo-user',
-        role: demoRole,
-      },
-    });
-
-    const refreshTokenData = await this.generateRefreshTokenWithTtl(
-      demoUser.id,
-    );
-
-    const payload = {
-      sub: demoUser.id,
-      username,
-      role: demoRole,
-    };
-
-    return {
-      accessToken: await this.jwtService.signAsync(payload),
-      refreshToken: refreshTokenData.refreshToken,
-      refreshTokenExpiresAt: refreshTokenData.expiresAt,
-      tokenType: 'Bearer',
-      expiresIn: this.configService.get<string>('JWT_EXPIRES_IN', '1h'),
-    };
-  }
-
-  async register(email: string, password: string, role: string) {
-    if (!AUTH_ROLES.includes(role as AuthRole)) {
-      throw new BadRequestException('Invalid role');
-    }
-
-    const passwordHash = this.hashPassword(password);
-
-    const userClient = this.prismaService as unknown as UserWriteClient;
-    const user = await userClient.user.create({
-      data: {
-        role: role as AuthRole,
-        passwordHash,
-      },
-    });
-
-    const payload = {
-      sub: user.id,
-      username: email,
-      email,
-      role: user.role,
-    };
-
-    return {
-      accessToken: await this.jwtService.signAsync(payload),
-      tokenType: 'Bearer',
-      expiresIn: this.configService.get<string>('JWT_EXPIRES_IN', '1h'),
-      user: {
-        id: user.id,
-        role: user.role,
-      },
-    };
-  }
 
   async googleLogin(profile: GoogleProfile) {
     const userClient = this.prismaService as unknown as UserWriteClient;
@@ -197,7 +115,6 @@ export class AuthService {
 
     const payload = {
       sub: user.id,
-      username: profile.email,
       email: profile.email,
       role: user.role,
     };
@@ -267,7 +184,7 @@ export class AuthService {
 
       const payload = {
         sub: storedToken.user.id,
-        username: this.resolveUsername(storedToken.user.id),
+        email: storedToken.user.email ?? storedToken.user.id,
         role: storedToken.user.role,
       };
 
@@ -318,31 +235,5 @@ export class AuthService {
 
   private hashRefreshToken(refreshToken: string) {
     return createHash('sha256').update(refreshToken).digest('hex');
-  }
-
-  private resolveUsername(userId: string) {
-    if (userId === 'demo-user') {
-      return this.getRequiredConfig('AUTH_DEMO_USERNAME');
-    }
-
-    return userId;
-  }
-
-  private getRequiredConfig(key: string): string {
-    const value = this.configService.get<string>(key);
-
-    if (!value || value.trim().length === 0) {
-      throw new InternalServerErrorException(
-        `Missing required configuration: ${key}`,
-      );
-    }
-
-    return value;
-  }
-
-  private hashPassword(password: string): string {
-    const salt = randomBytes(16).toString('hex');
-    const hash = scryptSync(password, salt, 64).toString('hex');
-    return `${salt}:${hash}`;
   }
 }

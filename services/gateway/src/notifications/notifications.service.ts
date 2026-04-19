@@ -52,16 +52,13 @@ export class NotificationsService implements OnModuleInit {
       });
       this.firebaseInitialized = true;
       this.logger.log('Firebase Admin initialized for push notifications');
-    } catch (error: any) {
-      this.logger.error(`Firebase init failed: ${error.message}`);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Firebase init failed: ${message}`);
     }
   }
 
-  async registerDeviceToken(
-    userId: string,
-    token: string,
-    platform: string,
-  ) {
+  async registerDeviceToken(userId: string, token: string, platform: string) {
     const client = this.prismaService as unknown as DeviceTokenClient;
     await client.deviceToken.upsert({
       where: { token },
@@ -116,7 +113,10 @@ export class NotificationsService implements OnModuleInit {
 
     const failedTokens: string[] = [];
     response.responses.forEach((resp, idx) => {
-      if (!resp.success && resp.error?.code === 'messaging/registration-token-not-registered') {
+      if (
+        !resp.success &&
+        resp.error?.code === 'messaging/registration-token-not-registered'
+      ) {
         failedTokens.push(tokens[idx]);
       }
     });
