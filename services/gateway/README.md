@@ -149,8 +149,9 @@ Create a `.env` file in `services/gateway`.
 | `SOCKETIO_SERVER_PORT` | `3001` | Socket.io port |
 | `GOOGLE_CLIENT_ID` | — | Google OAuth client ID (optional) |
 | `GOOGLE_CLIENT_SECRET` | — | Google OAuth client secret (optional) |
-| `GOOGLE_CALLBACK_URL` | `http://localhost:3002/auth/google/callback` | OAuth callback |
+| `GOOGLE_CALLBACK_URL` | `http://localhost:3002/api/v1/auth/google/callback` | OAuth callback |
 | `GOOGLE_REDIRECT_FRONTEND` | `http://localhost:4200` | Frontend redirect after OAuth |
+| `GOOGLE_REDIRECT_FRONTEND_ADMIN` | — | Optional admin redirect target used by `/auth/google?app=admin` |
 | `FIREBASE_PROJECT_ID` | — | Firebase project ID (optional) |
 | `FIREBASE_CLIENT_EMAIL` | — | Firebase service account email (optional) |
 | `FIREBASE_PRIVATE_KEY` | — | Firebase private key (optional) |
@@ -184,8 +185,8 @@ All routes are prefixed with `/api/v1`.
 | `POST` | `/auth/login` | Login with email + password |
 | `POST` | `/auth/register` | Register new user (admin/conductor) |
 | `POST` | `/auth/refresh` | Refresh token rotation |
-| `GET` | `/auth/google` | Initiate Google OAuth redirect |
-| `GET` | `/auth/google/callback` | Google OAuth callback |
+| `GET` | `/auth/google` | Initiate Google OAuth redirect (`?app=admin` for admin target) |
+| `GET` | `/auth/google/callback` | Google OAuth callback (redirects to frontend `/auth/callback`) |
 | `POST` | `/auth/google/token` | Mobile: exchange Google ID token for JWT |
 
 ### Webhook
@@ -237,10 +238,13 @@ All routes are prefixed with `/api/v1`.
 
 ### Google OAuth 2.0
 
-- `GET /auth/google` → redirects to Google consent screen
-- `GET /auth/google/callback` → upserts user by `googleId`, redirects to frontend with tokens
+- `GET /auth/google` → redirects to Google consent screen (optional `?app=admin`)
+- `GET /auth/google/callback` → upserts user by `googleId`, redirects to `${GOOGLE_REDIRECT_FRONTEND}/auth/callback` with tokens
 - `POST /auth/google/token` → mobile clients exchange Google ID token for JWT
+- `GOOGLE_REDIRECT_FRONTEND_ADMIN` (optional) receives redirects when login starts with `/auth/google?app=admin`
 - **Graceful degradation:** if `GOOGLE_CLIENT_ID` is not set, the GoogleStrategy is not registered and `/auth/google` returns 501.
+- **Default role:** Google-created users are provisioned with role `conductor`.
+- **Audience constraint:** `POST /auth/google/token` validates the `idToken` using `GOOGLE_CLIENT_ID` as audience.
 
 ### Push Notifications (Firebase)
 

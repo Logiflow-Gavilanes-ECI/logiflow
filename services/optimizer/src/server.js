@@ -110,12 +110,16 @@ async function persistRoutesToRedis(grpcResponse, call, clientOverride) {
       }
 
       const key = buildRouteRedisKey(vehicleId);
-      const value = JSON.stringify({
-        vehicleId,
-        route,
-        correlationId,
-        persistedAt,
-      });
+      const value = JSON.stringify(
+        {
+          vehicleId,
+          route,
+          correlationId,
+          persistedAt,
+        },
+        (_, rawValue) =>
+          typeof rawValue === 'bigint' ? rawValue.toString() : rawValue,
+      );
       await client.set(key, value, 'EX', REDIS_ROUTE_TTL_SECONDS);
     }
   } catch (error) {

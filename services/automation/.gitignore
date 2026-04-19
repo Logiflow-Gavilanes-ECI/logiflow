@@ -1,6 +1,8 @@
 node_modules/
 coverage/
 .env
+n8n/.env
+openclaw/.env
 *.log
 .n8n/
 dist/

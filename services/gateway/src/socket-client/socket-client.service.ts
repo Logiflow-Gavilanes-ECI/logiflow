@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { io, Socket } from 'socket.io-client';
+import * as jwt from 'jsonwebtoken';
 import {
   OptimizeResponse,
   Route,
@@ -48,12 +49,29 @@ export class SocketClientService implements OnModuleInit, OnModuleDestroy {
     );
     const port = this.configService.get<string>('SOCKETIO_SERVER_PORT', '3001');
     const url = `http://${host}:${port}`;
+    const jwtSecret = this.configService.get<string>('JWT_SECRET');
+    const serviceToken = jwtSecret
+      ? jwt.sign(
+          {
+            sub: 'gateway-service',
+            role: 'admin',
+            username: 'gateway-service',
+          },
+          jwtSecret,
+          { expiresIn: '1h' },
+        )
+      : undefined;
 
     this.socket = io(url, {
       autoConnect: true,
       reconnection: true,
       reconnectionAttempts: 10,
       reconnectionDelay: 2000,
+      auth: serviceToken
+        ? {
+            token: serviceToken,
+          }
+        : undefined,
     });
 
     this.socket.on('connect', () => {

@@ -9,7 +9,13 @@ import {
   Res,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBody,
+  ApiOperation,
+  ApiQuery,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import { Request, Response } from 'express';
 import { AuthService } from './auth.service';
@@ -26,6 +32,7 @@ interface GoogleProfile {
 interface GoogleAuthRequest extends Request {
   user: GoogleProfile;
 }
+type GoogleFrontendTarget = 'web' | 'admin' | 'mobile';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -77,7 +84,15 @@ export class AuthController {
 
   @ApiOperation({
     summary: 'Initiate Google OAuth login',
-    description: 'Redirects to Google consent screen for OAuth authentication.',
+    description:
+      'Redirects to Google consent screen for OAuth authentication. Optional ?app=admin targets admin frontend redirect.',
+  })
+  @ApiQuery({
+    name: 'app',
+    required: false,
+    enum: ['web', 'admin', 'mobile'],
+    description:
+      'Optional frontend target. admin uses GOOGLE_REDIRECT_FRONTEND_ADMIN; mobile uses GOOGLE_REDIRECT_FRONTEND_MOBILE; otherwise defaults to GOOGLE_REDIRECT_FRONTEND.',
   })
   @Get('google')
   @UseGuards(GoogleAuthGuard)
@@ -88,17 +103,14 @@ export class AuthController {
   @ApiOperation({
     summary: 'Google OAuth callback',
     description:
-      'Handles Google OAuth callback, creates/updates user, and redirects with tokens.',
+      'Handles Google OAuth callback, creates/updates user, and redirects with tokens to /auth/callback in the selected frontend.',
   })
   @Get('google/callback')
   @UseGuards(GoogleAuthGuard)
   async googleCallback(@Req() req: GoogleAuthRequest, @Res() res: Response) {
     const result = await this.authService.googleLogin(req.user);
-
-    const frontendUrl = this.configService.get<string>(
-      'GOOGLE_REDIRECT_FRONTEND',
-      'http://localhost:4200',
-    );
+    const state = this.parseFrontendTarget(req?.query?.state);
+    const frontendUrl = this.resolveFrontendRedirectBase(state);
 
     const params = new URLSearchParams({
       accessToken: result.accessToken,
@@ -146,5 +158,39 @@ export class AuthController {
       name: payload.name ?? payload.email,
       avatar: payload.picture,
     });
+  }
+
+  private parseFrontendTarget(value: unknown): GoogleFrontendTarget {
+    if (value === 'admin') return 'admin';
+    if (value === 'mobile') return 'mobile';
+    return 'web';
+  }
+
+  private resolveFrontendRedirectBase(target: GoogleFrontendTarget): string {
+    const defaultWebFrontend = 'http://localhost:4200';
+    const rawWebFrontend =
+      this.configService.get<string>(
+        'GOOGLE_REDIRECT_FRONTEND',
+        defaultWebFrontend,
+      ) ?? defaultWebFrontend;
+    const webFrontend = rawWebFrontend.trim() || defaultWebFrontend;
+
+    const rawAdminFrontend =
+      this.configService.get<string>('GOOGLE_REDIRECT_FRONTEND_ADMIN') ?? '';
+    const adminFrontend = rawAdminFrontend.trim() || webFrontend;
+
+    const defaultMobileFrontend = 'http://localhost:8100';
+    const rawMobileFrontend =
+      this.configService.get<string>('GOOGLE_REDIRECT_FRONTEND_MOBILE') ?? '';
+    const mobileFrontend = rawMobileFrontend.trim() || defaultMobileFrontend;
+
+    let selectedFrontend: string;
+    if (target === 'admin') selectedFrontend = adminFrontend;
+    else if (target === 'mobile') selectedFrontend = mobileFrontend;
+    else selectedFrontend = webFrontend;
+
+    return selectedFrontend.endsWith('/')
+      ? selectedFrontend.slice(0, -1)
+      : selectedFrontend;
   }
 }

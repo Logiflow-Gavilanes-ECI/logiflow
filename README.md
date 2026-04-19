@@ -266,7 +266,13 @@ sequenceDiagram
 
 The Google OAuth flow supports both **web redirect** (for web-admin and mobile browser) and **ID token exchange** (for native mobile via `POST /auth/google/token`).
 
+For multi-frontend deployments, start login with `GET /auth/google?app=admin` to redirect the callback to `GOOGLE_REDIRECT_FRONTEND_ADMIN`. Without `app`, the gateway redirects to `GOOGLE_REDIRECT_FRONTEND`.
+
 > **Graceful degradation:** If `GOOGLE_CLIENT_ID` is not set, the `/auth/google` endpoint returns a 501 with a helpful message. The gateway starts normally without Google credentials.
+>
+> **Default role:** Users created through Google OAuth are provisioned as `conductor` by default.
+>
+> **Mobile token exchange note:** `POST /auth/google/token` verifies the incoming `idToken` against the configured `GOOGLE_CLIENT_ID` audience.
 
 ---
 
@@ -364,8 +370,9 @@ graph LR
 | `SOCKETIO_SERVER_PORT` | `3001` | Realtime service port |
 | `GOOGLE_CLIENT_ID` | — | Google OAuth client ID (optional) |
 | `GOOGLE_CLIENT_SECRET` | — | Google OAuth client secret (optional) |
-| `GOOGLE_CALLBACK_URL` | `http://localhost:3002/auth/google/callback` | OAuth callback URL |
+| `GOOGLE_CALLBACK_URL` | `http://localhost:3002/api/v1/auth/google/callback` | OAuth callback URL |
 | `GOOGLE_REDIRECT_FRONTEND` | `http://localhost:4200` | Frontend URL for OAuth redirect |
+| `GOOGLE_REDIRECT_FRONTEND_ADMIN` | — | Optional admin frontend URL for OAuth redirect (`/auth/google?app=admin`) |
 | `FIREBASE_PROJECT_ID` | — | Firebase project ID (optional) |
 | `FIREBASE_CLIENT_EMAIL` | — | Firebase service account email (optional) |
 | `FIREBASE_PRIVATE_KEY` | — | Firebase service account private key (optional) |
@@ -451,6 +458,8 @@ Create a `.env` file at the project root:
 GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=your-client-secret
 GOOGLE_CALLBACK_URL=http://localhost:3002/api/v1/auth/google/callback
+GOOGLE_REDIRECT_FRONTEND=http://localhost:4200
+GOOGLE_REDIRECT_FRONTEND_ADMIN=http://localhost:4300
 
 # Firebase Push Notifications (optional — gateway starts without these)
 FIREBASE_PROJECT_ID=your-project-id
@@ -505,6 +514,17 @@ erDiagram
         datetime createdAt
     }
 ```
+
+## 🎬 Backend-Only Demo
+
+For a full manual backend demo flow (without frontend), including:
+
+- service bring-up
+- authenticated webhook execution
+- optimizer/realtime validation
+- Redis route persistence checks
+
+See: [docs/backend-demo-runbook.md](docs/backend-demo-runbook.md)
 
 ---
 
