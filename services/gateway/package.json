@@ -2,7 +2,7 @@
   "name": "logiflow-core-backend",
   "version": "0.1.0",
   "description": "LogiFlow Core Backend — AI-Powered Real-Time Dynamic Fleet Routing Platform",
-  "author": "Los Gavilanes del Codigo",
+  "author": "LogiFlow Team",
   "private": true,
   "license": "UNLICENSED",
   "scripts": {

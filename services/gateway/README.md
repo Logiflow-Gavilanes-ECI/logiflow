@@ -285,7 +285,7 @@ Current status: **13 test suites, 70 tests passing.**
 
 ## Team
 
-Los Gavilanes del Codigo — ARSW, Escuela Colombiana de Ingenieria
+LogiFlow Team — ARSW, Escuela Colombiana de Ingenieria Julio Garavito
 
 | Name | Role |
 |---|---|

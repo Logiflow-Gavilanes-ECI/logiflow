@@ -541,4 +541,4 @@ See: [docs/backend-demo-runbook.md](docs/backend-demo-runbook.md)
 
 ## 📄 License
 
-MIT © 2026 LogiFlow — Escuela Colombiana de Ingeniería Julio Garavito
+MIT © 2026 LogiFlow — Escuela Colombiana de Ingenieria Julio Garavito

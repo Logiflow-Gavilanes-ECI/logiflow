@@ -478,4 +478,4 @@ Both `n8n` and `openclaw` containers must appear in the output.
 
 ## 📄 License
 
-MIT © 2026 LogiFlow — Escuela Colombiana de Ingeniería Julio Garavito
+MIT © 2026 LogiFlow — Escuela Colombiana de Ingenieria Julio Garavito

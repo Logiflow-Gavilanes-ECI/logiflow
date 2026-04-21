@@ -141,8 +141,8 @@ export class NotificationsService implements OnModuleInit {
   ) {
     return this.sendToUsers(
       userIds,
-      'Ruta actualizada',
-      `Tu ruta para ${vehicleId} ha sido optimizada con ${routeSummary.stops} paradas.`,
+      'Route updated',
+      `Your route for ${vehicleId} has been optimized with ${routeSummary.stops} stops.`,
       {
         type: 'route_update',
         vehicleId,

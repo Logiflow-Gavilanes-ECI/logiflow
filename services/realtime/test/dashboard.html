@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>LogiFlow — Centro de Control</title>
+  <title>LogiFlow — Control Center</title>
 
   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 
@@ -246,7 +246,7 @@
     <div class="logo">Logi<span>Flow</span></div>
     <div class="header-divider"></div>
     <div class="header-status">
-      <span id="conn-label">Conectando...</span>
+      <span id="conn-label">Connecting...</span>
     </div>
     <div class="header-right">
       <div class="time-display" id="clock">--:--:--</div>
@@ -257,7 +257,7 @@
     <div class="stats-bar">
       <div class="stat-box">
         <div class="stat-box-value" id="stat-online">0</div>
-        <div class="stat-box-label">En línea</div>
+        <div class="stat-box-label">Online</div>
       </div>
       <div class="stat-box">
         <div class="stat-box-value" id="stat-offline" style="color: var(--offline)">0</div>
@@ -265,21 +265,21 @@
       </div>
       <div class="stat-box">
         <div class="stat-box-value" id="stat-routes" style="color: var(--accent2)">0</div>
-        <div class="stat-box-label">Rutas hoy</div>
+        <div class="stat-box-label">Routes today</div>
       </div>
     </div>
 
     <div class="sidebar-section">
-      <div class="section-label">Vehículos</div>
+      <div class="section-label">Vehicles</div>
       <div id="vehicle-list">
         <div style="font-size:12px; color: var(--muted); font-family: var(--font-mono);">
-          Esperando conexión...
+          Waiting for connection...
         </div>
       </div>
     </div>
 
     <div class="sidebar-section" style="padding-bottom: 8px;">
-      <div class="section-label">Eventos en tiempo real</div>
+      <div class="section-label">Real-time Events</div>
     </div>
     <div class="log-container" id="log"></div>
   </aside>
@@ -300,26 +300,26 @@
     ">
       <div style="font-family: var(--font-mono); font-size: 11px; color: var(--accent2);
                   letter-spacing: 1px; text-transform: uppercase; margin-bottom: 8px;">
-        🗺 Nueva ruta recibida
+        New route received
       </div>
       <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:4px; color: var(--muted);">
-        Vehículo <span id="t-vehicle" style="color: var(--text); font-family: var(--font-mono);">-</span>
+        Vehicle <span id="t-vehicle" style="color: var(--text); font-family: var(--font-mono);">-</span>
       </div>
       <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:4px; color: var(--muted);">
-        Paradas <span id="t-stops" style="color: var(--text); font-family: var(--font-mono);">-</span>
+        Stops <span id="t-stops" style="color: var(--text); font-family: var(--font-mono);">-</span>
       </div>
       <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:4px; color: var(--muted);">
-        Tiempo est. <span id="t-eta" style="color: var(--text); font-family: var(--font-mono);">-</span>
+        Est. time <span id="t-eta" style="color: var(--text); font-family: var(--font-mono);">-</span>
       </div>
       <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:4px; color: var(--muted);">
-        Distancia <span id="t-dist" style="color: var(--text); font-family: var(--font-mono);">-</span>
+        Distance <span id="t-dist" style="color: var(--text); font-family: var(--font-mono);">-</span>
       </div>
       <div style="display:flex; justify-content:space-between; font-size:12px; color: var(--muted);">
-        Evento <span id="t-event" style="color: var(--text); font-family: var(--font-mono);">-</span>
+        Event <span id="t-event" style="color: var(--text); font-family: var(--font-mono);">-</span>
       </div>
     </div>
 
-    <!-- Botón reset vista -->
+    <!-- Reset view button -->
     <button onclick="resetMapView()" style="
       position: absolute;
       top: 16px; right: 16px;
@@ -335,14 +335,14 @@
       transition: border-color 0.2s;
     " onmouseover="this.style.borderColor='var(--accent)'"
        onmouseout="this.style.borderColor='var(--border)'">
-      ⊞ Vista general
+      Overview
     </button>
   </div>
 
   <script>
     function updateClock() {
       document.getElementById('clock').textContent =
-        new Date().toLocaleTimeString('es-CO', { hour12: false });
+        new Date().toLocaleTimeString('en-US', { hour12: false });
     }
     setInterval(updateClock, 1000);
     updateClock();
@@ -355,19 +355,19 @@
       const socket = io('http://localhost:3001');
 
       socket.on('connect', () => {
-        document.getElementById('conn-label').textContent = 'Gateway conectado';
-        addLog('system', `Conectado al gateway (${socket.id})`);
+        document.getElementById('conn-label').textContent = 'Gateway connected';
+        addLog('system', `Connected to gateway (${socket.id})`);
 
         socket.emit('join:fleet');
       });
 
       socket.on('joined', (data) => {
-        addLog('system', `Sala unida: ${data.room}`);
+        addLog('system', `Room joined: ${data.room}`);
       });
 
       socket.on('disconnect', () => {
-        document.getElementById('conn-label').textContent = 'Sin conexión';
-        addLog('offline', 'Desconectado del gateway');
+        document.getElementById('conn-label').textContent = 'Disconnected';
+        addLog('offline', 'Disconnected from gateway');
       });
 
       socket.on('vehicle:position', (data) => {
@@ -386,27 +386,27 @@
         routeCount++;
         document.getElementById('stat-routes').textContent = routeCount;
 
-        addLog('route', `Ruta para ${vehicleId} → ${stops.length} paradas, ${estimatedTime} min`);
+        addLog('route', `Route for ${vehicleId} → ${stops.length} stops, ${estimatedTime} min`);
       });
 
       socket.on('vehicle:offline', (data) => {
         const { vehicleId } = data;
         updateOrCreateMarker(vehicleId, null, null, true);
         updateVehicleCard(vehicleId, null, null, null, true);
-        addLog('offline', `⚠ ${vehicleId} SIN SEÑAL`);
+        addLog('offline', `⚠ ${vehicleId} NO SIGNAL`);
       });
 
       socket.on('vehicle:online', (data) => {
         const { vehicleId } = data;
         updateOrCreateMarker(vehicleId, null, null, false);
         updateVehicleCard(vehicleId, null, null, null, false);
-        addLog('system', `✓ ${vehicleId} reconectado`);
+        addLog('system', `✓ ${vehicleId} reconnected`);
       });
     }
 
     function addLog(type, message) {
       const log  = document.getElementById('log');
-      const time = new Date().toLocaleTimeString('es-CO', { hour12: false });
+      const time = new Date().toLocaleTimeString('en-US', { hour12: false });
       const cssClass = {
         system:   'log-system',
         position: 'log-position',
@@ -419,8 +419,8 @@
   </script>
 
   <script>
-    const markers    = {}; 
-    const vehicleData = {};  
+    const markers    = {};
+    const vehicleData = {};
 
     function updateOrCreateMarker(vehicleId, lat, lng, isOffline) {
       const color = isOffline ? '#ff1744' : '#00e5ff';
@@ -476,14 +476,14 @@
           <div class="vehicle-card-header">
             <div class="vehicle-id">${v.vehicleId}</div>
             <div class="vehicle-badge ${v.isOffline ? 'offline' : ''}">
-              ${v.isOffline ? 'OFFLINE' : 'EN LÍNEA'}
+              ${v.isOffline ? 'OFFLINE' : 'ONLINE'}
             </div>
           </div>
           <div class="vehicle-stats">
             <div class="stat">Lat <span>${v.lat ? v.lat.toFixed(4) : '--'}</span></div>
             <div class="stat">Lng <span>${v.lng ? v.lng.toFixed(4) : '--'}</span></div>
-            <div class="stat">Vel <span>${v.speed ? v.speed + ' km/h' : '--'}</span></div>
-            <div class="stat">Estado <span style="color:${v.isOffline ? 'var(--offline)' : 'var(--online)'}">
+            <div class="stat">Speed <span>${v.speed ? v.speed + ' km/h' : '--'}</span></div>
+            <div class="stat">Status <span style="color:${v.isOffline ? 'var(--offline)' : 'var(--online)'}">
               ${v.isOffline ? '⚠' : '✓'}
             </span></div>
           </div>
@@ -526,7 +526,7 @@
   </script>
 
   <script>
-    const polylines = {}; 
+    const polylines = {};
 
     function drawPolyline(vehicleId, polylinePoints) {
       if (polylines[vehicleId]) {

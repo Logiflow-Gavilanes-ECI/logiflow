@@ -1,26 +1,26 @@
-# Demo Backend Manual - LogiFlow
+# Backend Demo Manual - LogiFlow
 
-Este documento permite ejecutar una demo funcional de LogiFlow solo con backend (sin frontend).
+This document describes how to run a functional LogiFlow demo using backend only (no frontend).
 
-## 1. Objetivo de la demo
+## 1. Demo objective
 
-Validar en vivo el flujo completo backend:
+Validate the complete backend flow end-to-end:
 
-1. Autenticacion en Gateway.
-2. Recepcion de webhook autenticado.
-3. Optimizacion de rutas via Optimizer + VROOM.
-4. Emision de evento realtime.
-5. Persistencia de ruta por vehiculo en Redis con clave canonica.
+1. Authentication in Gateway.
+2. Authenticated webhook reception.
+3. Route optimization via Optimizer + VROOM.
+4. Real-time event emission.
+5. Route persistence per vehicle in Redis with canonical key.
 
-## 2. Prerrequisitos
+## 2. Prerequisites
 
-1. Docker y Docker Compose instalados.
-2. Node 20+ y npm (para prechecks locales).
-3. Puerto libres: 3000, 3001, 3002, 5001, 50051, 5432, 6379.
+1. Docker and Docker Compose installed.
+2. Node 20+ and npm (for local prechecks).
+3. Free ports: 3000, 3001, 3002, 5001, 50051, 5432, 6379.
 
-## 3. Estado esperado de servicios
+## 3. Expected service state
 
-Al levantar compose, deben quedar disponibles:
+After starting compose, the following services should be available:
 
 1. Gateway: http://localhost:3002
 2. Realtime: http://localhost:3001
@@ -29,9 +29,9 @@ Al levantar compose, deben quedar disponibles:
 5. Redis: localhost:6379
 6. Postgres: localhost:5432
 
-## 4. Pipeline manual de validacion
+## 4. Manual validation pipeline
 
-### 4.1 Precheck de herramientas
+### 4.1 Tool precheck
 
 ```bash
 node -v
@@ -40,7 +40,7 @@ docker --version
 docker compose version
 ```
 
-### 4.2 Tests por servicio (opcional pero recomendado antes de demo)
+### 4.2 Per-service tests (optional but recommended before demo)
 
 ```bash
 cd services/optimizer && npm test -- --runInBand
@@ -50,7 +50,7 @@ cd ../automation && npm test -- --runInBand
 cd ../..
 ```
 
-### 4.3 Levantar stack completo
+### 4.3 Start complete stack
 
 ```bash
 docker compose down --remove-orphans
@@ -58,7 +58,7 @@ docker compose up -d --build
 docker compose ps
 ```
 
-## 5. Smoke tests de demo backend
+## 5. Backend demo smoke tests
 
 ### 5.1 Health checks
 
@@ -67,12 +67,12 @@ curl -sS -i http://localhost:3002/api/v1/health
 curl -sS -i http://localhost:5001/health
 ```
 
-Esperado:
+Expected:
 
-1. Gateway responde 200 con status ok.
-2. AI Predictor responde 200 con status ok.
+1. Gateway responds 200 with status ok.
+2. AI Predictor responds 200 with status ok.
 
-### 5.2 Login en Gateway
+### 5.2 Login in Gateway
 
 ```bash
 curl -sS -X POST http://localhost:3002/api/v1/auth/login \
@@ -80,13 +80,13 @@ curl -sS -X POST http://localhost:3002/api/v1/auth/login \
   -d '{"username":"demo","password":"demo123"}'
 ```
 
-Esperado:
+Expected:
 
 1. accessToken.
 2. refreshToken.
 3. tokenType Bearer.
 
-### 5.3 Webhook autenticado end-to-end
+### 5.3 Authenticated end-to-end webhook
 
 ```bash
 TOKEN=$(curl -sS -X POST http://localhost:3002/api/v1/auth/login \
@@ -120,27 +120,27 @@ curl -sS -X POST http://localhost:3002/api/v1/webhook \
   }'
 ```
 
-Esperado en respuesta:
+Expected response:
 
 1. received true.
 2. fallback false.
 3. socketConnected true.
-4. optimizedRoutes.code igual a 0.
-5. routes[0].vehicleId igual a v-001.
+4. optimizedRoutes.code equal to 0.
+5. routes[0].vehicleId equal to v-001.
 
-### 5.4 Verificacion de Redis
+### 5.4 Redis verification
 
 ```bash
 docker exec logiflow-redis redis-cli --raw KEYS 'route:vehicle:*'
 docker exec logiflow-redis redis-cli --raw GET route:vehicle:v-001
 ```
 
-Esperado:
+Expected:
 
-1. Existe la clave route:vehicle:v-001.
-2. El payload incluye vehicleId v-001.
+1. Key route:vehicle:v-001 exists.
+2. Payload includes vehicleId v-001.
 
-### 5.5 Verificacion de logs (evidencia para stakeholders)
+### 5.5 Log verification (evidence for stakeholders)
 
 ```bash
 docker logs --tail 120 logiflow-gateway
@@ -148,52 +148,52 @@ docker logs --tail 120 logiflow-optimizer
 docker logs --tail 120 logiflow-realtime
 ```
 
-Buscar evidencia de:
+Look for evidence of:
 
-1. Gateway recibe webhook con correlationId.
-2. Gateway envia VRP al optimizer y recibe rutas code 0.
-3. SocketClientService emite route-update.
-4. Optimizer procesa sin timeout.
+1. Gateway receives webhook with correlationId.
+2. Gateway sends VRP to optimizer and receives routes code 0.
+3. SocketClientService emits route-update.
+4. Optimizer processes without timeout.
 
-## 6. Demo opcional con y sin AI (solo backend)
+## 6. Optional demo with and without AI (backend only)
 
-Por defecto en compose esta AI_PREDICTOR_ENABLED en false dentro de optimizer.
+By default in compose, AI_PREDICTOR_ENABLED is set to false inside optimizer.
 
-Para comparar dos corridas:
+To compare two runs:
 
-1. Cambiar AI_PREDICTOR_ENABLED a true en docker-compose.yml.
-2. Rebuild de optimizer:
+1. Change AI_PREDICTOR_ENABLED to true in docker-compose.yml.
+2. Rebuild optimizer:
 
 ```bash
 docker compose up -d --build optimizer
 ```
 
-3. Ejecutar el mismo webhook dos veces (AI true y AI false) y comparar matrixSource en respuesta/logs.
+3. Execute the same webhook twice (AI true and AI false) and compare matrixSource in response/logs.
 
-## 7. Problemas comunes y solucion
+## 7. Common issues and solutions
 
-### 7.1 npm install falla con EACCES en realtime
+### 7.1 npm install fails with EACCES in realtime
 
-Si services/realtime/node_modules quedo con owner root por ejecucion en contenedor:
+If services/realtime/node_modules was left with root ownership from running in a container:
 
 ```bash
 docker run --rm -v "$PWD":/workspace alpine sh -c "chown -R $(id -u):$(id -g) /workspace/services/realtime/node_modules"
 ```
 
-### 7.2 Socket no conecta (Unauthorized)
+### 7.2 Socket does not connect (Unauthorized)
 
-1. Verificar que realtime tenga JWT_SECRET en compose.
-2. Verificar que gateway use el mismo JWT_SECRET.
+1. Verify that realtime has JWT_SECRET in compose.
+2. Verify that gateway uses the same JWT_SECRET.
 
-### 7.3 Optimizer no escribe en Redis
+### 7.3 Optimizer does not write to Redis
 
-1. Confirmar REDIS_URL en optimizer.
-2. Revisar logs de optimizer por errores de persistencia.
+1. Confirm REDIS_URL in optimizer.
+2. Check optimizer logs for persistence errors.
 
-## 8. Comandos de cierre
+## 8. Shutdown commands
 
 ```bash
 docker compose down --remove-orphans
 ```
 
-Si quieres conservar estado de DB/Redis para segunda demo, omite down y deja los contenedores corriendo.
+If you want to preserve DB/Redis state for a second demo, skip down and leave the containers running.
