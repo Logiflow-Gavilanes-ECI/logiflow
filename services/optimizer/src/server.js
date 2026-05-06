@@ -1,6 +1,7 @@
 const grpc = require('@grpc/grpc-js');
 const protoLoader = require('@grpc/proto-loader');
 const { HealthImplementation } = require('grpc-health-check');
+const CircuitBreaker = require('opossum');
 const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
@@ -446,6 +447,33 @@ async function callAIPredictor(matrix, departureTime, correlationId) {
   return response.data;
 }
 
+// Wrap the predictor call in a circuit breaker so a single bad period
+// does not slow every optimization down by AI_PREDICTOR_TIMEOUT_MS.
+// Once errorThreshold % of recent calls have failed, the breaker opens
+// and rejects calls immediately for resetTimeout ms; one trial call
+// then probes recovery (half-open).
+const aiPredictorBreaker = new CircuitBreaker(callAIPredictor, {
+  timeout: AI_PREDICTOR_TIMEOUT_MS,
+  errorThresholdPercentage: Number(process.env.AI_BREAKER_ERROR_PCT || 50),
+  resetTimeout: Number(process.env.AI_BREAKER_RESET_MS || 30000),
+  volumeThreshold: Number(process.env.AI_BREAKER_VOLUME || 5),
+  rollingCountTimeout: Number(process.env.AI_BREAKER_WINDOW_MS || 10000),
+  name: 'ai-predictor',
+});
+
+aiPredictorBreaker.on('open', () =>
+  logger.warn({ event: 'ai_breaker_open' }, 'ai_breaker_open'),
+);
+aiPredictorBreaker.on('halfOpen', () =>
+  logger.info({ event: 'ai_breaker_half_open' }, 'ai_breaker_half_open'),
+);
+aiPredictorBreaker.on('close', () =>
+  logger.info({ event: 'ai_breaker_close' }, 'ai_breaker_close'),
+);
+aiPredictorBreaker.on('reject', () =>
+  logger.warn({ event: 'ai_breaker_reject' }, 'ai_breaker_reject'),
+);
+
 async function optimizeRoutes(call, callback) {
   const correlationId = getCorrelationId(call);
   const log = loggerFor(correlationId);
@@ -471,7 +499,7 @@ async function optimizeRoutes(call, callback) {
 
     if (AI_PREDICTOR_ENABLED && vroomRequest.matrix) {
       try {
-        const aiResponse = await callAIPredictor(
+        const aiResponse = await aiPredictorBreaker.fire(
           {
             distances: vroomRequest.matrix.distances,
             durations: vroomRequest.matrix.durations,
@@ -681,6 +709,7 @@ module.exports = {
   buildMatrixLocations,
   maybeAttachGoogleMatrix,
   callAIPredictor,
+  aiPredictorBreaker,
   buildRouteRedisKey,
   persistRoutesToRedis,
   optimizeRoutes,
