@@ -590,6 +590,66 @@ function setHealth(status) {
   healthImpl.setStatus(HEALTH_SERVICE, status);
 }
 
+const SHUTDOWN_DEADLINE_MS = Number(process.env.SHUTDOWN_DEADLINE_MS || 25000);
+
+function installShutdownHandlers(server) {
+  let shuttingDown = false;
+
+  const shutdown = (signal) => {
+    if (shuttingDown) {
+      return;
+    }
+    shuttingDown = true;
+    logger.info({ signal, event: 'shutdown_started' }, 'shutdown_started');
+
+    // Stop reporting healthy so orchestrators stop sending new traffic.
+    setHealth('NOT_SERVING');
+
+    const forceTimer = setTimeout(() => {
+      logger.warn({ event: 'shutdown_force' }, 'shutdown_force');
+      try {
+        server.forceShutdown();
+      } catch (error) {
+        logger.error({ err: error }, 'force_shutdown_failed');
+      }
+      closeRedisAndExit(1);
+    }, SHUTDOWN_DEADLINE_MS);
+    forceTimer.unref();
+
+    server.tryShutdown((error) => {
+      clearTimeout(forceTimer);
+      if (error) {
+        logger.error({ err: error, event: 'graceful_shutdown_error' }, 'graceful_shutdown_error');
+        closeRedisAndExit(1);
+        return;
+      }
+      logger.info({ event: 'grpc_drained' }, 'grpc_drained');
+      closeRedisAndExit(0);
+    });
+  };
+
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
+  process.on('uncaughtException', (error) => {
+    logger.fatal({ err: error, event: 'uncaught_exception' }, 'uncaught_exception');
+    shutdown('uncaughtException');
+  });
+  process.on('unhandledRejection', (reason) => {
+    logger.error({ err: reason, event: 'unhandled_rejection' }, 'unhandled_rejection');
+  });
+}
+
+function closeRedisAndExit(code) {
+  if (!redisClient) {
+    process.exit(code);
+    return;
+  }
+  redisClient
+    .quit()
+    .catch((error) => logger.warn({ err: error }, 'redis_quit_failed'))
+    .finally(() => process.exit(code));
+}
+
 function main() {
   const server = new grpc.Server();
   server.addService(proto.RouteOptimizer.service, {
@@ -604,8 +664,9 @@ function main() {
       process.exit(1);
     }
     logger.info({ port: boundPort, event: 'grpc_listening' }, 'grpc_listening');
-    server.start();
+    // bindAsync already starts the server; server.start() is deprecated.
     setHealth('SERVING');
+    installShutdownHandlers(server);
   });
 }
 
