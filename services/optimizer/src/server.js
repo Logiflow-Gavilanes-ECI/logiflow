@@ -7,6 +7,16 @@ const fs = require('fs');
 const path = require('path');
 const { GoogleRoutesClient, profileToGoogleTravelMode } = require('./google-routes-client');
 const { logger, loggerFor } = require('./logger');
+const {
+  startMetricsServer,
+  optimizeRequestsTotal,
+  optimizeDurationMs,
+  vroomFailuresTotal,
+  aiPredictorFailuresTotal,
+  aiBreakerStateChanges,
+  redisFailuresTotal,
+  matrixSourceTotal,
+} = require('./metrics');
 
 const protoPathCandidates = [
   process.env.OPTIMIZER_PROTO_PATH,
@@ -126,6 +136,7 @@ async function persistRoutesToRedis(grpcResponse, call, clientOverride) {
       await client.set(key, value, 'EX', REDIS_ROUTE_TTL_SECONDS);
     }
   } catch (error) {
+    redisFailuresTotal.inc();
     loggerFor(getCorrelationId(call)).warn(
       { err: error },
       'redis_persistence_skipped',
@@ -461,18 +472,28 @@ const aiPredictorBreaker = new CircuitBreaker(callAIPredictor, {
   name: 'ai-predictor',
 });
 
-aiPredictorBreaker.on('open', () =>
-  logger.warn({ event: 'ai_breaker_open' }, 'ai_breaker_open'),
-);
-aiPredictorBreaker.on('halfOpen', () =>
-  logger.info({ event: 'ai_breaker_half_open' }, 'ai_breaker_half_open'),
-);
-aiPredictorBreaker.on('close', () =>
-  logger.info({ event: 'ai_breaker_close' }, 'ai_breaker_close'),
-);
-aiPredictorBreaker.on('reject', () =>
-  logger.warn({ event: 'ai_breaker_reject' }, 'ai_breaker_reject'),
-);
+aiPredictorBreaker.on('open', () => {
+  aiBreakerStateChanges.inc({ state: 'open' });
+  logger.warn({ event: 'ai_breaker_open' }, 'ai_breaker_open');
+});
+aiPredictorBreaker.on('halfOpen', () => {
+  aiBreakerStateChanges.inc({ state: 'half_open' });
+  logger.info({ event: 'ai_breaker_half_open' }, 'ai_breaker_half_open');
+});
+aiPredictorBreaker.on('close', () => {
+  aiBreakerStateChanges.inc({ state: 'close' });
+  logger.info({ event: 'ai_breaker_close' }, 'ai_breaker_close');
+});
+aiPredictorBreaker.on('reject', () => {
+  aiPredictorFailuresTotal.inc({ reason: 'breaker_open' });
+  logger.warn({ event: 'ai_breaker_reject' }, 'ai_breaker_reject');
+});
+aiPredictorBreaker.on('timeout', () => {
+  aiPredictorFailuresTotal.inc({ reason: 'timeout' });
+});
+aiPredictorBreaker.on('failure', () => {
+  aiPredictorFailuresTotal.inc({ reason: 'error' });
+});
 
 async function optimizeRoutes(call, callback) {
   const correlationId = getCorrelationId(call);
@@ -566,13 +587,17 @@ async function optimizeRoutes(call, callback) {
     await persistRoutesToRedis(grpcResponse, call);
 
     const durationMs = Number((process.hrtime.bigint() - startedAt) / BigInt(1_000_000));
+    const matrixSource = grpcResponse.matrixSource || 'request';
+    optimizeRequestsTotal.inc({ status: 'success' });
+    optimizeDurationMs.observe({ status: 'success', matrix_source: matrixSource }, durationMs);
+    matrixSourceTotal.inc({ source: matrixSource });
     log.info(
       {
         event: 'optimize_completed',
         durationMs,
         routes: grpcResponse.routes?.length || 0,
         unassigned: grpcResponse.unassigned?.length || 0,
-        matrixSource: grpcResponse.matrixSource,
+        matrixSource,
       },
       'optimize_completed',
     );
@@ -582,6 +607,11 @@ async function optimizeRoutes(call, callback) {
       ? error.response.data
       : JSON.stringify(error.response?.data || {});
     const durationMs = Number((process.hrtime.bigint() - startedAt) / BigInt(1_000_000));
+    optimizeRequestsTotal.inc({ status: 'error' });
+    optimizeDurationMs.observe({ status: 'error', matrix_source: 'unknown' }, durationMs);
+    if (error.response) {
+      vroomFailuresTotal.inc();
+    }
     log.error(
       {
         err: error,
@@ -694,6 +724,7 @@ function main() {
     logger.info({ port: boundPort, event: 'grpc_listening' }, 'grpc_listening');
     // bindAsync already starts the server; server.start() is deprecated.
     setHealth('SERVING');
+    startMetricsServer();
     installShutdownHandlers(server);
   });
 }
