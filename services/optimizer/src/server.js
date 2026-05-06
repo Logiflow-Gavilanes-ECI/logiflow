@@ -1,5 +1,6 @@
 const grpc = require('@grpc/grpc-js');
 const protoLoader = require('@grpc/proto-loader');
+const { HealthImplementation } = require('grpc-health-check');
 const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
@@ -575,11 +576,26 @@ async function optimizeRoutes(call, callback) {
   }
 }
 
+// gRPC standard health protocol (grpc.health.v1.Health). Probes:
+//   grpc_health_probe -addr=:50051                 -> overall server health
+//   grpc_health_probe -addr=:50051 -service=logiflow.RouteOptimizer
+const HEALTH_SERVICE = 'logiflow.RouteOptimizer';
+const healthImpl = new HealthImplementation({
+  '': 'NOT_SERVING',
+  [HEALTH_SERVICE]: 'NOT_SERVING',
+});
+
+function setHealth(status) {
+  healthImpl.setStatus('', status);
+  healthImpl.setStatus(HEALTH_SERVICE, status);
+}
+
 function main() {
   const server = new grpc.Server();
   server.addService(proto.RouteOptimizer.service, {
     optimizeRoutes: optimizeRoutes,
   });
+  healthImpl.addToServer(server);
 
   const port = process.env.GRPC_PORT || '50051';
   server.bindAsync(`0.0.0.0:${port}`, grpc.ServerCredentials.createInsecure(), (err, boundPort) => {
@@ -589,6 +605,7 @@ function main() {
     }
     logger.info({ port: boundPort, event: 'grpc_listening' }, 'grpc_listening');
     server.start();
+    setHealth('SERVING');
   });
 }
 
@@ -606,4 +623,7 @@ module.exports = {
   buildRouteRedisKey,
   persistRoutesToRedis,
   optimizeRoutes,
+  healthImpl,
+  setHealth,
+  HEALTH_SERVICE,
 };
