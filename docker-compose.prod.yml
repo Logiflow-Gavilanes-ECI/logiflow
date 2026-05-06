@@ -1,0 +1,193 @@
+# LogiFlow production compose — optimizer-layer slice (Cristian).
+#
+# Scope and ownership
+# -------------------
+# This file owns the production deployment of redis, vroom, optimizer
+# and ai-predictor. Sebastián owns gateway, realtime, postgres and n8n
+# and adds them to this same file (placeholders documented at the bottom).
+# The four services below are sufficient on their own to validate the
+# optimizer pipeline end-to-end (gRPC -> Google Routes -> AI -> VROOM ->
+# Redis).
+#
+# Network policy
+# --------------
+# Only services that need to be reached from outside the EC2 instance
+# bind to host ports. Internal services (redis, vroom, ai-predictor) are
+# only reachable inside the logiflow-prod network. The optimizer exposes
+# 50051 to the host because gateway will run on the same EC2 today, but
+# in a multi-host deployment that should also become internal-only.
+#
+# Logging
+# -------
+# Every service uses the json-file driver with rotation so a runaway log
+# does not fill the EC2 disk. CloudWatch / Loki should tail the
+# container stdout via the docker logs API or a sidecar.
+#
+# Run with:
+#   docker compose -f docker-compose.prod.yml --env-file .env.prod up -d
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: logiflow-redis
+    command: ["redis-server", "--appendonly", "yes", "--save", "60", "1000"]
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: "0.5"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+    networks: [logiflow-prod]
+
+  vroom:
+    build:
+      context: ./services/optimizer
+      dockerfile: Dockerfile.vroom
+    image: logiflow/vroom:${IMAGE_TAG:-latest}
+    container_name: logiflow-vroom
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 3000 || exit 1"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "1.0"
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+    networks: [logiflow-prod]
+
+  ai-predictor:
+    build:
+      context: ./services/ai-predictor
+      dockerfile: Dockerfile
+    image: logiflow/ai-predictor:${IMAGE_TAG:-latest}
+    container_name: logiflow-ai-predictor
+    restart: unless-stopped
+    environment:
+      PORT: 5001
+      GUNICORN_WORKERS: ${GUNICORN_WORKERS:-2}
+      GUNICORN_TIMEOUT: ${GUNICORN_TIMEOUT:-30}
+      LOG_LEVEL: ${PREDICTOR_LOG_LEVEL:-info}
+      INTERNAL_TOKEN: ${AI_PREDICTOR_INTERNAL_TOKEN:-}
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:5001/health || exit 1"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: "0.5"
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+    networks: [logiflow-prod]
+
+  optimizer:
+    build:
+      context: .
+      dockerfile: services/optimizer/Dockerfile
+    image: logiflow/optimizer:${IMAGE_TAG:-latest}
+    container_name: logiflow-optimizer
+    restart: unless-stopped
+    ports:
+      # gRPC port reachable from the gateway running on the same host.
+      # Remove this once gateway moves off-host and joins logiflow-prod.
+      - "50051:50051"
+    environment:
+      GRPC_PORT: "50051"
+      METRICS_PORT: "9090"
+      LOG_LEVEL: ${OPTIMIZER_LOG_LEVEL:-info}
+      VROOM_URL: http://vroom:3000
+      REDIS_URL: redis://redis:6379
+      REDIS_ROUTE_TTL_SECONDS: ${REDIS_ROUTE_TTL_SECONDS:-3600}
+      OPTIMIZER_PROTO_PATH: /app/shared/proto/optimizer.proto
+      MATRIX_SOURCE: ${MATRIX_SOURCE:-google}
+      GOOGLE_ROUTES_ENABLED: ${GOOGLE_ROUTES_ENABLED:-true}
+      GOOGLE_ROUTES_ALLOW_CALLS: ${GOOGLE_ROUTES_ALLOW_CALLS:-true}
+      GOOGLE_ROUTES_MOCK: ${GOOGLE_ROUTES_MOCK:-false}
+      GOOGLE_MAPS_API_KEY: ${GOOGLE_MAPS_API_KEY:-}
+      MAX_GOOGLE_MATRIX_LOCATIONS: ${MAX_GOOGLE_MATRIX_LOCATIONS:-25}
+      AI_PREDICTOR_ENABLED: ${AI_PREDICTOR_ENABLED:-true}
+      AI_PREDICTOR_URL: http://ai-predictor:5001/adjust
+      AI_PREDICTOR_TIMEOUT_MS: ${AI_PREDICTOR_TIMEOUT_MS:-5000}
+      AI_PREDICTOR_INTERNAL_TOKEN: ${AI_PREDICTOR_INTERNAL_TOKEN:-}
+      AI_BREAKER_ERROR_PCT: ${AI_BREAKER_ERROR_PCT:-50}
+      AI_BREAKER_RESET_MS: ${AI_BREAKER_RESET_MS:-30000}
+      AI_BREAKER_VOLUME: ${AI_BREAKER_VOLUME:-5}
+      SHUTDOWN_DEADLINE_MS: ${SHUTDOWN_DEADLINE_MS:-25000}
+    depends_on:
+      vroom:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      ai-predictor:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "grpc_health_probe", "-addr=localhost:50051", "-service=logiflow.RouteOptimizer"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "1.0"
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+    networks: [logiflow-prod]
+
+# ---------------------------------------------------------------------------
+# Sebastián adds the gateway / realtime / postgres / n8n services here.
+# They MUST attach to the logiflow-prod network so they can resolve
+# `optimizer:50051`, `redis:6379` and `ai-predictor:5001` by service name.
+# Suggested skeleton:
+#
+#   gateway:
+#     build: ./services/gateway
+#     image: logiflow/gateway:${IMAGE_TAG:-latest}
+#     environment:
+#       GRPC_OPTIMIZER_HOST: optimizer
+#       GRPC_OPTIMIZER_PORT: "50051"
+#       REDIS_URL: redis://redis:6379
+#     networks: [logiflow-prod]
+#     depends_on:
+#       optimizer: { condition: service_healthy }
+#       postgres:  { condition: service_healthy }
+# ---------------------------------------------------------------------------
+
+volumes:
+  redis_data:
+
+networks:
+  logiflow-prod:
+    name: logiflow-prod
+    driver: bridge
