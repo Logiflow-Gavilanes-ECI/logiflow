@@ -4,6 +4,7 @@ const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
 const { GoogleRoutesClient, profileToGoogleTravelMode } = require('./google-routes-client');
+const { logger, loggerFor } = require('./logger');
 
 const protoPathCandidates = [
   process.env.OPTIMIZER_PROTO_PATH,
@@ -69,7 +70,7 @@ function getRedisClient() {
   });
 
   redisClient.on('error', (error) => {
-    console.warn(`Redis client error: ${error.message}`);
+    logger.warn({ err: error }, 'redis_client_error');
   });
 
   return redisClient;
@@ -123,7 +124,10 @@ async function persistRoutesToRedis(grpcResponse, call, clientOverride) {
       await client.set(key, value, 'EX', REDIS_ROUTE_TTL_SECONDS);
     }
   } catch (error) {
-    console.warn(`Route persistence to Redis skipped: ${error.message}`);
+    loggerFor(getCorrelationId(call)).warn(
+      { err: error },
+      'redis_persistence_skipped',
+    );
   }
 }
 
@@ -417,7 +421,15 @@ async function maybeAttachGoogleMatrix(req, vroomRequest) {
   return matrixResult;
 }
 
-async function callAIPredictor(matrix, departureTime) {
+async function callAIPredictor(matrix, departureTime, correlationId) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (correlationId) {
+    headers['X-Correlation-Id'] = correlationId;
+  }
+  if (process.env.AI_PREDICTOR_INTERNAL_TOKEN) {
+    headers['X-Internal-Token'] = process.env.AI_PREDICTOR_INTERNAL_TOKEN;
+  }
+
   const response = await axios.post(
     AI_PREDICTOR_URL,
     {
@@ -426,7 +438,7 @@ async function callAIPredictor(matrix, departureTime) {
     },
     {
       timeout: AI_PREDICTOR_TIMEOUT_MS,
-      headers: { 'Content-Type': 'application/json' },
+      headers,
     },
   );
 
@@ -434,10 +446,27 @@ async function callAIPredictor(matrix, departureTime) {
 }
 
 async function optimizeRoutes(call, callback) {
+  const correlationId = getCorrelationId(call);
+  const log = loggerFor(correlationId);
+  const startedAt = process.hrtime.bigint();
+  log.info(
+    {
+      event: 'optimize_started',
+      vehicles: call.request?.vehicles?.length || 0,
+      jobs: call.request?.jobs?.length || 0,
+      shipments: call.request?.shipments?.length || 0,
+    },
+    'optimize_started',
+  );
+
   try {
     const idMapper = createVroomIdMapper();
     const vroomRequest = grpcToVroomRequest(call.request, idMapper);
     let matrixResult = await maybeAttachGoogleMatrix(call.request, vroomRequest);
+
+    if (matrixResult?.source === 'fallback') {
+      log.warn({ event: 'matrix_fallback_used' }, 'matrix_fallback_used');
+    }
 
     if (AI_PREDICTOR_ENABLED && vroomRequest.matrix) {
       try {
@@ -448,6 +477,7 @@ async function optimizeRoutes(call, callback) {
             locations: matrixResult?.locations || buildMatrixLocations(call.request),
           },
           resolveDepartureTime(call.request),
+          correlationId,
         );
 
         if (aiResponse?.matrix?.durations && aiResponse?.matrix?.distances) {
@@ -462,9 +492,13 @@ async function optimizeRoutes(call, callback) {
             locations: aiResponse.matrix.locations || matrixResult?.locations || buildMatrixLocations(call.request),
             source: 'ai-adjusted',
           };
+          log.info({ event: 'ai_predictor_applied' }, 'ai_predictor_applied');
         }
       } catch (error) {
-        console.warn(`AI predictor unavailable, using base matrix: ${error.message}`);
+        log.warn(
+          { err: error, event: 'ai_predictor_unavailable' },
+          'ai_predictor_unavailable',
+        );
       }
     }
 
@@ -486,9 +520,12 @@ async function optimizeRoutes(call, callback) {
       return;
     }
     const vroomTargetUrl = new URL(VROOM_OPTIMIZE_PATH, `${VROOM_URL.replace(/\/$/, '')}/`).toString();
-    
+
     const vroomRes = await axios.post(vroomTargetUrl, vroomRequest, {
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Correlation-Id': correlationId,
+      },
       timeout: 30000,
     });
 
@@ -498,12 +535,34 @@ async function optimizeRoutes(call, callback) {
     }
 
     await persistRoutesToRedis(grpcResponse, call);
+
+    const durationMs = Number((process.hrtime.bigint() - startedAt) / BigInt(1_000_000));
+    log.info(
+      {
+        event: 'optimize_completed',
+        durationMs,
+        routes: grpcResponse.routes?.length || 0,
+        unassigned: grpcResponse.unassigned?.length || 0,
+        matrixSource: grpcResponse.matrixSource,
+      },
+      'optimize_completed',
+    );
     callback(null, grpcResponse);
   } catch (error) {
     const upstreamDetails = typeof error.response?.data === 'string'
       ? error.response.data
       : JSON.stringify(error.response?.data || {});
-    console.error('OptimizeRoutes failed:', error.message, upstreamDetails);
+    const durationMs = Number((process.hrtime.bigint() - startedAt) / BigInt(1_000_000));
+    log.error(
+      {
+        err: error,
+        upstreamStatus: error.response?.status,
+        upstreamDetails,
+        durationMs,
+        event: 'optimize_failed',
+      },
+      'optimize_failed',
+    );
     const errorResponse = {
       code: error.response?.status || 500,
       error: `${error.message || 'Internal server error'}${upstreamDetails && upstreamDetails !== '{}' ? ` | ${upstreamDetails}` : ''}`,
@@ -523,12 +582,12 @@ function main() {
   });
 
   const port = process.env.GRPC_PORT || '50051';
-  server.bindAsync(`0.0.0.0:${port}`, grpc.ServerCredentials.createInsecure(), (err, port) => {
+  server.bindAsync(`0.0.0.0:${port}`, grpc.ServerCredentials.createInsecure(), (err, boundPort) => {
     if (err) {
-      console.error('Failed to bind server:', err);
+      logger.error({ err }, 'grpc_bind_failed');
       process.exit(1);
     }
-    console.log(`gRPC server listening on port ${port}`);
+    logger.info({ port: boundPort, event: 'grpc_listening' }, 'grpc_listening');
     server.start();
   });
 }
