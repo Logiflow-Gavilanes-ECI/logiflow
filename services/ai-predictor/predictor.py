@@ -1,8 +1,51 @@
+import logging
+import os
+import sys
+import time
+import uuid
 from datetime import datetime, timezone
-from typing import Dict, List, Tuple
+from typing import Any, Dict, List, Tuple
 
-from flask import Flask, jsonify, request
+import structlog
+from flask import Flask, g, jsonify, request
 
+# ---------------------------------------------------------------------------
+# Logging — structlog renders JSON so CloudWatch / ELK can index every field.
+# ---------------------------------------------------------------------------
+LOG_LEVEL = os.environ.get("LOG_LEVEL", "info").upper()
+
+logging.basicConfig(
+    format="%(message)s",
+    stream=sys.stdout,
+    level=getattr(logging, LOG_LEVEL, logging.INFO),
+)
+
+structlog.configure(
+    processors=[
+        structlog.contextvars.merge_contextvars,
+        structlog.processors.add_log_level,
+        structlog.processors.TimeStamper(fmt="iso", utc=True),
+        structlog.processors.StackInfoRenderer(),
+        structlog.processors.format_exc_info,
+        structlog.processors.JSONRenderer(),
+    ],
+    wrapper_class=structlog.make_filtering_bound_logger(
+        getattr(logging, LOG_LEVEL, logging.INFO)
+    ),
+    cache_logger_on_first_use=True,
+)
+
+log = structlog.get_logger("ai-predictor")
+
+# ---------------------------------------------------------------------------
+# Configuration
+# ---------------------------------------------------------------------------
+INTERNAL_TOKEN = os.environ.get("INTERNAL_TOKEN", "").strip()
+SERVICE_NAME = "ai-predictor"
+
+# ---------------------------------------------------------------------------
+# Flask app
+# ---------------------------------------------------------------------------
 app = Flask(__name__)
 
 # Corridor model: axis-aligned bounding boxes and peak hour multipliers.
@@ -111,30 +154,142 @@ def adjust_durations(
     return adjusted
 
 
-@app.route("/health", methods=["GET"])
-def health() -> tuple:
-    return jsonify({"status": "ok"}), 200
+# ---------------------------------------------------------------------------
+# Validation
+# ---------------------------------------------------------------------------
+class PayloadError(ValueError):
+    """Raised when /adjust receives an invalid payload."""
 
 
-@app.route("/adjust", methods=["POST"])
-def adjust() -> tuple:
-    payload = request.get_json(silent=True) or {}
-    matrix = payload.get("matrix", {})
+def validate_matrix_payload(payload: Any) -> Dict[str, Any]:
+    if not isinstance(payload, dict):
+        raise PayloadError("body must be a JSON object")
+
+    matrix = payload.get("matrix")
+    if not isinstance(matrix, dict):
+        raise PayloadError("matrix is required and must be an object")
 
     durations = matrix.get("durations", [])
     distances = matrix.get("distances", [])
     locations = matrix.get("locations", [])
 
-    departure_time = payload.get("departure_time", "")
-    departure_dt = parse_departure_time(departure_time)
+    if not isinstance(durations, list) or not isinstance(distances, list):
+        raise PayloadError("matrix.durations and matrix.distances must be arrays")
 
-    adjusted_durations = adjust_durations(durations, locations, departure_dt)
+    if not isinstance(locations, list):
+        raise PayloadError("matrix.locations must be an array")
+
+    n = len(locations)
+    expected = n * n
+    if len(durations) != expected:
+        raise PayloadError(
+            f"matrix.durations length {len(durations)} does not match locations^2 {expected}"
+        )
+    if distances and len(distances) != expected:
+        raise PayloadError(
+            f"matrix.distances length {len(distances)} does not match locations^2 {expected}"
+        )
+
+    for idx, loc in enumerate(locations):
+        if not isinstance(loc, dict) or "lat" not in loc or "lon" not in loc:
+            raise PayloadError(f"matrix.locations[{idx}] must have lat and lon")
+
+    return {
+        "matrix": matrix,
+        "durations": durations,
+        "distances": distances,
+        "locations": locations,
+        "departure_time": payload.get("departure_time", ""),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Request middleware: correlation IDs + auth + access logs
+# ---------------------------------------------------------------------------
+@app.before_request
+def _request_start() -> None:
+    g.start_time = time.perf_counter()
+    correlation_id = (
+        request.headers.get("X-Correlation-Id")
+        or request.headers.get("X-Request-Id")
+        or str(uuid.uuid4())
+    )
+    g.correlation_id = correlation_id
+    structlog.contextvars.clear_contextvars()
+    structlog.contextvars.bind_contextvars(
+        correlation_id=correlation_id,
+        service=SERVICE_NAME,
+        method=request.method,
+        path=request.path,
+    )
+
+
+@app.before_request
+def _enforce_internal_token():
+    if not INTERNAL_TOKEN:
+        return None
+
+    # Health checks are intentionally unauthenticated so docker/k8s probes work.
+    if request.path == "/health":
+        return None
+
+    provided = request.headers.get("X-Internal-Token", "")
+    if provided != INTERNAL_TOKEN:
+        log.warning("internal_token_rejected")
+        return jsonify({"error": "unauthorized"}), 401
+
+    return None
+
+
+@app.after_request
+def _request_end(response):
+    duration_ms = int((time.perf_counter() - getattr(g, "start_time", time.perf_counter())) * 1000)
+    response.headers["X-Correlation-Id"] = getattr(g, "correlation_id", "")
+    log.info("request_completed", status=response.status_code, duration_ms=duration_ms)
+    return response
+
+
+@app.errorhandler(PayloadError)
+def _handle_payload_error(error: PayloadError):
+    log.warning("payload_invalid", reason=str(error))
+    return jsonify({"error": "invalid_payload", "detail": str(error)}), 400
+
+
+@app.errorhandler(Exception)
+def _handle_unexpected(error: Exception):  # pragma: no cover - defensive
+    log.exception("unhandled_exception", error=str(error))
+    return jsonify({"error": "internal_error"}), 500
+
+
+# ---------------------------------------------------------------------------
+# Routes
+# ---------------------------------------------------------------------------
+@app.route("/health", methods=["GET"])
+def health() -> tuple:
+    return jsonify({"status": "ok", "service": SERVICE_NAME}), 200
+
+
+@app.route("/adjust", methods=["POST"])
+def adjust() -> tuple:
+    payload = request.get_json(silent=True)
+    parsed = validate_matrix_payload(payload or {})
+
+    departure_dt = parse_departure_time(parsed["departure_time"])
+    adjusted_durations = adjust_durations(
+        parsed["durations"], parsed["locations"], departure_dt
+    )
+
+    log.info(
+        "matrix_adjusted",
+        locations=len(parsed["locations"]),
+        departure_time=departure_dt.isoformat(),
+    )
 
     response = {
         "matrix": {
             "durations": adjusted_durations,
-            "distances": distances,
-            "locations": locations,
+            "distances": parsed["distances"],
+            "locations": parsed["locations"],
         },
         "matrix_source": "ai-adjusted",
         "departure_time": departure_dt.isoformat(),
@@ -144,4 +299,5 @@ def adjust() -> tuple:
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5001)
+    # Dev-only entry point. Production runs gunicorn (see Dockerfile CMD).
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", "5001")))
