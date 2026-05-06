@@ -265,7 +265,7 @@ VROOM supports different transportation modes:
 
 ```protobuf
 enum Profile {
-  CAR = 0;      // Default, uses OSRM car profile
+  CAR = 0;      // Default car profile
   BICYCLE = 1;  // Bike-friendly routes
   FOOT = 2;     // Pedestrian routes
 }
