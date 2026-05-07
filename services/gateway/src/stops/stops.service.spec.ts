@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { StopsService } from './stops.service';
 import { StopsRepository, StopRecord } from './stops.repository';
+import { SocketClientService } from '../socket-client/socket-client.service';
 import { NotFoundException } from '@nestjs/common';
 
 const mockStop: StopRecord = {
@@ -9,6 +10,7 @@ const mockStop: StopRecord = {
   lng: -74.081,
   demand: 20,
   priority: 0,
+  completedAt: null,
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
 };
@@ -16,6 +18,7 @@ const mockStop: StopRecord = {
 describe('StopsService', () => {
   let service: StopsService;
   let repo: jest.Mocked<StopsRepository>;
+  let socketClient: jest.Mocked<SocketClientService>;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -29,6 +32,13 @@ describe('StopsService', () => {
             create: jest.fn(),
             update: jest.fn(),
             remove: jest.fn(),
+            markCompleted: jest.fn(),
+          },
+        },
+        {
+          provide: SocketClientService,
+          useValue: {
+            emitStopCompleted: jest.fn(),
           },
         },
       ],
@@ -36,6 +46,7 @@ describe('StopsService', () => {
 
     service = module.get<StopsService>(StopsService);
     repo = module.get(StopsRepository);
+    socketClient = module.get(SocketClientService);
   });
 
   it('should be defined', () => {
@@ -153,6 +164,56 @@ describe('StopsService', () => {
       await expect(service.remove('unknown')).rejects.toThrow(
         NotFoundException,
       );
+    });
+  });
+
+  describe('complete', () => {
+    it('marks a pending stop as completed and returns the updated record', async () => {
+      const completedAt = new Date().toISOString();
+      repo.findById.mockResolvedValue(mockStop);
+      repo.markCompleted.mockResolvedValue({ ...mockStop, completedAt });
+
+      const result = await service.complete('s1');
+
+      expect(repo.markCompleted.mock.calls).toContainEqual(['s1']);
+      expect(result.completedAt).toBe(completedAt);
+      expect(socketClient.emitStopCompleted).toHaveBeenCalledWith({
+        stopId: 's1',
+        completedAt,
+      });
+    });
+
+    it('is idempotent — re-completing returns the existing record without re-writing', async () => {
+      const completedAt = new Date().toISOString();
+      repo.findById.mockResolvedValue({ ...mockStop, completedAt });
+
+      const result = await service.complete('s1');
+
+      expect(result.completedAt).toBe(completedAt);
+      expect(repo.markCompleted).not.toHaveBeenCalled();
+      expect(socketClient.emitStopCompleted).not.toHaveBeenCalled();
+    });
+
+    it('throws NotFoundException for unknown id', async () => {
+      repo.findById.mockResolvedValue(null);
+
+      await expect(service.complete('unknown')).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(repo.markCompleted).not.toHaveBeenCalled();
+      expect(socketClient.emitStopCompleted).not.toHaveBeenCalled();
+    });
+
+    it('does not fail the request when socket emission throws', async () => {
+      const completedAt = new Date().toISOString();
+      repo.findById.mockResolvedValue(mockStop);
+      repo.markCompleted.mockResolvedValue({ ...mockStop, completedAt });
+      socketClient.emitStopCompleted.mockImplementation(() => {
+        throw new Error('boom');
+      });
+
+      const result = await service.complete('s1');
+      expect(result.completedAt).toBe(completedAt);
     });
   });
 });

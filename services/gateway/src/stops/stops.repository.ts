@@ -10,6 +10,7 @@ export interface StopRecord {
   lng: number;
   demand: number;
   priority: number;
+  completedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -68,6 +69,15 @@ export class StopsRepository {
     });
   }
 
+  async markCompleted(id: string, at: Date = new Date()): Promise<StopRecord> {
+    const stop = await this.prisma.stop.update({
+      where: { id },
+      data: { completedAt: at },
+    });
+
+    return this.toRecord(stop);
+  }
+
   private toRecord(stop: Stop): StopRecord {
     return {
       id: stop.id,
@@ -75,6 +85,7 @@ export class StopsRepository {
       lng: stop.lng,
       demand: stop.demand,
       priority: stop.priority,
+      completedAt: stop.completedAt ? stop.completedAt.toISOString() : null,
       createdAt: stop.createdAt.toISOString(),
       updatedAt: stop.updatedAt.toISOString(),
     };

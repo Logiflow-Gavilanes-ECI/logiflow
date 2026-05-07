@@ -100,6 +100,24 @@ async function main() {
       const routes = Array.isArray(incoming?.routes) ? incoming.routes : [];
       routes.forEach((route) => processRouteUpdate(io, route, incoming));
     });
+
+    socket.on('stop:completed', (incoming) => {
+      const stopId = typeof incoming?.stopId === 'string' ? incoming.stopId.trim() : '';
+      const completedAt = typeof incoming?.completedAt === 'string' ? incoming.completedAt : null;
+      if (!stopId || !completedAt) return;
+
+      const payload = {
+        stopId,
+        completedAt,
+        vehicleId: typeof incoming.vehicleId === 'string' ? incoming.vehicleId : null,
+        emittedAt: incoming.emittedAt || new Date().toISOString(),
+      };
+
+      io.to('fleet').emit('stop:completed', payload);
+      if (payload.vehicleId) {
+        io.to(`vehicle:${payload.vehicleId}`).emit('stop:completed', payload);
+      }
+    });
   });
 
   setInterval(() => {
