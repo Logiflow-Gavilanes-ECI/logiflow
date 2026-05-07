@@ -16,18 +16,12 @@ enum Role {
   conductor
 }
 
-enum AuthProvider {
-  local
-  google
-}
-
 model User {
   id            String         @id @default(uuid())
   email         String?        @unique
   name          String?
   role          Role
-  passwordHash  String?
-  provider      AuthProvider   @default(local)
+  provider      String         @default("google")
   googleId      String?        @unique
   avatar        String?
   createdAt     DateTime       @default(now())
