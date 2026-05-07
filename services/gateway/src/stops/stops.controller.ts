@@ -14,7 +14,7 @@ import { StopsService } from './stops.service';
 import { CreateStopDto } from './dto/create-stop.dto';
 import { UpdateStopDto } from './dto/update-stop.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { ApiBearerAuth } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiResponse } from '@nestjs/swagger';
 
 @Controller('stops')
 @UseGuards(JwtAuthGuard)
@@ -46,5 +46,24 @@ export class StopsController {
   @HttpCode(HttpStatus.NO_CONTENT)
   remove(@Param('id') id: string) {
     return this.stopsService.remove(id);
+  }
+
+  @ApiOperation({
+    summary: 'Mark a stop as completed',
+    description:
+      'Sets completedAt for the given stop. Idempotent — re-calling on an already-completed stop returns the existing record without changing the timestamp.',
+  })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Stop record with completedAt set.',
+  })
+  @ApiResponse({
+    status: HttpStatus.NOT_FOUND,
+    description: 'Stop with the given id does not exist.',
+  })
+  @Post(':id/complete')
+  @HttpCode(HttpStatus.OK)
+  complete(@Param('id') id: string) {
+    return this.stopsService.complete(id);
   }
 }

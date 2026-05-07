@@ -64,11 +64,12 @@ model Vehicle {
 }
 
 model Stop {
-  id        String   @id @default(uuid())
-  lat       Float
-  lng       Float
-  demand    Int
-  priority  Int      @default(0)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String    @id @default(uuid())
+  lat         Float
+  lng         Float
+  demand      Int
+  priority    Int       @default(0)
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 }
