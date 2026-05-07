@@ -1,9 +1,10 @@
 const { httpServer, io, initializeServer, app } = require('./server');
 const { registerRooms } = require('./rooms');
-const { startPositionBroadcast } = require('./events/position');
+const { startPositionBroadcast, handleIncomingPosition } = require('./events/position');
 const { emitRouteUpdate } = require('./events/routeUpdate');
 const { checkHeartbeats } = require('./heartbeat');
 const { authMiddleware } = require('./middleware/auth');
+const { pubClient } = require('./redis');
 require('dotenv').config();
 
 const vehicleHeartbeats = {};
@@ -83,10 +84,13 @@ async function main() {
 
   io.on('connection', (socket) => {
     socket.on('vehicle:position', (data) => {
-      const { vehicleId } = data;
-      if (vehicleId) {
-        vehicleHeartbeats[vehicleId] = Date.now();
-        console.log(`Heartbeat actualizado: ${vehicleId} → ${vehicleHeartbeats[vehicleId]}`);
+      const broadcast = handleIncomingPosition(io, data, {
+        vehicleHeartbeats,
+        offlineVehicles,
+        redisClient: pubClient,
+      });
+      if (!broadcast) {
+        console.warn('[vehicle:position] payload rejected from socket', socket.id);
       }
     });
 
