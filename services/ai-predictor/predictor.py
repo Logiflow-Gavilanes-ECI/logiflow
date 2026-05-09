@@ -1,4 +1,5 @@
 import logging
+import math
 import os
 import sys
 import time
@@ -161,6 +162,22 @@ class PayloadError(ValueError):
     """Raised when /adjust receives an invalid payload."""
 
 
+def _coerce_matrix_entries(entries: List[Any], field: str) -> List[int]:
+    coerced: List[int] = []
+    for idx, value in enumerate(entries):
+        # bool is an int subclass but never a valid duration/distance, so reject it.
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise PayloadError(
+                f"matrix.{field}[{idx}] must be a number, got {type(value).__name__}"
+            )
+        if not math.isfinite(value):
+            raise PayloadError(f"matrix.{field}[{idx}] must be finite")
+        if value < 0:
+            raise PayloadError(f"matrix.{field}[{idx}] must be non-negative")
+        coerced.append(int(value))
+    return coerced
+
+
 def validate_matrix_payload(payload: Any) -> Dict[str, Any]:
     if not isinstance(payload, dict):
         raise PayloadError("body must be a JSON object")
@@ -193,6 +210,9 @@ def validate_matrix_payload(payload: Any) -> Dict[str, Any]:
     for idx, loc in enumerate(locations):
         if not isinstance(loc, dict) or "lat" not in loc or "lon" not in loc:
             raise PayloadError(f"matrix.locations[{idx}] must have lat and lon")
+
+    durations = _coerce_matrix_entries(durations, "durations")
+    distances = _coerce_matrix_entries(distances, "distances") if distances else distances
 
     return {
         "matrix": matrix,
