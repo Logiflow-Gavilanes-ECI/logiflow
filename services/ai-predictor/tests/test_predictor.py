@@ -173,6 +173,51 @@ class TestValidation:
                 }
             )
 
+    def test_rejects_non_numeric_duration(self, predictor_module):
+        with pytest.raises(predictor_module.PayloadError):
+            predictor_module.validate_matrix_payload(
+                {
+                    "matrix": {
+                        "durations": [0, "fast", 0, 0],
+                        "distances": [0, 0, 0, 0],
+                        "locations": [
+                            {"lat": 1, "lon": 2},
+                            {"lat": 3, "lon": 4},
+                        ],
+                    }
+                }
+            )
+
+    def test_rejects_negative_distance(self, predictor_module):
+        with pytest.raises(predictor_module.PayloadError):
+            predictor_module.validate_matrix_payload(
+                {
+                    "matrix": {
+                        "durations": [0, 1, 1, 0],
+                        "distances": [0, -5, 1, 0],
+                        "locations": [
+                            {"lat": 1, "lon": 2},
+                            {"lat": 3, "lon": 4},
+                        ],
+                    }
+                }
+            )
+
+    def test_rejects_non_finite_duration(self, predictor_module):
+        with pytest.raises(predictor_module.PayloadError):
+            predictor_module.validate_matrix_payload(
+                {
+                    "matrix": {
+                        "durations": [0, float("inf"), 0, 0],
+                        "distances": [],
+                        "locations": [
+                            {"lat": 1, "lon": 2},
+                            {"lat": 3, "lon": 4},
+                        ],
+                    }
+                }
+            )
+
 
 # ---------------------------------------------------------------------------
 # HTTP integration via Flask test client
