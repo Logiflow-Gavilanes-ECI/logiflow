@@ -553,6 +553,22 @@ async function optimizeRoutes(call, callback) {
     }
 
     if (OPTIMIZER_VALIDATE_MATRIX_ONLY && matrixResult) {
+      const matrixSource = matrixResult.source || 'google';
+      const durationMs = Number((process.hrtime.bigint() - startedAt) / BigInt(1_000_000));
+      optimizeRequestsTotal.inc({ status: 'success' });
+      optimizeDurationMs.observe({ status: 'success', matrix_source: matrixSource }, durationMs);
+      matrixSourceTotal.inc({ source: matrixSource });
+      log.info(
+        {
+          event: 'optimize_completed',
+          durationMs,
+          routes: 0,
+          unassigned: 0,
+          matrixSource,
+          mode: 'validate_matrix_only',
+        },
+        'optimize_completed',
+      );
       callback(null, {
         code: 0,
         error: '',
@@ -563,7 +579,7 @@ async function optimizeRoutes(call, callback) {
           durations: matrixResult.durations,
           locations: matrixResult.locations,
         },
-        matrixSource: matrixResult.source || 'google',
+        matrixSource,
         routingDistance: 0,
         routingDuration: 0,
       });
