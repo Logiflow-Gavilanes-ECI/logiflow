@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Tuple
 
 import structlog
 from flask import Flask, g, jsonify, request
+from werkzeug.exceptions import HTTPException
 
 # ---------------------------------------------------------------------------
 # Logging — structlog renders JSON so CloudWatch / ELK can index every field.
@@ -273,6 +274,13 @@ def _request_end(response):
 def _handle_payload_error(error: PayloadError):
     log.warning("payload_invalid", reason=str(error))
     return jsonify({"error": "invalid_payload", "detail": str(error)}), 400
+
+
+@app.errorhandler(HTTPException)
+def _handle_http_exception(error: HTTPException):
+    # Preserve Werkzeug's own status code/response for 4xx/5xx routing errors
+    # so probes and clients see the correct status (404, 405, 413, ...).
+    return error
 
 
 @app.errorhandler(Exception)

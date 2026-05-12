@@ -1,6 +1,16 @@
 'use strict';
 
-const STATUS_KEY_TTL_SECONDS = Number(process.env.STATUS_KEY_TTL_SECONDS || 60 * 60);
+function parsePositiveIntEnv(raw, fallback) {
+  if (raw === undefined || raw === null || raw === '') return fallback;
+  const parsed = parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  return parsed;
+}
+
+const STATUS_KEY_TTL_SECONDS = parsePositiveIntEnv(
+  process.env.STATUS_KEY_TTL_SECONDS,
+  60 * 60,
+);
 
 const VALID_STATUSES = new Set(['en_camino', 'en_parada', 'entregado']);
 

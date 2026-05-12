@@ -139,12 +139,11 @@ export class SocketClientService implements OnModuleInit, OnModuleDestroy {
     stopId: string;
     completedAt: string;
     vehicleId?: string | null;
-  }): boolean {
+  }): void {
     if (!this.connected) {
-      this.logger.warn(
+      throw new Error(
         `Socket.io server not connected, stop:completed not emitted for ${payload.stopId}`,
       );
-      return false;
     }
 
     this.socket.emit('stop:completed', {
@@ -152,7 +151,6 @@ export class SocketClientService implements OnModuleInit, OnModuleDestroy {
       emittedAt: new Date().toISOString(),
     });
     this.logger.log(`Emitted stop:completed for ${payload.stopId}`);
-    return true;
   }
 
   private mapRoutesToInternalFormat(routes: Route[]): InternalRoute[] {

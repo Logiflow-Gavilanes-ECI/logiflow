@@ -114,11 +114,13 @@ async function main() {
       const completedAt = typeof incoming?.completedAt === 'string' ? incoming.completedAt : null;
       if (!stopId || !completedAt) return;
 
+      const vehicleIdRaw =
+        typeof incoming.vehicleId === 'string' ? incoming.vehicleId.trim() : '';
       const payload = {
         stopId,
         completedAt,
-        vehicleId: typeof incoming.vehicleId === 'string' ? incoming.vehicleId : null,
-        emittedAt: incoming.emittedAt || new Date().toISOString(),
+        vehicleId: vehicleIdRaw || null,
+        emittedAt: new Date().toISOString(),
       };
 
       io.to('fleet').emit('stop:completed', payload);
