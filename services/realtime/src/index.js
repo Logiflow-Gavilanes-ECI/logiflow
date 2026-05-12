@@ -1,6 +1,7 @@
 const { httpServer, io, initializeServer, app } = require('./server');
 const { registerRooms } = require('./rooms');
 const { startPositionBroadcast, handleIncomingPosition } = require('./events/position');
+const { handleIncomingStatus } = require('./events/status');
 const { emitRouteUpdate } = require('./events/routeUpdate');
 const { checkHeartbeats } = require('./heartbeat');
 const { authMiddleware } = require('./middleware/auth');
@@ -99,6 +100,13 @@ async function main() {
 
       const routes = Array.isArray(incoming?.routes) ? incoming.routes : [];
       routes.forEach((route) => processRouteUpdate(io, route, incoming));
+    });
+
+    socket.on('vehicle:status', (data) => {
+      const broadcast = handleIncomingStatus(io, data, { redisClient: pubClient });
+      if (!broadcast) {
+        console.warn('[vehicle:status] payload rejected from socket', socket.id);
+      }
     });
 
     socket.on('stop:completed', (incoming) => {
