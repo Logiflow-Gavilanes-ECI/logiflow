@@ -1,4 +1,8 @@
-import { BadRequestException, ExecutionContext, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  ExecutionContext,
+  Injectable,
+} from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ConfigService } from '@nestjs/config';
 import { Response } from 'express';
@@ -26,7 +30,9 @@ export class GoogleAuthGuard extends AuthGuard('google') {
 
     const appTarget = this.extractAppTarget(context);
     if (appTarget !== undefined && !ALLOWED_APP_TARGETS.has(appTarget)) {
-      throw new BadRequestException('Invalid app value. Use "web", "admin", or "mobile".');
+      throw new BadRequestException(
+        'Invalid app value. Use "web", "admin", or "mobile".',
+      );
     }
 
     return super.canActivate(context);

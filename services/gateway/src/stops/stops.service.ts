@@ -1,4 +1,9 @@
-import { Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  Optional,
+} from '@nestjs/common';
 import { CreateStopDto } from './dto/create-stop.dto';
 import { UpdateStopDto } from './dto/update-stop.dto';
 import { StopsRepository, StopRecord } from './stops.repository';
@@ -56,7 +61,9 @@ export class StopsService {
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      this.logger.warn(`Failed to broadcast stop:completed for ${id}: ${message}`);
+      this.logger.warn(
+        `Failed to broadcast stop:completed for ${id}: ${message}`,
+      );
     }
 
     return updated;
