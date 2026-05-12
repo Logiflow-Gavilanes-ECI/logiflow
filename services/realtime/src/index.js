@@ -1,9 +1,10 @@
 const { httpServer, io, initializeServer, app } = require('./server');
 const { registerRooms } = require('./rooms');
-const { startPositionBroadcast } = require('./events/position');
+const { startPositionBroadcast, handleIncomingPosition } = require('./events/position');
 const { emitRouteUpdate } = require('./events/routeUpdate');
 const { checkHeartbeats } = require('./heartbeat');
 const { authMiddleware } = require('./middleware/auth');
+const { pubClient } = require('./redis');
 require('dotenv').config();
 
 const vehicleHeartbeats = {};
@@ -83,10 +84,13 @@ async function main() {
 
   io.on('connection', (socket) => {
     socket.on('vehicle:position', (data) => {
-      const { vehicleId } = data;
-      if (vehicleId) {
-        vehicleHeartbeats[vehicleId] = Date.now();
-        console.log(`Heartbeat actualizado: ${vehicleId} → ${vehicleHeartbeats[vehicleId]}`);
+      const broadcast = handleIncomingPosition(io, data, {
+        vehicleHeartbeats,
+        offlineVehicles,
+        redisClient: pubClient,
+      });
+      if (!broadcast) {
+        console.warn('[vehicle:position] payload rejected from socket', socket.id);
       }
     });
 
@@ -95,6 +99,24 @@ async function main() {
 
       const routes = Array.isArray(incoming?.routes) ? incoming.routes : [];
       routes.forEach((route) => processRouteUpdate(io, route, incoming));
+    });
+
+    socket.on('stop:completed', (incoming) => {
+      const stopId = typeof incoming?.stopId === 'string' ? incoming.stopId.trim() : '';
+      const completedAt = typeof incoming?.completedAt === 'string' ? incoming.completedAt : null;
+      if (!stopId || !completedAt) return;
+
+      const payload = {
+        stopId,
+        completedAt,
+        vehicleId: typeof incoming.vehicleId === 'string' ? incoming.vehicleId : null,
+        emittedAt: incoming.emittedAt || new Date().toISOString(),
+      };
+
+      io.to('fleet').emit('stop:completed', payload);
+      if (payload.vehicleId) {
+        io.to(`vehicle:${payload.vehicleId}`).emit('stop:completed', payload);
+      }
     });
   });
 

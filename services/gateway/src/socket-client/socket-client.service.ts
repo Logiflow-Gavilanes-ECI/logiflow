@@ -135,6 +135,26 @@ export class SocketClientService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  emitStopCompleted(payload: {
+    stopId: string;
+    completedAt: string;
+    vehicleId?: string | null;
+  }): boolean {
+    if (!this.connected) {
+      this.logger.warn(
+        `Socket.io server not connected, stop:completed not emitted for ${payload.stopId}`,
+      );
+      return false;
+    }
+
+    this.socket.emit('stop:completed', {
+      ...payload,
+      emittedAt: new Date().toISOString(),
+    });
+    this.logger.log(`Emitted stop:completed for ${payload.stopId}`);
+    return true;
+  }
+
   private mapRoutesToInternalFormat(routes: Route[]): InternalRoute[] {
     return routes.map((route) => ({
       vehicleId: route.vehicleId,

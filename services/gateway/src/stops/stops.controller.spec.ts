@@ -9,6 +9,7 @@ const mockStop: StopRecord = {
   lng: -74.081,
   demand: 20,
   priority: 0,
+  completedAt: null,
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
 };
@@ -29,6 +30,7 @@ describe('StopsController', () => {
             create: jest.fn(),
             update: jest.fn(),
             remove: jest.fn(),
+            complete: jest.fn(),
           },
         },
       ],
@@ -91,6 +93,17 @@ describe('StopsController', () => {
 
       await controller.remove('s1');
       expect(service.remove.mock.calls).toContainEqual(['s1']);
+    });
+  });
+
+  describe('complete', () => {
+    it('returns the stop record with completedAt set', async () => {
+      const completedAt = new Date().toISOString();
+      service.complete.mockResolvedValue({ ...mockStop, completedAt });
+
+      const result = await controller.complete('s1');
+      expect(service.complete.mock.calls).toContainEqual(['s1']);
+      expect(result.completedAt).toBe(completedAt);
     });
   });
 });

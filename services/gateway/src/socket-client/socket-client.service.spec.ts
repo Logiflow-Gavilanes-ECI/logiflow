@@ -44,6 +44,36 @@ describe('SocketClientService', () => {
     );
   });
 
+  it('emits stop:completed when connected and short-circuits otherwise', () => {
+    const emit = jest.fn();
+    const writableService = service as unknown as {
+      connected: boolean;
+      socket: { emit: (event: string, payload: unknown) => void };
+    };
+
+    expect(
+      service.emitStopCompleted({ stopId: 's1', completedAt: '2026-05-07T12:00:00.000Z' }),
+    ).toBe(false);
+
+    writableService.connected = true;
+    writableService.socket = { emit };
+
+    const ok = service.emitStopCompleted({
+      stopId: 's1',
+      completedAt: '2026-05-07T12:00:00.000Z',
+    });
+
+    expect(ok).toBe(true);
+    expect(emit).toHaveBeenCalledWith(
+      'stop:completed',
+      expect.objectContaining({
+        stopId: 's1',
+        completedAt: '2026-05-07T12:00:00.000Z',
+        emittedAt: expect.any(String),
+      }),
+    );
+  });
+
   it('should map OptimizeResponse.routes to internal route payload format', () => {
     const emit = jest.fn();
     const writableService = service as unknown as {

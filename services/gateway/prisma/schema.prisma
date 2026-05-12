@@ -16,18 +16,12 @@ enum Role {
   conductor
 }
 
-enum AuthProvider {
-  local
-  google
-}
-
 model User {
   id            String         @id @default(uuid())
   email         String?        @unique
   name          String?
   role          Role
-  passwordHash  String?
-  provider      AuthProvider   @default(local)
+  provider      String         @default("google")
   googleId      String?        @unique
   avatar        String?
   createdAt     DateTime       @default(now())
@@ -70,11 +64,12 @@ model Vehicle {
 }
 
 model Stop {
-  id        String   @id @default(uuid())
-  lat       Float
-  lng       Float
-  demand    Int
-  priority  Int      @default(0)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String    @id @default(uuid())
+  lat         Float
+  lng         Float
+  demand      Int
+  priority    Int       @default(0)
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 }
