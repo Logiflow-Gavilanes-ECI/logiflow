@@ -6,7 +6,29 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  app.enableCors();
+  const defaultCorsOrigins = [
+    'https://logiflowapp.z13.web.core.windows.net',
+    'http://localhost:4200',
+  ];
+  const corsOrigins = (process.env.CORS_ORIGINS ?? '')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter((origin) => origin.length > 0);
+  const allowedOrigins = corsOrigins.length > 0
+    ? corsOrigins
+    : defaultCorsOrigins;
+
+  app.enableCors({
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+        return;
+      }
+
+      callback(new Error(`CORS rejected origin: ${origin}`), false);
+    },
+    credentials: true,
+  });
   app.setGlobalPrefix('api/v1');
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
 
