@@ -112,6 +112,15 @@ export class AuthController {
     const state = this.parseFrontendTarget(req?.query?.state);
     const frontendUrl = this.resolveFrontendRedirectBase(state);
 
+    if (state === 'mobile') {
+      const mobileParams = new URLSearchParams({
+        token: result.accessToken,
+      });
+
+      res.redirect(`${frontendUrl}?${mobileParams.toString()}`);
+      return;
+    }
+
     const params = new URLSearchParams({
       accessToken: result.accessToken,
       refreshToken: result.refreshToken,
