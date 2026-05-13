@@ -67,6 +67,7 @@ services:
       dockerfile: Dockerfile.vroom
       args:
         VROOM_VERSION: v1.13.0
+        VROOM_EXPRESS_REF: v0.12.0
     image: logiflow/vroom:${IMAGE_TAG:-latest}
     container_name: logiflow-vroom
     restart: unless-stopped
