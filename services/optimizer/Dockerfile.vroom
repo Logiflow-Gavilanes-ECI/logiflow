@@ -8,7 +8,7 @@
 # time and the image stays self-contained.
 
 ARG TARGETPLATFORM=linux/amd64
-ARG VROOM_VERSION=v1.14.0
+ARG VROOM_VERSION=v1.13.0
 ARG VROOM_EXPRESS_REF=v1.4.0
 
 FROM --platform=${TARGETPLATFORM} vroomvrp/vroom-docker:${VROOM_VERSION} AS vroom-bin

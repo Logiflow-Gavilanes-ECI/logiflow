@@ -65,6 +65,8 @@ services:
     build:
       context: ./services/optimizer
       dockerfile: Dockerfile.vroom
+      args:
+        VROOM_VERSION: v1.13.0
     image: logiflow/vroom:${IMAGE_TAG:-latest}
     container_name: logiflow-vroom
     restart: unless-stopped
