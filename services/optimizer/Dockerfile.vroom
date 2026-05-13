@@ -1,39 +1,47 @@
 # syntax=docker/dockerfile:1.7
-# Real VROOM solver image. Stage 1 brings the compiled vroom binary from
-# the upstream image; stage 2 layers vroom-express (the HTTP wrapper)
-# on top so the optimizer service can POST jobs over HTTP at :3000.
+# Real VROOM solver image. Uses the upstream vroomvrp/vroom-docker image
+# as the runtime base so all native deps (libssl, libglpk, libtbb, libboost)
+# come pre-installed, then layers Node.js + vroom-express on top to expose
+# the solver over HTTP at :3000.
 #
 # The optimizer always forwards a precomputed `matrix` (Google Routes /
 # AI predictor / Haversine fallback), so VROOM never needs OSRM at run
 # time and the image stays self-contained.
 
 ARG TARGETPLATFORM=linux/amd64
-ARG VROOM_VERSION=v1.14.0
-ARG VROOM_EXPRESS_REF=v1.4.0
+ARG VROOM_VERSION=v1.13.0
+ARG VROOM_EXPRESS_REF=v0.12.0
 
-FROM --platform=${TARGETPLATFORM} vroomvrp/vroom-docker:${VROOM_VERSION} AS vroom-bin
-
-FROM --platform=${TARGETPLATFORM} node:20-alpine AS runtime
+FROM --platform=${TARGETPLATFORM} vroomvrp/vroom-docker:${VROOM_VERSION} AS runtime
 
 ARG VROOM_EXPRESS_REF
-RUN apk add --no-cache git dumb-init libstdc++ libgcc \
-    && addgroup -S vroom && adduser -S vroom -G vroom
+
+USER root
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+         curl ca-certificates gnupg git dumb-init netcat-openbsd \
+    && mkdir -p /etc/apt/keyrings \
+    && curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key \
+         | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg \
+    && echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_20.x nodistro main" \
+         > /etc/apt/sources.list.d/nodesource.list \
+    && apt-get update && apt-get install -y --no-install-recommends nodejs \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd -r vroomx && useradd -r -g vroomx -d /app vroomx
 
 WORKDIR /app
 
-# Copy the real vroom solver binary from the official image.
-COPY --from=vroom-bin /usr/local/bin/vroom /usr/local/bin/vroom
-
-# Pull a pinned vroom-express revision and install only production deps.
 RUN git clone --depth 1 --branch ${VROOM_EXPRESS_REF} \
         https://github.com/VROOM-Project/vroom-express.git /tmp/vroom-express \
     && cp -r /tmp/vroom-express/. /app/ \
     && rm -rf /tmp/vroom-express \
     && npm install --omit=dev --ignore-scripts \
     && npm cache clean --force \
-    && chown -R vroom:vroom /app
+    && chown -R vroomx:vroomx /app \
+    && mkdir -p /conf && chown -R vroomx:vroomx /conf
 
-USER vroom
+USER vroomx
 
 ENV NODE_ENV=production \
     VROOM_DOCKER=osrm \

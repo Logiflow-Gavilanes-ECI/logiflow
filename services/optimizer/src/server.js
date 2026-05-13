@@ -184,15 +184,36 @@ function grpcToVroomRequest(req, idMapper) {
     vehicles: [],
   };
 
+  // When the caller supplied a precomputed matrix, VROOM ignores raw
+  // coordinates and indexes everything against matrix.locations. Build
+  // a lat/lon → index lookup so we can stamp location_index on each
+  // job / vehicle / shipment task.
+  const locationToIndex = new Map();
+  const matrixLocations = req?.matrix?.locations || [];
+  if (matrixLocations.length > 0) {
+    matrixLocations.forEach((loc, idx) => {
+      if (loc && Number.isFinite(Number(loc.lat)) && Number.isFinite(Number(loc.lon))) {
+        const key = `${Number(loc.lat).toFixed(7)}|${Number(loc.lon).toFixed(7)}`;
+        if (!locationToIndex.has(key)) locationToIndex.set(key, idx);
+      }
+    });
+  }
+  const indexFor = (coord) => {
+    if (!coord || locationToIndex.size === 0) return undefined;
+    const key = `${Number(coord.lat).toFixed(7)}|${Number(coord.lon).toFixed(7)}`;
+    return locationToIndex.get(key);
+  };
+
   if (req.jobs && req.jobs.length > 0) {
     vroomReq.jobs = req.jobs.map((job) => ({
       id: idMapper.toVroomId(job.id),
       location: [job.location.lon, job.location.lat],
+      location_index: indexFor(job.location),
       service: job.service || 0,
       amount: job.amount ? [job.amount] : [0],
       time_windows: job.timeWindowStart || job.timeWindowEnd
         ? [[job.timeWindowStart || 0, job.timeWindowEnd || 4294967295]]
-        : [],
+        : undefined,
       skills: job.skills || [],
       priority: job.priority || 0,
     }));
@@ -204,21 +225,23 @@ function grpcToVroomRequest(req, idMapper) {
       pickup: {
         id: idMapper.toVroomId(shipment.pickup.id),
         location: [shipment.pickup.location.lon, shipment.pickup.location.lat],
+        location_index: indexFor(shipment.pickup.location),
         service: shipment.pickup.service || 0,
         amount: shipment.pickup.amount ? [shipment.pickup.amount] : [0],
         time_windows: shipment.pickup.timeWindowStart || shipment.pickup.timeWindowEnd
           ? [[shipment.pickup.timeWindowStart || 0, shipment.pickup.timeWindowEnd || 4294967295]]
-          : [],
+          : undefined,
         skills: shipment.pickup.skills || [],
       },
       delivery: {
         id: idMapper.toVroomId(shipment.delivery.id),
         location: [shipment.delivery.location.lon, shipment.delivery.location.lat],
+        location_index: indexFor(shipment.delivery.location),
         service: shipment.delivery.service || 0,
         amount: shipment.delivery.amount ? [shipment.delivery.amount] : [0],
         time_windows: shipment.delivery.timeWindowStart || shipment.delivery.timeWindowEnd
           ? [[shipment.delivery.timeWindowStart || 0, shipment.delivery.timeWindowEnd || 4294967295]]
-          : [],
+          : undefined,
         skills: shipment.delivery.skills || [],
       },
       skills: shipment.skills || [],
@@ -231,12 +254,14 @@ function grpcToVroomRequest(req, idMapper) {
       id: idMapper.toVroomId(vehicle.id),
       profile: mapProfile(vehicle.profile),
       start: vehicle.start ? [vehicle.start.lon, vehicle.start.lat] : null,
+      start_index: indexFor(vehicle.start),
       end: vehicle.end ? [vehicle.end.lon, vehicle.end.lat] : null,
+      end_index: indexFor(vehicle.end),
       capacity: vehicle.capacity ? [vehicle.capacity] : [0],
       skills: vehicle.skills || [],
       time_window: vehicle.timeWindowStart || vehicle.timeWindowEnd
         ? [vehicle.timeWindowStart || 0, vehicle.timeWindowEnd || 4294967295]
-        : [0, 4294967295],
+        : undefined,
       restrictions: vehicle.restrictions || [],
     }));
   }
@@ -249,6 +274,30 @@ function grpcToVroomRequest(req, idMapper) {
       algorithm: req.options.algorithm || 'greedy',
       max_jobs_per_route: req.options.maxJobsPerRoute || 0,
     };
+  }
+
+  // Forward a caller-supplied matrix to VROOM. Proto sends durations /
+  // distances as flat int64 arrays of length N² (row-major); vroom-express
+  // expects matrices keyed by profile with N×N 2D arrays.
+  const flatDurations = req?.matrix?.durations;
+  if (Array.isArray(flatDurations) && flatDurations.length > 0) {
+    const n = Math.round(Math.sqrt(flatDurations.length));
+    if (n * n === flatDurations.length) {
+      const reshape = (flat) => {
+        const out = [];
+        for (let i = 0; i < n; i += 1) {
+          out.push(flat.slice(i * n, (i + 1) * n).map(Number));
+        }
+        return out;
+      };
+      const profile = mapProfile(req.vehicles?.[0]?.profile);
+      const matrices = { [profile]: { durations: reshape(flatDurations) } };
+      const flatDistances = req.matrix.distances;
+      if (Array.isArray(flatDistances) && flatDistances.length === flatDurations.length) {
+        matrices[profile].distances = reshape(flatDistances);
+      }
+      vroomReq.matrices = matrices;
+    }
   }
 
   return vroomReq;
@@ -273,7 +322,7 @@ function vroomToGrpcResponse(vroomRes, idMapper) {
 
   if (vroomRes.routes && vroomRes.routes.length > 0) {
     response.routes = vroomRes.routes.map((route) => ({
-      vehicleId: mapEntityId(route.vehicle_id, idMapper),
+      vehicleId: mapEntityId(route.vehicle_id ?? route.vehicle, idMapper),
       cost: route.cost || 0,
       distance: BigInt(route.distance || 0),
       duration: BigInt(route.duration || 0),
@@ -323,8 +372,8 @@ function vroomToGrpcResponse(vroomRes, idMapper) {
     };
   }
 
-  response.routingDistance = BigInt(vroomRes.summary ? vroomRes.summary.distance : 0);
-  response.routingDuration = BigInt(vroomRes.summary ? vroomRes.summary.duration : 0);
+  response.routingDistance = BigInt(vroomRes.summary?.distance || 0);
+  response.routingDuration = BigInt(vroomRes.summary?.duration || 0);
 
   return response;
 }
