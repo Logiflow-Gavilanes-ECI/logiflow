@@ -10,6 +10,11 @@ type PrismaLike = {
   user: {
     upsert: jest.Mock;
   };
+  vehicle: {
+    findUnique: jest.Mock;
+    findFirst: jest.Mock;
+    upsert: jest.Mock;
+  };
   refreshToken: {
     create: jest.Mock;
     findUnique: jest.Mock;
@@ -75,6 +80,13 @@ describe('AuthService', () => {
           }),
       ),
     },
+    vehicle: {
+      findUnique: jest.fn(() => Promise.resolve(null)),
+      findFirst: jest.fn(() => Promise.resolve(null)),
+      upsert: jest.fn(({ create }: { create: { id: string } }) =>
+        Promise.resolve({ id: create.id }),
+      ),
+    },
     refreshToken: {
       create: jest.fn(
         ({
@@ -103,6 +115,12 @@ describe('AuthService', () => {
     jest.clearAllMocks();
     prismaService.refreshToken.findUnique.mockResolvedValue(null);
     prismaService.refreshToken.updateMany.mockResolvedValue({ count: 0 });
+    prismaService.vehicle.findUnique.mockResolvedValue(null);
+    prismaService.vehicle.findFirst.mockResolvedValue(null);
+    prismaService.vehicle.upsert.mockImplementation(
+      ({ create }: { create: { id: string } }) =>
+        Promise.resolve({ id: create.id }),
+    );
     authService = new AuthService(
       configService,
       jwtService,
@@ -140,6 +158,7 @@ describe('AuthService', () => {
         sub: 'user-google-1',
         email: 'driver@gmail.com',
         role: 'conductor',
+        vehicleId: 'user-google-1',
       }),
     );
 
@@ -209,6 +228,7 @@ describe('AuthService', () => {
         sub: 'user-google-1',
         email: 'driver@gmail.com',
         role: 'conductor',
+        vehicleId: 'user-google-1',
       }),
     );
   });

@@ -24,7 +24,7 @@ function normalizeStep(s, index) {
   const address =
     s.address ||
     s.stopAddress ||
-    (stopId ? `Stop ${index + 1} (${String(stopId).slice(0, 8)})` : undefined);
+    '';
 
   return {
     id: stopId,

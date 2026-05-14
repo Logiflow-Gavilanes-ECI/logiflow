@@ -19,6 +19,7 @@ const mockVehicle: VehicleRecord = {
 describe('VehiclesService', () => {
   let service: VehiclesService;
   let repo: jest.Mocked<VehiclesRepository>;
+  let stopsService: jest.Mocked<StopsService>;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -29,6 +30,7 @@ describe('VehiclesService', () => {
           useValue: {
             findAll: jest.fn(),
             findById: jest.fn(),
+            ensureExists: jest.fn(),
             create: jest.fn(),
             update: jest.fn(),
             remove: jest.fn(),
@@ -45,6 +47,7 @@ describe('VehiclesService', () => {
 
     service = module.get<VehiclesService>(VehiclesService);
     repo = module.get(VehiclesRepository);
+    stopsService = module.get(StopsService);
   });
 
   it('should be defined', () => {
@@ -125,6 +128,39 @@ describe('VehiclesService', () => {
     });
   });
 
+  describe('getAssignedRoute', () => {
+    it('should return persisted stop addresses without synthetic labels', async () => {
+      repo.findById.mockResolvedValue(mockVehicle);
+      stopsService.findAll.mockResolvedValue([
+        {
+          id: 's-201',
+          address: 'Cra 7 #45-12, Bogotá',
+          lat: 4.7,
+          lng: -74.0,
+          demand: 1,
+          priority: 1,
+          completedAt: null,
+          createdAt: '2026-05-14T10:00:00.000Z',
+          updatedAt: '2026-05-14T10:00:00.000Z',
+        },
+      ]);
+
+      await expect(service.getAssignedRoute('v1')).resolves.toEqual({
+        vehicleId: 'v1',
+        steps: [
+          {
+            stopId: 's-201',
+            address: 'Cra 7 #45-12, Bogotá',
+            lat: 4.7,
+            lng: -74.0,
+            arrivalOrder: 1,
+            status: 'active',
+          },
+        ],
+      });
+    });
+  });
+
   describe('findDetails', () => {
     it('should return the mobile vehicle profile contract', async () => {
       repo.findById.mockResolvedValue({
@@ -140,6 +176,24 @@ describe('VehiclesService', () => {
         model: 'Toyota Hilux 2023',
         status: 'online',
       });
+    });
+
+    it('should provision the JWT vehicle id when it is not stored yet', async () => {
+      repo.findById.mockResolvedValue(null);
+      repo.ensureExists.mockResolvedValue({
+        ...mockVehicle,
+        id: 'de015a64-dcb6-40ce-9c3e-6d037e7c706c',
+      });
+
+      const result = await service.findDetails(
+        'de015a64-dcb6-40ce-9c3e-6d037e7c706c',
+      );
+
+      expect(repo.ensureExists).toHaveBeenCalledWith(
+        'de015a64-dcb6-40ce-9c3e-6d037e7c706c',
+      );
+      expect(result.vehicleId).toBe('de015a64-dcb6-40ce-9c3e-6d037e7c706c');
+      expect(result.status).toBe('online');
     });
   });
 

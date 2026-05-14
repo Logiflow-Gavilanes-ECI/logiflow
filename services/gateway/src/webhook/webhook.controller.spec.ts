@@ -6,6 +6,7 @@ import { GrpcClientService } from '../grpc-client/grpc-client.service';
 import { SocketClientService } from '../socket-client/socket-client.service';
 import { RetryService } from '../common/retry/retry.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { PrismaService } from '../prisma/prisma.service';
 import { UNKNOWN_CORRELATION_ID } from '../common/constants/correlation-id.constant';
 
 const mockNotificationsService = {
@@ -36,6 +37,15 @@ const mockRetryService = {
     .mockImplementation((operation: () => Promise<unknown>) => operation()),
 };
 
+const mockPrismaService = {
+  vehicle: {
+    upsert: jest.fn().mockResolvedValue({}),
+  },
+  stop: {
+    upsert: jest.fn().mockResolvedValue({}),
+  },
+};
+
 describe('WebhookController', () => {
   let controller: WebhookController;
   let service: WebhookService;
@@ -55,6 +65,7 @@ describe('WebhookController', () => {
         { provide: SocketClientService, useValue: mockSocketClientService },
         { provide: RetryService, useValue: mockRetryService },
         { provide: NotificationsService, useValue: mockNotificationsService },
+        { provide: PrismaService, useValue: mockPrismaService },
       ],
     }).compile();
 

@@ -58,7 +58,14 @@ export class VehiclesService {
   }
 
   async findDetails(id: string): Promise<VehicleDetails> {
-    const vehicle = await this.findOne(id);
+    const trimmedId = id.trim();
+    if (!trimmedId) {
+      throw new NotFoundException(`Vehicle "${id}" not found`);
+    }
+
+    const vehicle =
+      (await this.repo.findById(trimmedId)) ??
+      (await this.repo.ensureExists(trimmedId));
     return toVehicleDetails(vehicle);
   }
 
@@ -85,7 +92,7 @@ export class VehiclesService {
       vehicleId: resolvedVehicleId,
       steps: sortedStops.map((stop, index) => ({
         stopId: stop.id,
-        address: stop.address?.trim() || buildStopAddress(stop.id, index),
+        address: resolveStopAddress(stop, index),
         lat: stop.lat,
         lng: stop.lng,
         arrivalOrder: index + 1,
@@ -146,6 +153,15 @@ function compareStopsForArrivalOrder(
 
 function buildStopAddress(stopId: string, index: number): string {
   return `Stop ${index + 1} (${stopId.slice(0, 8)})`;
+}
+
+function resolveStopAddress(stop: RouteStopSource, index: number): string {
+  const address = stop.address?.trim();
+  if (address) {
+    return address;
+  }
+
+  return stop.id.startsWith('fallback-stop-') ? buildStopAddress(stop.id, index) : '';
 }
 
 function toVehicleDetails(vehicle: VehicleRecord): VehicleDetails {

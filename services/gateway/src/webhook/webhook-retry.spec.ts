@@ -4,11 +4,21 @@ import { GrpcClientService } from '../grpc-client/grpc-client.service';
 import { SocketClientService } from '../socket-client/socket-client.service';
 import { RetryService } from '../common/retry/retry.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { PrismaService } from '../prisma/prisma.service';
 
 const mockNotificationsService = {
   sendRouteUpdate: jest.fn().mockResolvedValue(undefined),
   registerDeviceToken: jest.fn().mockResolvedValue(undefined),
   sendToUsers: jest.fn().mockResolvedValue(undefined),
+};
+
+const mockPrismaService = {
+  vehicle: {
+    upsert: jest.fn().mockResolvedValue({}),
+  },
+  stop: {
+    upsert: jest.fn().mockResolvedValue({}),
+  },
 };
 
 const BASE_EVENT = {
@@ -75,6 +85,7 @@ describe('WebhookService — retry integration (Task 194)', () => {
           },
         },
         { provide: NotificationsService, useValue: mockNotificationsService },
+        { provide: PrismaService, useValue: mockPrismaService },
       ],
     }).compile();
 

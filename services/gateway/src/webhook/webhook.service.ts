@@ -18,6 +18,7 @@ import {
 } from '../common/retry/retry.options';
 import { RetryExhaustedException } from '../common/retry/retry-exhausted.exception';
 import { NotificationsService } from '../notifications/notifications.service';
+import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class WebhookService {
@@ -28,6 +29,7 @@ export class WebhookService {
     private readonly socketClient: SocketClientService,
     private readonly retryService: RetryService,
     private readonly notificationsService: NotificationsService,
+    private readonly prismaService: PrismaService,
   ) {}
 
   async handleEvent(event: WebhookEventDto, correlationId?: string) {
@@ -39,6 +41,7 @@ export class WebhookService {
     );
 
     const grpcRequest = this.buildOptimizeRequest(event);
+    await this.persistIncomingFleetSnapshot(event, effectiveCorrelationId);
 
     let optimizedRoutes: OptimizeResponse;
     let optimizerFailed = false;
@@ -287,6 +290,62 @@ export class WebhookService {
       routingDistance: Math.floor(Math.random() * 50000 + 10000),
       routingDuration: Math.floor(Math.random() * 3600 + 900),
     };
+  }
+
+  private async persistIncomingFleetSnapshot(
+    event: WebhookEventDto,
+    correlationId: string,
+  ): Promise<void> {
+    try {
+      await Promise.all([
+        ...event.vehicles.map((vehicle) => {
+          const lat = vehicle.lat ?? vehicle.start?.lat ?? 4.711;
+          const lng = vehicle.lng ?? vehicle.start?.lon ?? -74.0721;
+
+          return this.prismaService.vehicle.upsert({
+            where: { id: vehicle.id },
+            update: {
+              lat,
+              lng,
+              capacity: vehicle.capacity,
+              status: 'online',
+            },
+            create: {
+              id: vehicle.id,
+              lat,
+              lng,
+              capacity: vehicle.capacity,
+              status: 'online',
+            },
+          });
+        }),
+        ...(event.stops ?? []).map((stop) =>
+          this.prismaService.stop.upsert({
+            where: { id: stop.id },
+            update: {
+              address: stop.address?.trim() || undefined,
+              lat: stop.lat,
+              lng: stop.lng,
+              demand: stop.demand,
+              priority: stop.priority ?? 0,
+            },
+            create: {
+              id: stop.id,
+              address: stop.address?.trim() || undefined,
+              lat: stop.lat,
+              lng: stop.lng,
+              demand: stop.demand,
+              priority: stop.priority ?? 0,
+            },
+          }),
+        ),
+      ]);
+    } catch (error) {
+      this.logger.warn(
+        `Could not persist incoming fleet snapshot | correlationId: ${correlationId}. ` +
+          `Error: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   }
 
   private attachRouteStepAddresses(

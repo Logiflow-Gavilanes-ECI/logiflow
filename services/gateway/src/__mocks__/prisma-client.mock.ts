@@ -50,6 +50,62 @@ export class PrismaClient {
     findUnique: jest.fn(({ where }: { where: { id: string } }) => {
       return this.vehicleStore.get(where.id) ?? null;
     }),
+    findFirst: jest.fn(() => {
+      return Array.from(this.vehicleStore.values())[0] ?? null;
+    }),
+    upsert: jest.fn(
+      ({
+        where,
+        update,
+        create,
+      }: {
+        where: { id: string };
+        update: Partial<{
+          lat: number;
+          lng: number;
+          capacity: number;
+          plate: string;
+          model: string;
+          status: string;
+        }>;
+        create: {
+          id: string;
+          lat: number;
+          lng: number;
+          capacity: number;
+          plate?: string;
+          model?: string;
+          status?: string;
+        };
+      }) => {
+        const now = new Date();
+        const current = this.vehicleStore.get(where.id);
+        if (current) {
+          const updated: VehicleEntity = {
+            ...current,
+            ...update,
+            updatedAt: now,
+          };
+          this.vehicleStore.set(where.id, updated);
+          return updated;
+        }
+
+        const created: VehicleEntity = {
+          id: create.id,
+          lat: create.lat,
+          lng: create.lng,
+          capacity: create.capacity,
+          plate: create.plate ?? null,
+          model: create.model ?? null,
+          status: create.status ?? 'online',
+          createdAt: now,
+          updatedAt: now,
+        };
+
+        this.vehicleStore.set(where.id, created);
+        return created;
+      },
+    ),
     create: jest.fn(
       ({
         data,
@@ -120,6 +176,56 @@ export class PrismaClient {
     findUnique: jest.fn(({ where }: { where: { id: string } }) => {
       return this.stopStore.get(where.id) ?? null;
     }),
+    upsert: jest.fn(
+      ({
+        where,
+        update,
+        create,
+      }: {
+        where: { id: string };
+        update: Partial<{
+          address: string;
+          lat: number;
+          lng: number;
+          demand: number;
+          priority: number;
+        }>;
+        create: {
+          id: string;
+          address?: string;
+          lat: number;
+          lng: number;
+          demand: number;
+          priority?: number;
+        };
+      }) => {
+        const now = new Date();
+        const current = this.stopStore.get(where.id);
+        if (current) {
+          const updated: StopEntity = {
+            ...current,
+            ...update,
+            updatedAt: now,
+          };
+          this.stopStore.set(where.id, updated);
+          return updated;
+        }
+
+        const created: StopEntity = {
+          id: create.id,
+          address: create.address ?? null,
+          lat: create.lat,
+          lng: create.lng,
+          demand: create.demand,
+          priority: create.priority ?? 0,
+          createdAt: now,
+          updatedAt: now,
+        };
+
+        this.stopStore.set(where.id, created);
+        return created;
+      },
+    ),
     create: jest.fn(
       ({
         data,

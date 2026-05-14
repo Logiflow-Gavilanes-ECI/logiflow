@@ -36,6 +36,22 @@ export class VehiclesRepository {
     return vehicle ? this.toRecord(vehicle) : null;
   }
 
+  async ensureExists(id: string): Promise<VehicleRecord> {
+    const vehicle = await this.prisma.vehicle.upsert({
+      where: { id },
+      update: {},
+      create: {
+        id,
+        lat: 4.711,
+        lng: -74.0721,
+        capacity: 1,
+        status: 'online',
+      },
+    });
+
+    return this.toRecord(vehicle);
+  }
+
   async create(dto: CreateVehicleDto): Promise<VehicleRecord> {
     const vehicle = await this.prisma.vehicle.create({
       data: {

@@ -176,7 +176,7 @@ export class SocketClientService implements OnModuleInit, OnModuleDestroy {
     return {
       id: step.id,
       stopId: step.id,
-      address: step.address?.trim() || `Stop ${index + 1} (${step.id.slice(0, 8)})`,
+      address: step.address?.trim() || '',
       lat: step.location.lat,
       lng: step.location.lon,
       lon: step.location.lon,

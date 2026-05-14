@@ -41,6 +41,30 @@ type RefreshTokenWriteClient = {
   ) => Promise<T>;
 };
 
+type VehicleWriteClient = {
+  vehicle: {
+    findUnique: (args: { where: { id: string } }) => Promise<{
+      id: string;
+    } | null>;
+    findFirst: (args: {
+      orderBy: { createdAt: 'asc' };
+    }) => Promise<{
+      id: string;
+    } | null>;
+    upsert: (args: {
+      where: { id: string };
+      update: Record<string, never>;
+      create: {
+        id: string;
+        lat: number;
+        lng: number;
+        capacity: number;
+        status: string;
+      };
+    }) => Promise<{ id: string }>;
+  };
+};
+
 type StoredRefreshToken = {
   id: string;
   userId: string;
@@ -126,7 +150,7 @@ export class AuthService {
 
     const refreshTokenData = await this.generateRefreshTokenWithTtl(user.id);
 
-    const vehicleId = await this.resolveVehicleIdForUser(user.id);
+    const vehicleId = await this.resolveVehicleIdForUser(user.id, user.role);
     const payload = {
       sub: user.id,
       email: profile.email,
@@ -197,7 +221,10 @@ export class AuthService {
         tx,
       );
 
-      const vehicleId = await this.resolveVehicleIdForUser(storedToken.user.id);
+      const vehicleId = await this.resolveVehicleIdForUser(
+        storedToken.user.id,
+        storedToken.user.role,
+      );
       const payload = {
         sub: storedToken.user.id,
         email: storedToken.user.email ?? storedToken.user.id,
@@ -254,21 +281,37 @@ export class AuthService {
     return createHash('sha256').update(refreshToken).digest('hex');
   }
 
-  private async resolveVehicleIdForUser(userId: string) {
+  private async resolveVehicleIdForUser(userId: string, role?: AuthRole) {
     const trimmed = userId?.trim();
     if (!trimmed) {
       return undefined;
     }
 
     try {
-      const directMatch = await this.prismaService.vehicle.findUnique({
+      const vehicleClient = this.prismaService as unknown as VehicleWriteClient;
+      const directMatch = await vehicleClient.vehicle.findUnique({
         where: { id: trimmed },
       });
       if (directMatch) {
         return directMatch.id;
       }
 
-      const firstVehicle = await this.prismaService.vehicle.findFirst({
+      if (role === 'conductor') {
+        const created = await vehicleClient.vehicle.upsert({
+          where: { id: trimmed },
+          update: {},
+          create: {
+            id: trimmed,
+            lat: 4.711,
+            lng: -74.0721,
+            capacity: 1,
+            status: 'online',
+          },
+        });
+        return created.id;
+      }
+
+      const firstVehicle = await vehicleClient.vehicle.findFirst({
         orderBy: { createdAt: 'asc' },
       });
       return firstVehicle?.id ?? trimmed;
