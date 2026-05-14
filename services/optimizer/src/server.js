@@ -672,6 +672,43 @@ function enrichRouteStepDetails(grpcResponse, req) {
   return updated;
 }
 
+function enrichRouteLoadTotals(grpcResponse) {
+  if (!grpcResponse?.routes?.length) {
+    return false;
+  }
+
+  let updated = false;
+  grpcResponse.routes = grpcResponse.routes.map((route) => {
+    let pickup = firstNumeric(route.pickup, 0);
+    let delivery = firstNumeric(route.delivery, 0);
+
+    const pickupFromSteps = (route.steps || [])
+      .filter((step) => step.type === 'pickup')
+      .reduce((total, step) => total + firstNumeric(step.amount, 0), 0);
+    const deliveryFromSteps = (route.steps || [])
+      .filter((step) => step.type === 'delivery' || step.type === 'job')
+      .reduce((total, step) => total + firstNumeric(step.amount, 0), 0);
+
+    if (pickup === 0 && pickupFromSteps > 0) {
+      pickup = pickupFromSteps;
+      updated = true;
+    }
+
+    if (delivery === 0 && deliveryFromSteps > 0) {
+      delivery = deliveryFromSteps;
+      updated = true;
+    }
+
+    return {
+      ...route,
+      pickup,
+      delivery,
+    };
+  });
+
+  return updated;
+}
+
 function vroomToGrpcResponse(vroomRes, idMapper) {
   const response = {
     code: vroomRes.code || 0,
@@ -1023,6 +1060,7 @@ async function optimizeRoutes(call, callback) {
     const grpcResponse = vroomToGrpcResponse(vroomRes.data, idMapper);
     const routeMetricsEnriched = enrichRouteMetrics(grpcResponse, matrixResult);
     const routeStepDetailsEnriched = enrichRouteStepDetails(grpcResponse, call.request);
+    const routeLoadTotalsEnriched = enrichRouteLoadTotals(grpcResponse);
     if (matrixResult?.source) {
       grpcResponse.matrixSource = matrixResult.source;
     }
@@ -1043,6 +1081,7 @@ async function optimizeRoutes(call, callback) {
         matrixSource,
         routeMetricsEnriched,
         routeStepDetailsEnriched,
+        routeLoadTotalsEnriched,
         routingDistance: String(grpcResponse.routingDistance || 0),
       },
       'optimize_completed',
@@ -1185,6 +1224,7 @@ module.exports = {
   vroomToGrpcResponse,
   enrichRouteMetrics,
   enrichRouteStepDetails,
+  enrichRouteLoadTotals,
   buildMatrixLocations,
   maybeAttachGoogleMatrix,
   callAIPredictor,
