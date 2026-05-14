@@ -125,7 +125,7 @@ services:
       SOCKETIO_SERVER_PORT: 3001
       JWT_SECRET: ${jwt_secret}
       JWT_EXPIRES_IN: 1h
-      CORS_ORIGINS: https://logiflowapp.z13.web.core.windows.net,http://localhost:4200,capacitor://localhost,http://localhost
+      CORS_ORIGINS: https://logiflowapp.z13.web.core.windows.net,http://localhost:4200,capacitor://localhost,http://localhost,https://localhost
     depends_on:
       postgres:
         condition: service_healthy

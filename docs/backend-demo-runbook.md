@@ -31,7 +31,7 @@ Frontend (optional reference for OAuth UI only):
 Required gateway env for the current web-admin demo:
 
 ```bash
-CORS_ORIGINS=https://logiflowapp.z13.web.core.windows.net,http://localhost:4200,capacitor://localhost,http://localhost
+CORS_ORIGINS=https://logiflowapp.z13.web.core.windows.net,http://localhost:4200,capacitor://localhost,http://localhost,https://localhost
 GOOGLE_ADMIN_EMAILS=elizabethcorreasuarez@gmail.com
 GOOGLE_REDIRECT_FRONTEND_ADMIN=https://logiflowapp.z13.web.core.windows.net
 ```

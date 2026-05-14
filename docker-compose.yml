@@ -105,7 +105,7 @@ services:
       SOCKETIO_SERVER_PORT: 3001
       JWT_SECRET: your-super-secret-key-change-this-in-production
       JWT_EXPIRES_IN: 1h
-      CORS_ORIGINS: "${CORS_ORIGINS:-https://logiflowapp.z13.web.core.windows.net,http://localhost:4200,capacitor://localhost,http://localhost}"
+      CORS_ORIGINS: "${CORS_ORIGINS:-https://logiflowapp.z13.web.core.windows.net,http://localhost:4200,capacitor://localhost,http://localhost,https://localhost}"
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
       GOOGLE_CALLBACK_URL: ${GOOGLE_CALLBACK_URL:-http://localhost:3002/api/v1/auth/google/callback}
