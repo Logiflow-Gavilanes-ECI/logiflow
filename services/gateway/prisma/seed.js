@@ -5,8 +5,10 @@ const { Pool } = require('pg');
 
 const DEMO_VEHICLE_ID = 'v-001';
 const ADMIN_EMAIL = 'admin@logiflow.app';
+const ADMIN_NAME = 'Admin LogiFlow';
 const ADMIN_PASSWORD = 'Admin2026!';
 const DRIVER_EMAIL = 'conductor@logiflow.app';
+const DRIVER_NAME = 'Conductor Demo';
 const DRIVER_PASSWORD = 'Driver2026!';
 
 async function main() {
@@ -86,6 +88,7 @@ async function seedDemoData(prisma) {
       data: {
         id: DEMO_VEHICLE_ID,
         email: DRIVER_EMAIL,
+        name: DRIVER_NAME,
         passwordHash: driverPasswordHash,
         role: 'conductor',
         provider: 'local',
@@ -96,6 +99,7 @@ async function seedDemoData(prisma) {
       where: { id: DEMO_VEHICLE_ID },
       data: {
         email: DRIVER_EMAIL,
+        name: DRIVER_NAME,
         passwordHash: driverPasswordHash,
         role: 'conductor',
         provider: 'local',
@@ -106,6 +110,7 @@ async function seedDemoData(prisma) {
       data: {
         id: DEMO_VEHICLE_ID,
         email: DRIVER_EMAIL,
+        name: DRIVER_NAME,
         passwordHash: driverPasswordHash,
         role: 'conductor',
         provider: 'local',
@@ -116,12 +121,14 @@ async function seedDemoData(prisma) {
   await prisma.user.upsert({
     where: { email: ADMIN_EMAIL },
     update: {
+      name: ADMIN_NAME,
       passwordHash: adminPasswordHash,
       role: 'admin',
       provider: 'local',
     },
     create: {
       email: ADMIN_EMAIL,
+      name: ADMIN_NAME,
       passwordHash: adminPasswordHash,
       role: 'admin',
       provider: 'local',
