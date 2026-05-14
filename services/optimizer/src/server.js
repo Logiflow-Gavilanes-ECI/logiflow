@@ -236,6 +236,64 @@ function buildVroomMatrices(matrix, profile) {
   return matrices;
 }
 
+function buildLocationIndexMap(locations) {
+  if (!Array.isArray(locations) || locations.length === 0) {
+    return null;
+  }
+
+  const map = new Map();
+  locations.forEach((loc, idx) => {
+    if (!loc) return;
+    const lat = Number(loc.lat);
+    const lon = Number(loc.lon);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+    const key = `${lat.toFixed(6)},${lon.toFixed(6)}`;
+    if (!map.has(key)) map.set(key, idx);
+  });
+
+  return map;
+}
+
+function applyLocationIndexes(vroomRequest, locations) {
+  const indexMap = buildLocationIndexMap(locations);
+  if (!indexMap) {
+    return;
+  }
+
+  const resolveIndex = (coords) => {
+    if (!Array.isArray(coords) || coords.length < 2) return undefined;
+    const lon = Number(coords[0]);
+    const lat = Number(coords[1]);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return undefined;
+    const key = `${lat.toFixed(6)},${lon.toFixed(6)}`;
+    return indexMap.get(key);
+  };
+
+  for (const job of vroomRequest.jobs || []) {
+    if (job.location_index === undefined) {
+      job.location_index = resolveIndex(job.location);
+    }
+  }
+
+  for (const shipment of vroomRequest.shipments || []) {
+    if (shipment.pickup && shipment.pickup.location_index === undefined) {
+      shipment.pickup.location_index = resolveIndex(shipment.pickup.location);
+    }
+    if (shipment.delivery && shipment.delivery.location_index === undefined) {
+      shipment.delivery.location_index = resolveIndex(shipment.delivery.location);
+    }
+  }
+
+  for (const vehicle of vroomRequest.vehicles || []) {
+    if (vehicle.start && vehicle.start_index === undefined) {
+      vehicle.start_index = resolveIndex(vehicle.start);
+    }
+    if (vehicle.end && vehicle.end_index === undefined) {
+      vehicle.end_index = resolveIndex(vehicle.end);
+    }
+  }
+}
+
 function grpcToVroomRequest(req, idMapper) {
   const vroomReq = {
     jobs: [],
@@ -711,6 +769,7 @@ async function optimizeRoutes(call, callback) {
     if (matrices) {
       vroomRequest.matrices = matrices;
       delete vroomRequest.matrix;
+      applyLocationIndexes(vroomRequest, matrixResult?.locations);
     }
 
     const vroomTargetUrl = new URL(VROOM_OPTIMIZE_PATH, `${VROOM_URL.replace(/\/$/, '')}/`).toString();
