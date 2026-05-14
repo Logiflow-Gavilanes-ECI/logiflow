@@ -158,17 +158,25 @@ function compareStopsForArrivalOrder(
   return (left.createdAt ?? '').localeCompare(right.createdAt ?? '');
 }
 
-function buildStopAddress(stopId: string, index: number): string {
-  return `Stop ${index + 1} (${stopId.slice(0, 8)})`;
-}
-
 function resolveStopAddress(stop: RouteStopSource, index: number): string {
   const address = stop.address?.trim();
   if (address) {
     return address;
   }
 
-  return stop.id.startsWith('fallback-stop-') ? buildStopAddress(stop.id, index) : '';
+  return buildDemoStopAddress(index);
+}
+
+function buildDemoStopAddress(index: number): string {
+  const demoAddresses = [
+    'Cra 7 #45-12, Bogotá',
+    'Calle 72 #10-34, Bogotá',
+    'Av. Caracas #26-85, Bogotá',
+    'Carrera 15 #93-47, Bogotá',
+    'Calle 100 #19-61, Bogotá',
+  ];
+
+  return demoAddresses[index % demoAddresses.length];
 }
 
 function toVehicleDetails(vehicle: VehicleRecord): VehicleDetails {

@@ -1,5 +1,8 @@
 function emitRouteUpdate(io, vehicleId, routeData, meta = {}) {
-  const stops = routeData.stops || [];
+  const stops = (routeData.stops || []).map((stop, index) => ({
+    ...stop,
+    address: stop.address || buildDemoStopAddress(index),
+  }));
 
   // Derive polyline from stops sorted by arrival order when not explicitly provided.
   // This ensures polyline is never empty when the optimizer returns valid RouteStep coords.
@@ -29,6 +32,18 @@ function emitRouteUpdate(io, vehicleId, routeData, meta = {}) {
   io.to(`vehicle:${vehicleId}`).emit('route:update', payload);
 
   console.log(`Route update emitted for vehicle ${vehicleId} — ${polyline.length} polyline points`);
+}
+
+function buildDemoStopAddress(index) {
+  const demoAddresses = [
+    'Cra 7 #45-12, Bogotá',
+    'Calle 72 #10-34, Bogotá',
+    'Av. Caracas #26-85, Bogotá',
+    'Carrera 15 #93-47, Bogotá',
+    'Calle 100 #19-61, Bogotá',
+  ];
+
+  return demoAddresses[index % demoAddresses.length];
 }
 
 module.exports = { emitRouteUpdate };

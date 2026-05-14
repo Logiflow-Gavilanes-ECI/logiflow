@@ -18,13 +18,25 @@ const CHECK_INTERVAL_MS    = 6000;
 
 const PORT = process.env.PORT || 3001;
 
+function buildDemoStopAddress(index) {
+  const demoAddresses = [
+    'Cra 7 #45-12, Bogotá',
+    'Calle 72 #10-34, Bogotá',
+    'Av. Caracas #26-85, Bogotá',
+    'Carrera 15 #93-47, Bogotá',
+    'Calle 100 #19-61, Bogotá',
+  ];
+
+  return demoAddresses[index % demoAddresses.length];
+}
+
 function normalizeStep(s, index) {
   const stopId = s.id || s.stopId;
   const arrivalOrder = s.arrivalOrder || s.arrival || s.order || index + 1;
   const address =
     s.address ||
     s.stopAddress ||
-    '';
+    buildDemoStopAddress(index);
 
   return {
     id: stopId,

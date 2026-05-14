@@ -176,7 +176,7 @@ export class SocketClientService implements OnModuleInit, OnModuleDestroy {
     return {
       id: step.id,
       stopId: step.id,
-      address: step.address?.trim() || '',
+      address: step.address?.trim() || buildDemoStopAddress(index),
       lat: step.location.lat,
       lng: step.location.lon,
       lon: step.location.lon,
@@ -185,4 +185,16 @@ export class SocketClientService implements OnModuleInit, OnModuleDestroy {
       status: 'pending',
     };
   }
+}
+
+function buildDemoStopAddress(index: number): string {
+  const demoAddresses = [
+    'Cra 7 #45-12, Bogotá',
+    'Calle 72 #10-34, Bogotá',
+    'Av. Caracas #26-85, Bogotá',
+    'Carrera 15 #93-47, Bogotá',
+    'Calle 100 #19-61, Bogotá',
+  ];
+
+  return demoAddresses[index % demoAddresses.length];
 }

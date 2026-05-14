@@ -71,4 +71,19 @@ describe('emitRouteUpdate', () => {
       ],
     }));
   });
+
+  test('adds demo addresses when route stops do not include address yet', () => {
+    const stops = [{ id: 's1', lat: 4.711, lng: -74.072, order: 1 }];
+
+    emitRouteUpdate(mockIo, 'v-003', { stops }, {});
+
+    expect(mockIo.emit).toHaveBeenCalledWith('route:update', expect.objectContaining({
+      stops: [
+        expect.objectContaining({
+          id: 's1',
+          address: 'Cra 7 #45-12, Bogotá',
+        }),
+      ],
+    }));
+  });
 });

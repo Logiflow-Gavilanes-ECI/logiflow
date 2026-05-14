@@ -177,6 +177,26 @@ describe('VehiclesService', () => {
         ],
       });
     });
+
+    it('should use demo delivery addresses when stored stops have no address yet', async () => {
+      repo.findById.mockResolvedValue(mockVehicle);
+      stopsService.findAll.mockResolvedValue([
+        {
+          id: 's-201',
+          address: null,
+          lat: 4.7,
+          lng: -74.0,
+          demand: 1,
+          priority: 1,
+          completedAt: null,
+          createdAt: '2026-05-14T10:00:00.000Z',
+          updatedAt: '2026-05-14T10:00:00.000Z',
+        },
+      ]);
+
+      const route = await service.getAssignedRoute('v1');
+      expect(route.steps[0].address).toBe('Cra 7 #45-12, Bogotá');
+    });
   });
 
   describe('findDetails', () => {
