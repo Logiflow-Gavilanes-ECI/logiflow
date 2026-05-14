@@ -9,6 +9,9 @@ async function bootstrap() {
   const defaultCorsOrigins = [
     'https://logiflowapp.z13.web.core.windows.net',
     'http://localhost:4200',
+    'https://localhost',
+    'capacitor://localhost',
+    'http://localhost',
   ];
   const corsOrigins = (process.env.CORS_ORIGINS ?? '')
     .split(',')

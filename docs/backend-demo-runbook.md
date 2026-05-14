@@ -1,6 +1,6 @@
 # Backend Demo Manual - LogiFlow
 
-This document describes how to run a functional LogiFlow demo using backend only (no frontend).
+This document describes how to run a functional LogiFlow demo against the deployed VM (backend only, no frontend).
 
 ## 1. Demo objective
 
@@ -14,90 +14,81 @@ Validate the complete backend flow end-to-end:
 
 ## 2. Prerequisites
 
-1. Docker and Docker Compose installed.
-2. Node 20+ and npm (for local prechecks).
-3. Free ports: 3000, 3001, 3002, 5001, 50051, 5432, 6379.
+1. SSH access to the VM that runs the stack.
+2. Docker and Docker Compose installed on the VM.
+3. `curl` available on the VM.
 
-## 3. Expected service state
+## 3. Expected service state (deployed VM)
 
-After starting compose, the following services should be available:
+Public endpoint:
 
-1. Gateway: http://localhost:3002
-2. Realtime: http://localhost:3001
-3. VROOM: http://localhost:3000
-4. AI Predictor: http://localhost:5001
-5. Redis: localhost:6379
-6. Postgres: localhost:5432
+1. Gateway: https://logiflow-api.eastus2.cloudapp.azure.com
+
+Frontend (optional reference for OAuth UI only):
+
+1. https://logiflowapp.z13.web.core.windows.net
+
+Internal service endpoints (containers):
+
+1. Realtime: http://realtime:3001
+2. VROOM: http://vroom:3000
+3. AI Predictor: http://ai-predictor:5001
+4. Redis: redis:6379
+5. Postgres: postgres:5432
 
 ## 4. Manual validation pipeline
 
-### 4.1 Tool precheck
+### 4.1 Stack status (VM)
 
 ```bash
-node -v
-npm -v
-docker --version
-docker compose version
-```
-
-### 4.2 Per-service tests (optional but recommended before demo)
-
-```bash
-cd services/optimizer && npm test -- --runInBand
-cd ../realtime && npm test -- --runInBand
-cd ../gateway && npm test -- --runInBand
-cd ../automation && npm test -- --runInBand
-cd ../..
-```
-
-### 4.3 Start complete stack
-
-```bash
-docker compose down --remove-orphans
-docker compose up -d --build
-docker compose ps
+cd /home/ubuntu/logiflow
+docker-compose -f docker-compose.prod.yml ps
 ```
 
 ## 5. Backend demo smoke tests
 
-### 5.1 Health checks
+### 5.1 Health check (public)
 
 ```bash
-curl -sS -i http://localhost:3002/api/v1/health
-curl -sS -i http://localhost:5001/health
+BASE_URL=https://logiflow-api.eastus2.cloudapp.azure.com
+curl -sS -i "$BASE_URL/api/v1/health"
 ```
 
 Expected:
 
 1. Gateway responds 200 with status ok.
-2. AI Predictor responds 200 with status ok.
 
-### 5.2 Login in Gateway
+If you get 404, try the alternate health path used by some reverse-proxy configs:
 
 ```bash
-curl -sS -X POST http://localhost:3002/api/v1/auth/login \
+curl -sS -i "$BASE_URL/health"
+```
+
+### 5.2 Obtain JWT for the webhook
+
+Production recommendation: keep `POST /auth/login` disabled. Use the container-based token below for internal smoke tests.
+
+Option A (only if `/auth/login` is available):
+
+```bash
+curl -sS -X POST "$BASE_URL/api/v1/auth/login" \
   -H 'Content-Type: application/json' \
   -d '{"username":"demo","password":"demo123"}'
 ```
 
-Expected:
-
-1. accessToken.
-2. refreshToken.
-3. tokenType Bearer.
-
-### 5.3 Authenticated end-to-end webhook
+Option B (recommended for the VM): generate a short-lived JWT inside the gateway container (does not expose `JWT_SECRET`).
 
 ```bash
-TOKEN=$(curl -sS -X POST http://localhost:3002/api/v1/auth/login \
-  -H 'Content-Type: application/json' \
-  -d '{"username":"demo","password":"demo123"}' \
-  | node -pe "const fs=require('fs');JSON.parse(fs.readFileSync(0,'utf8')).accessToken")
+TOKEN=$(docker-compose -f docker-compose.prod.yml exec -T gateway node -e "const jwt=require('jsonwebtoken'); const payload={sub:'demo-user', username:'demo', role:'admin'}; console.log(jwt.sign(payload, process.env.JWT_SECRET, {expiresIn:'10m'}));")
+```
 
-curl -sS -X POST http://localhost:3002/api/v1/webhook \
+### 5.3 Authenticated end-to-end webhook (VROOM)
+
+```bash
+curl -sS -X POST "$BASE_URL/api/v1/webhook" \
   -H "Authorization: Bearer $TOKEN" \
   -H 'Content-Type: application/json' \
-  -H 'x-correlation-id: demo-backend-001' \
+  -H 'x-correlation-id: vroom-smoke-001' \
   -d '{
     "eventType":"traffic_jam",
     "departureTime":"2026-04-09T17:30:00Z",
@@ -109,12 +100,13 @@ curl -sS -X POST http://localhost:3002/api/v1/webhook \
         "capacity":10
       }
     ],
-    "jobs":[
+    "stops":[
       {
-        "id":"j-001",
-        "location":{"lat":4.7005,"lon":-74.0502},
-        "service":120,
-        "amount":1
+        "id":"s-101",
+        "lat":4.705,
+        "lng":-74.068,
+        "demand":2,
+        "priority":1
       }
     ]
   }'
@@ -123,10 +115,9 @@ curl -sS -X POST http://localhost:3002/api/v1/webhook \
 Expected response:
 
 1. received true.
-2. fallback false.
-3. socketConnected true.
-4. optimizedRoutes.code equal to 0.
-5. routes[0].vehicleId equal to v-001.
+2. fallback false (optimizer + VROOM reachable).
+3. optimizedRoutes.code equal to 0.
+4. routes[0].vehicleId equal to v-001.
 
 ### 5.4 Redis verification
 
@@ -143,9 +134,9 @@ Expected:
 ### 5.5 Log verification (evidence for stakeholders)
 
 ```bash
-docker logs --tail 120 logiflow-gateway
-docker logs --tail 120 logiflow-optimizer
-docker logs --tail 120 logiflow-realtime
+docker-compose -f docker-compose.prod.yml logs --tail 120 gateway
+docker-compose -f docker-compose.prod.yml logs --tail 120 optimizer
+docker-compose -f docker-compose.prod.yml logs --tail 120 realtime
 ```
 
 Look for evidence of:
@@ -157,15 +148,15 @@ Look for evidence of:
 
 ## 6. Optional demo with and without AI (backend only)
 
-By default in compose, AI_PREDICTOR_ENABLED is set to false inside optimizer.
+By default in production compose, AI_PREDICTOR_ENABLED may be set to true or false depending on the VM .env.
 
 To compare two runs:
 
-1. Change AI_PREDICTOR_ENABLED to true in docker-compose.yml.
+1. Change AI_PREDICTOR_ENABLED in docker-compose.prod.yml (or the VM .env).
 2. Rebuild optimizer:
 
 ```bash
-docker compose up -d --build optimizer
+docker-compose -f docker-compose.prod.yml up -d --build optimizer
 ```
 
 3. Execute the same webhook twice (AI true and AI false) and compare matrixSource in response/logs.
@@ -193,7 +184,7 @@ docker run --rm -v "$PWD":/workspace alpine sh -c "chown -R $(id -u):$(id -g) /w
 ## 8. Shutdown commands
 
 ```bash
-docker compose down --remove-orphans
+docker-compose -f docker-compose.prod.yml down --remove-orphans
 ```
 
 If you want to preserve DB/Redis state for a second demo, skip down and leave the containers running.
