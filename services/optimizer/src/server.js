@@ -193,6 +193,49 @@ function buildTimeWindow(start, end) {
   return [safeStart, endValue];
 }
 
+function reshapeSquareMatrix(flat) {
+  if (!Array.isArray(flat) || flat.length === 0) {
+    return null;
+  }
+
+  const n = Math.round(Math.sqrt(flat.length));
+  if (n * n !== flat.length) {
+    return null;
+  }
+
+  const out = [];
+  for (let i = 0; i < n; i += 1) {
+    out.push(flat.slice(i * n, (i + 1) * n).map(Number));
+  }
+  return out;
+}
+
+function buildVroomMatrices(matrix, profile) {
+  if (!matrix || !Array.isArray(matrix.durations) || matrix.durations.length === 0) {
+    return null;
+  }
+
+  const durations = Array.isArray(matrix.durations[0])
+    ? matrix.durations.map((row) => row.map(Number))
+    : reshapeSquareMatrix(matrix.durations);
+
+  if (!durations) {
+    return null;
+  }
+
+  const matrices = { [profile]: { durations } };
+  if (Array.isArray(matrix.distances) && matrix.distances.length > 0) {
+    const distances = Array.isArray(matrix.distances[0])
+      ? matrix.distances.map((row) => row.map(Number))
+      : reshapeSquareMatrix(matrix.distances);
+    if (distances) {
+      matrices[profile].distances = distances;
+    }
+  }
+
+  return matrices;
+}
+
 function grpcToVroomRequest(req, idMapper) {
   const vroomReq = {
     jobs: [],
@@ -663,6 +706,13 @@ async function optimizeRoutes(call, callback) {
       });
       return;
     }
+    const profile = mapProfile(call.request?.vehicles?.[0]?.profile);
+    const matrices = buildVroomMatrices(vroomRequest.matrix, profile);
+    if (matrices) {
+      vroomRequest.matrices = matrices;
+      delete vroomRequest.matrix;
+    }
+
     const vroomTargetUrl = new URL(VROOM_OPTIMIZE_PATH, `${VROOM_URL.replace(/\/$/, '')}/`).toString();
 
     const vroomRes = await axios.post(vroomTargetUrl, vroomRequest, {
