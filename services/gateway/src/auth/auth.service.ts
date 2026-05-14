@@ -76,6 +76,7 @@ type StoredRefreshToken = {
     id: string;
     role: AuthRole;
     email?: string | null;
+    name?: string | null;
   };
 };
 
@@ -88,6 +89,7 @@ type AuthUserRecord = {
   provider: string;
   googleId: string | null;
   avatar: string | null;
+  createdAt?: Date;
 };
 
 type UserWriteClient = {
@@ -108,6 +110,29 @@ type UserWriteClient = {
       update: Record<string, unknown>;
       create: Record<string, unknown>;
     }) => Promise<AuthUserRecord>;
+  };
+};
+
+type UserProfileClient = {
+  user: {
+    findUnique: (args: {
+      where: { id: string };
+      select: {
+        id: true;
+        email: true;
+        name: true;
+        role: true;
+        avatar: true;
+        createdAt: true;
+      };
+    }) => Promise<{
+      id: string;
+      email: string | null;
+      name: string | null;
+      role: AuthRole;
+      avatar: string | null;
+      createdAt: Date;
+    } | null>;
   };
 };
 
@@ -309,6 +334,34 @@ export class AuthService {
     });
   }
 
+  async getProfile(userId: string) {
+    const profileClient = this.prismaService as unknown as UserProfileClient;
+    const user = await profileClient.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        avatar: true,
+        createdAt: true,
+      },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('Invalid user');
+    }
+
+    return {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      avatar: user.avatar,
+      createdAt: user.createdAt.toISOString(),
+    };
+  }
+
   private normalizeEmail(email: string) {
     return email.trim().toLowerCase();
   }
@@ -316,12 +369,14 @@ export class AuthService {
   private async issueAccessToken(user: {
     id: string;
     email?: string | null;
+    name?: string | null;
     role: AuthRole;
   }) {
     const vehicleId = await this.resolveVehicleIdForUser(user.id, user.role);
     const payload = {
       sub: user.id,
       email: user.email ?? user.id,
+      name: user.name ?? null,
       role: user.role,
       vehicleId,
     };

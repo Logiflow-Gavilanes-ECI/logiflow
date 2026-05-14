@@ -7,6 +7,7 @@ export interface JwtPayload {
   sub: string;
   username?: string;
   email?: string;
+  name?: string | null;
   role?: 'admin' | 'conductor';
   vehicleId?: string;
 }
@@ -25,6 +26,7 @@ export class JwtStrategy extends PassportStrategy(Strategy as any) {
     return {
       userId: payload.sub,
       username: payload.username ?? payload.email ?? payload.sub,
+      name: payload.name ?? null,
       role: payload.role,
       vehicleId: payload.vehicleId,
     };

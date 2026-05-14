@@ -188,5 +188,47 @@ describe('WebhookService', () => {
         }),
       );
     });
+
+    it('should accept shipment-only payloads for pickup and delivery optimization', async () => {
+      const result = await service.handleEvent(
+        {
+          eventType: 'new_order',
+          vehicles: [{ id: 'v3', lat: 4.711, lng: -74.0721, capacity: 15 }],
+          shipments: [
+            {
+              id: 'sh-1',
+              pickup: {
+                id: 'pu-1',
+                location: { lat: 4.705, lon: -74.068 },
+                amount: 5,
+              },
+              delivery: {
+                id: 'dl-1',
+                location: { lat: 4.695, lon: -74.06 },
+                amount: 5,
+              },
+            },
+          ],
+        },
+        'corr-ship',
+      );
+
+      expect(result.received).toBe(true);
+      expect(result.jobCount).toBe(0);
+      expect(result.shipmentCount).toBe(1);
+      expect(mockGrpcClientService.optimizeRoutes).toHaveBeenCalledWith(
+        expect.objectContaining({
+          jobs: [],
+          shipments: [
+            expect.objectContaining({
+              id: 'sh-1',
+              pickup: expect.objectContaining({ id: 'pu-1' }),
+              delivery: expect.objectContaining({ id: 'dl-1' }),
+            }),
+          ],
+        }),
+        'corr-ship',
+      );
+    });
   });
 });

@@ -10,6 +10,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import {
+  ApiBearerAuth,
   ApiBody,
   ApiOperation,
   ApiQuery,
@@ -23,6 +24,7 @@ import { LoginDto } from './dto/login.dto';
 import { RefreshDto } from './dto/refresh.dto';
 import { RegisterDto } from './dto/register.dto';
 import { GoogleAuthGuard } from './google-auth.guard';
+import { JwtAuthGuard } from './jwt-auth.guard';
 
 interface GoogleProfile {
   googleId: string;
@@ -34,6 +36,13 @@ interface GoogleProfile {
 interface GoogleAuthRequest extends Request {
   user: GoogleProfile;
 }
+
+interface AuthenticatedRequest extends Request {
+  user?: {
+    userId?: string;
+  };
+}
+
 type GoogleFrontendTarget = 'web' | 'admin' | 'mobile';
 
 @ApiTags('auth')
@@ -138,6 +147,38 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   refresh(@Body() body: RefreshDto) {
     return this.authService.refresh(body.refreshToken);
+  }
+
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Get authenticated user profile',
+    description:
+      'Returns profile information for the user identified by the JWT access token.',
+  })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Authenticated user profile.',
+    schema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string' },
+        email: { type: 'string', nullable: true },
+        name: { type: 'string', nullable: true },
+        role: { type: 'string', enum: ['admin', 'conductor'] },
+        avatar: { type: 'string', nullable: true },
+        createdAt: { type: 'string', format: 'date-time' },
+      },
+      required: ['id', 'email', 'name', 'role', 'avatar', 'createdAt'],
+    },
+  })
+  @ApiResponse({
+    status: HttpStatus.UNAUTHORIZED,
+    description: 'Access token is missing, invalid, or user no longer exists.',
+  })
+  @Get('me')
+  @UseGuards(JwtAuthGuard)
+  me(@Req() req: AuthenticatedRequest) {
+    return this.authService.getProfile(req.user?.userId ?? '');
   }
 
   @ApiOperation({

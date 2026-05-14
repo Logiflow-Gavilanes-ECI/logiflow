@@ -231,6 +231,7 @@ describe('AuthService', () => {
       expect.objectContaining({
         sub: 'user-local-1',
         email: 'admin@logiflow.app',
+        name: null,
         role: 'admin',
         vehicleId: 'user-local-1',
       }),
@@ -292,6 +293,7 @@ describe('AuthService', () => {
       expect.objectContaining({
         sub: 'user-google-1',
         email: 'driver@gmail.com',
+        name: 'Test Driver',
         role: 'conductor',
         vehicleId: 'user-google-1',
       }),
@@ -371,6 +373,7 @@ describe('AuthService', () => {
         id: 'user-google-1',
         role: 'conductor',
         email: 'driver@gmail.com',
+        name: 'Test Driver',
       },
     });
     prismaService.refreshToken.updateMany.mockResolvedValueOnce({ count: 1 });
@@ -391,10 +394,47 @@ describe('AuthService', () => {
       expect.objectContaining({
         sub: 'user-google-1',
         email: 'driver@gmail.com',
+        name: 'Test Driver',
         role: 'conductor',
         vehicleId: 'user-google-1',
       }),
     );
+  });
+
+  it('returns the authenticated user profile', async () => {
+    const createdAt = new Date('2026-05-14T12:56:00.000Z');
+    prismaService.user.findUnique.mockResolvedValueOnce({
+      id: 'user-google-1',
+      email: 'driver@gmail.com',
+      name: 'Test Driver',
+      passwordHash: null,
+      role: 'conductor',
+      provider: 'google',
+      googleId: 'google-123',
+      avatar: 'https://photo.url/avatar.jpg',
+      createdAt,
+    });
+
+    await expect(authService.getProfile('user-google-1')).resolves.toEqual({
+      id: 'user-google-1',
+      email: 'driver@gmail.com',
+      name: 'Test Driver',
+      role: 'conductor',
+      avatar: 'https://photo.url/avatar.jpg',
+      createdAt: '2026-05-14T12:56:00.000Z',
+    });
+
+    expect(prismaService.user.findUnique).toHaveBeenCalledWith({
+      where: { id: 'user-google-1' },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        avatar: true,
+        createdAt: true,
+      },
+    });
   });
 
   it('rejects refresh when token does not exist', async () => {

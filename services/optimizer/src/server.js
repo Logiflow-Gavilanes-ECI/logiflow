@@ -442,6 +442,236 @@ function mapEntityId(value, idMapper) {
   return originalId !== undefined ? originalId : String(value || '');
 }
 
+function firstNumeric(value, fallback = 0) {
+  const rawValue = Array.isArray(value) ? value[0] : value;
+  const numberValue = Number(rawValue);
+  return Number.isFinite(numberValue) ? numberValue : fallback;
+}
+
+function toBigIntValue(value) {
+  if (typeof value === 'bigint') {
+    return value;
+  }
+
+  const numberValue = firstNumeric(value, 0);
+  return BigInt(Math.max(0, Math.round(numberValue)));
+}
+
+function normalizeMatrixValues(values) {
+  if (!Array.isArray(values) || values.length === 0) {
+    return null;
+  }
+
+  if (Array.isArray(values[0])) {
+    return values.flat().map(Number);
+  }
+
+  return values.map(Number);
+}
+
+function matrixIndexForLocation(indexMap, location) {
+  if (!location) {
+    return undefined;
+  }
+
+  const lat = Number(location.lat);
+  const lon = Number(location.lon);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+    return undefined;
+  }
+
+  return indexMap.get(`${lat.toFixed(6)},${lon.toFixed(6)}`);
+}
+
+function estimateRouteMetricFromMatrix(route, matrixResult, field) {
+  const locations = matrixResult?.locations || [];
+  const values = normalizeMatrixValues(matrixResult?.[field]);
+  if (!Array.isArray(locations) || locations.length === 0 || !values) {
+    return BigInt(0);
+  }
+
+  const n = locations.length;
+  if (values.length !== n * n) {
+    return BigInt(0);
+  }
+
+  const indexMap = buildLocationIndexMap(locations);
+  if (!indexMap) {
+    return BigInt(0);
+  }
+
+  let total = 0;
+  const steps = route.steps || [];
+  for (let i = 1; i < steps.length; i += 1) {
+    const from = matrixIndexForLocation(indexMap, steps[i - 1]?.location);
+    const to = matrixIndexForLocation(indexMap, steps[i]?.location);
+    if (from === undefined || to === undefined) {
+      continue;
+    }
+
+    const value = Number(values[(from * n) + to]);
+    if (Number.isFinite(value) && value > 0) {
+      total += value;
+    }
+  }
+
+  return BigInt(Math.round(total));
+}
+
+function toRadians(value) {
+  return (value * Math.PI) / 180;
+}
+
+function haversineDistanceMeters(origin, destination) {
+  if (!origin || !destination) {
+    return 0;
+  }
+
+  const originLat = Number(origin.lat);
+  const originLon = Number(origin.lon);
+  const destinationLat = Number(destination.lat);
+  const destinationLon = Number(destination.lon);
+  if (
+    !Number.isFinite(originLat)
+    || !Number.isFinite(originLon)
+    || !Number.isFinite(destinationLat)
+    || !Number.isFinite(destinationLon)
+  ) {
+    return 0;
+  }
+
+  const earthRadiusMeters = 6371000;
+  const dLat = toRadians(destinationLat - originLat);
+  const dLon = toRadians(destinationLon - originLon);
+  const lat1 = toRadians(originLat);
+  const lat2 = toRadians(destinationLat);
+  const a = (Math.sin(dLat / 2) ** 2)
+    + (Math.cos(lat1) * Math.cos(lat2) * (Math.sin(dLon / 2) ** 2));
+
+  return Math.round(2 * earthRadiusMeters * Math.asin(Math.sqrt(a)));
+}
+
+function estimateRouteDistanceFromSteps(route) {
+  let total = 0;
+  const steps = route.steps || [];
+  for (let i = 1; i < steps.length; i += 1) {
+    total += haversineDistanceMeters(steps[i - 1]?.location, steps[i]?.location);
+  }
+  return BigInt(total);
+}
+
+function estimateRouteDistance(route, matrixResult) {
+  const matrixDistance = estimateRouteMetricFromMatrix(route, matrixResult, 'distances');
+  if (matrixDistance > BigInt(0)) {
+    return matrixDistance;
+  }
+
+  return estimateRouteDistanceFromSteps(route);
+}
+
+function enrichRouteMetrics(grpcResponse, matrixResult) {
+  if (!grpcResponse?.routes?.length) {
+    return false;
+  }
+
+  let updated = false;
+  let routingDistance = BigInt(0);
+
+  grpcResponse.routes = grpcResponse.routes.map((route) => {
+    const currentDistance = toBigIntValue(route.distance);
+    const estimatedDistance = currentDistance > BigInt(0)
+      ? currentDistance
+      : estimateRouteDistance(route, matrixResult);
+
+    if (currentDistance === BigInt(0) && estimatedDistance > BigInt(0)) {
+      updated = true;
+      return {
+        ...route,
+        distance: estimatedDistance,
+      };
+    }
+
+    return route;
+  });
+
+  for (const route of grpcResponse.routes) {
+    routingDistance += toBigIntValue(route.distance);
+  }
+
+  if (toBigIntValue(grpcResponse.routingDistance) === BigInt(0) && routingDistance > BigInt(0)) {
+    grpcResponse.routingDistance = routingDistance;
+    updated = true;
+  }
+
+  return updated;
+}
+
+function buildTaskDetailsById(req) {
+  const details = new Map();
+
+  for (const job of req?.jobs || []) {
+    details.set(String(job.id), {
+      amount: firstNumeric(job.amount, 0),
+      skills: job.skills || [],
+    });
+  }
+
+  for (const shipment of req?.shipments || []) {
+    if (shipment.pickup?.id) {
+      details.set(String(shipment.pickup.id), {
+        amount: firstNumeric(shipment.pickup.amount, 0),
+        skills: shipment.pickup.skills || shipment.skills || [],
+      });
+    }
+
+    if (shipment.delivery?.id) {
+      details.set(String(shipment.delivery.id), {
+        amount: firstNumeric(shipment.delivery.amount, 0),
+        skills: shipment.delivery.skills || shipment.skills || [],
+      });
+    }
+  }
+
+  return details;
+}
+
+function enrichRouteStepDetails(grpcResponse, req) {
+  if (!grpcResponse?.routes?.length) {
+    return false;
+  }
+
+  const detailsById = buildTaskDetailsById(req);
+  if (detailsById.size === 0) {
+    return false;
+  }
+
+  let updated = false;
+  grpcResponse.routes = grpcResponse.routes.map((route) => ({
+    ...route,
+    steps: (route.steps || []).map((step) => {
+      const details = detailsById.get(String(step.id));
+      if (!details) {
+        return step;
+      }
+
+      const next = { ...step };
+      if (firstNumeric(next.amount, 0) === 0 && details.amount > 0) {
+        next.amount = details.amount;
+        updated = true;
+      }
+
+      if ((!Array.isArray(next.skills) || next.skills.length === 0) && details.skills.length > 0) {
+        next.skills = details.skills;
+        updated = true;
+      }
+
+      return next;
+    }),
+  }));
+
+  return updated;
+}
+
 function vroomToGrpcResponse(vroomRes, idMapper) {
   const response = {
     code: vroomRes.code || 0,
@@ -454,24 +684,32 @@ function vroomToGrpcResponse(vroomRes, idMapper) {
     response.routes = vroomRes.routes.map((route) => ({
       vehicleId: mapEntityId(route.vehicle_id ?? route.vehicle, idMapper),
       cost: route.cost || 0,
-      distance: BigInt(route.distance || 0),
-      duration: BigInt(route.duration || 0),
-      steps: route.steps.map((step) => ({
-        type: step.type || '',
-        id: mapEntityId(step.id, idMapper),
-        location: {
-          lat: step.location ? step.location[1] : 0,
-          lon: step.location ? step.location[0] : 0,
-        },
-        service: step.service || 0,
-        waitingTime: step.waiting_time || 0,
-        arrival: step.arrival || 0,
-        departure: step.departure || 0,
-        amount: step.amount || [],
-        skills: step.skills || [],
-      })),
-      delivery: route.delivery || 0,
-      pickup: route.pickup || 0,
+      distance: toBigIntValue(route.distance),
+      duration: toBigIntValue(route.duration),
+      steps: (route.steps || []).map((step) => {
+        const arrival = firstNumeric(step.arrival, 0);
+        const service = firstNumeric(step.service, 0);
+        const departure = firstNumeric(step.departure, NaN);
+
+        return {
+          type: step.type || '',
+          id: mapEntityId(step.id, idMapper),
+          location: {
+            lat: step.location ? step.location[1] : 0,
+            lon: step.location ? step.location[0] : 0,
+          },
+          service,
+          waitingTime: firstNumeric(step.waiting_time, 0),
+          arrival,
+          departure: Number.isFinite(departure) && departure > 0
+            ? departure
+            : arrival + service,
+          amount: firstNumeric(step.amount, 0),
+          skills: step.skills || [],
+        };
+      }),
+      delivery: firstNumeric(route.delivery, 0),
+      pickup: firstNumeric(route.pickup, 0),
     }));
   }
 
@@ -502,8 +740,8 @@ function vroomToGrpcResponse(vroomRes, idMapper) {
     };
   }
 
-  response.routingDistance = BigInt(vroomRes.summary?.distance || 0);
-  response.routingDuration = BigInt(vroomRes.summary?.duration || 0);
+  response.routingDistance = toBigIntValue(vroomRes.summary?.distance);
+  response.routingDuration = toBigIntValue(vroomRes.summary?.duration);
 
   return response;
 }
@@ -783,6 +1021,8 @@ async function optimizeRoutes(call, callback) {
     });
 
     const grpcResponse = vroomToGrpcResponse(vroomRes.data, idMapper);
+    const routeMetricsEnriched = enrichRouteMetrics(grpcResponse, matrixResult);
+    const routeStepDetailsEnriched = enrichRouteStepDetails(grpcResponse, call.request);
     if (matrixResult?.source) {
       grpcResponse.matrixSource = matrixResult.source;
     }
@@ -801,6 +1041,9 @@ async function optimizeRoutes(call, callback) {
         routes: grpcResponse.routes?.length || 0,
         unassigned: grpcResponse.unassigned?.length || 0,
         matrixSource,
+        routeMetricsEnriched,
+        routeStepDetailsEnriched,
+        routingDistance: String(grpcResponse.routingDistance || 0),
       },
       'optimize_completed',
     );
@@ -940,6 +1183,8 @@ module.exports = {
   createVroomIdMapper,
   grpcToVroomRequest,
   vroomToGrpcResponse,
+  enrichRouteMetrics,
+  enrichRouteStepDetails,
   buildMatrixLocations,
   maybeAttachGoogleMatrix,
   callAIPredictor,

@@ -35,9 +35,10 @@ export class WebhookService {
   async handleEvent(event: WebhookEventDto, correlationId?: string) {
     const effectiveCorrelationId = correlationId ?? UNKNOWN_CORRELATION_ID;
     const jobsCount = event.jobs?.length ?? event.stops?.length ?? 0;
+    const shipmentsCount = event.shipments?.length ?? 0;
 
     this.logger.log(
-      `Received event: ${event.eventType} | vehicles: ${event.vehicles.length} | jobs: ${jobsCount} | correlationId: ${effectiveCorrelationId}`,
+      `Received event: ${event.eventType} | vehicles: ${event.vehicles.length} | jobs: ${jobsCount} | shipments: ${shipmentsCount} | correlationId: ${effectiveCorrelationId}`,
     );
 
     const grpcRequest = this.buildOptimizeRequest(event);
@@ -128,6 +129,7 @@ export class WebhookService {
       vehicleCount: event.vehicles.length,
       stopCount: event.stops?.length ?? 0,
       jobCount: grpcRequest.jobs.length,
+      shipmentCount: grpcRequest.shipments.length,
       correlationId: effectiveCorrelationId,
       optimizedRoutes,
       fallback: optimizerFailed,
@@ -191,12 +193,6 @@ export class WebhookService {
     const jobs =
       jobsFromPayload.length > 0 ? jobsFromPayload : jobsFromLegacyStops;
 
-    if (jobs.length === 0) {
-      throw new BadRequestException(
-        'The webhook payload must include at least one job or one legacy stop.',
-      );
-    }
-
     const shipments: Shipment[] = (event.shipments ?? []).map((shipment) => ({
       id: shipment.id,
       pickup: {
@@ -228,6 +224,12 @@ export class WebhookService {
       skills: shipment.skills ?? [],
       priority: shipment.priority ?? 0,
     }));
+
+    if (jobs.length === 0 && shipments.length === 0) {
+      throw new BadRequestException(
+        'The webhook payload must include at least one job, one legacy stop, or one shipment.',
+      );
+    }
 
     const request: OptimizeRequest = {
       vehicles,
