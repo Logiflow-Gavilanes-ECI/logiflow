@@ -5,10 +5,19 @@ import {
   HttpStatus,
   Post,
   Req,
+  UnauthorizedException,
+  UseGuards,
 } from '@nestjs/common';
-import { ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiOperation,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import { Request } from 'express';
 import { NotificationsService } from './notifications.service';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
 interface AuthenticatedRequest extends Request {
   user: { userId: string };
@@ -16,6 +25,8 @@ interface AuthenticatedRequest extends Request {
 
 @ApiTags('notifications')
 @Controller('notifications')
+@UseGuards(JwtAuthGuard)
+@ApiBearerAuth()
 export class NotificationsController {
   constructor(private readonly notificationsService: NotificationsService) {}
 
@@ -45,6 +56,9 @@ export class NotificationsController {
     @Req() req: AuthenticatedRequest,
     @Body() body: { token: string; platform: string },
   ) {
+    if (!req.user?.userId) {
+      throw new UnauthorizedException('Invalid or missing token');
+    }
     await this.notificationsService.registerDeviceToken(
       req.user.userId,
       body.token,

@@ -177,6 +177,22 @@ function createVroomIdMapper() {
   };
 }
 
+function buildTimeWindow(start, end) {
+  const startValue = Number.isFinite(Number(start)) ? Number(start) : undefined;
+  const endValue = Number.isFinite(Number(end)) ? Number(end) : undefined;
+
+  if (endValue === undefined || endValue <= 0) {
+    return undefined;
+  }
+
+  const safeStart = startValue !== undefined && startValue >= 0 ? startValue : 0;
+  if (endValue < safeStart) {
+    return undefined;
+  }
+
+  return [safeStart, endValue];
+}
+
 function grpcToVroomRequest(req, idMapper) {
   const vroomReq = {
     jobs: [],
@@ -205,22 +221,32 @@ function grpcToVroomRequest(req, idMapper) {
   };
 
   if (req.jobs && req.jobs.length > 0) {
-    vroomReq.jobs = req.jobs.map((job) => ({
+    vroomReq.jobs = req.jobs.map((job) => {
+      const jobWindow = buildTimeWindow(job.timeWindowStart, job.timeWindowEnd);
+      return {
       id: idMapper.toVroomId(job.id),
       location: [job.location.lon, job.location.lat],
       location_index: indexFor(job.location),
       service: job.service || 0,
       amount: job.amount ? [job.amount] : [0],
-      time_windows: job.timeWindowStart || job.timeWindowEnd
-        ? [[job.timeWindowStart || 0, job.timeWindowEnd || 4294967295]]
-        : undefined,
+      time_windows: jobWindow ? [jobWindow] : undefined,
       skills: job.skills || [],
       priority: job.priority || 0,
-    }));
+      };
+    });
   }
 
   if (req.shipments && req.shipments.length > 0) {
-    vroomReq.shipments = req.shipments.map((shipment) => ({
+    vroomReq.shipments = req.shipments.map((shipment) => {
+      const pickupWindow = buildTimeWindow(
+        shipment.pickup.timeWindowStart,
+        shipment.pickup.timeWindowEnd,
+      );
+      const deliveryWindow = buildTimeWindow(
+        shipment.delivery.timeWindowStart,
+        shipment.delivery.timeWindowEnd,
+      );
+      return {
       id: idMapper.toVroomId(shipment.id),
       pickup: {
         id: idMapper.toVroomId(shipment.pickup.id),
@@ -228,9 +254,7 @@ function grpcToVroomRequest(req, idMapper) {
         location_index: indexFor(shipment.pickup.location),
         service: shipment.pickup.service || 0,
         amount: shipment.pickup.amount ? [shipment.pickup.amount] : [0],
-        time_windows: shipment.pickup.timeWindowStart || shipment.pickup.timeWindowEnd
-          ? [[shipment.pickup.timeWindowStart || 0, shipment.pickup.timeWindowEnd || 4294967295]]
-          : undefined,
+        time_windows: pickupWindow ? [pickupWindow] : undefined,
         skills: shipment.pickup.skills || [],
       },
       delivery: {
@@ -239,31 +263,36 @@ function grpcToVroomRequest(req, idMapper) {
         location_index: indexFor(shipment.delivery.location),
         service: shipment.delivery.service || 0,
         amount: shipment.delivery.amount ? [shipment.delivery.amount] : [0],
-        time_windows: shipment.delivery.timeWindowStart || shipment.delivery.timeWindowEnd
-          ? [[shipment.delivery.timeWindowStart || 0, shipment.delivery.timeWindowEnd || 4294967295]]
-          : undefined,
+        time_windows: deliveryWindow ? [deliveryWindow] : undefined,
         skills: shipment.delivery.skills || [],
       },
       skills: shipment.skills || [],
       priority: shipment.priority || 0,
-    }));
+      };
+    });
   }
 
   if (req.vehicles && req.vehicles.length > 0) {
-    vroomReq.vehicles = req.vehicles.map((vehicle) => ({
+    vroomReq.vehicles = req.vehicles.map((vehicle) => {
+      const startCoord = isValidCoordinate(vehicle.start) ? vehicle.start : undefined;
+      const endCoord = isValidCoordinate(vehicle.end) ? vehicle.end : undefined;
+      const vehicleWindow = buildTimeWindow(
+        vehicle.timeWindowStart,
+        vehicle.timeWindowEnd,
+      );
+      return {
       id: idMapper.toVroomId(vehicle.id),
       profile: mapProfile(vehicle.profile),
-      start: vehicle.start ? [vehicle.start.lon, vehicle.start.lat] : null,
-      start_index: indexFor(vehicle.start),
-      end: vehicle.end ? [vehicle.end.lon, vehicle.end.lat] : null,
-      end_index: indexFor(vehicle.end),
+      start: startCoord ? [startCoord.lon, startCoord.lat] : undefined,
+      start_index: startCoord ? indexFor(startCoord) : undefined,
+      end: endCoord ? [endCoord.lon, endCoord.lat] : undefined,
+      end_index: endCoord ? indexFor(endCoord) : undefined,
       capacity: vehicle.capacity ? [vehicle.capacity] : [0],
       skills: vehicle.skills || [],
-      time_window: vehicle.timeWindowStart || vehicle.timeWindowEnd
-        ? [vehicle.timeWindowStart || 0, vehicle.timeWindowEnd || 4294967295]
-        : undefined,
+      time_window: vehicleWindow,
       restrictions: vehicle.restrictions || [],
-    }));
+      };
+    });
   }
 
   if (req.options) {
