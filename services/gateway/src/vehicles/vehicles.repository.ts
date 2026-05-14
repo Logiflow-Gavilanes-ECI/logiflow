@@ -45,6 +45,8 @@ export class VehiclesRepository {
         lat: 4.711,
         lng: -74.0721,
         capacity: 1,
+        plate: 'ABC-123',
+        model: 'Toyota Hilux 2023',
         status: 'online',
       },
     });

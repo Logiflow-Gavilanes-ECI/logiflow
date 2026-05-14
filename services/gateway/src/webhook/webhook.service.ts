@@ -315,6 +315,8 @@ export class WebhookService {
               lat,
               lng,
               capacity: vehicle.capacity,
+              plate: 'ABC-123',
+              model: 'Toyota Hilux 2023',
               status: 'online',
             },
           });

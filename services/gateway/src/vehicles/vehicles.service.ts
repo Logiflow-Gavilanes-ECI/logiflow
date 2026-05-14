@@ -52,12 +52,8 @@ export class VehiclesService {
     return this.repo.findAll();
   }
 
-  async findOne(id: string): Promise<VehicleRecord> {
-    const vehicle = await this.repo.findById(id);
-    if (!vehicle) {
-      throw new NotFoundException(`Vehicle "${id}" not found`);
-    }
-    return vehicle;
+  async findOne(id: string): Promise<VehicleDetails> {
+    return this.findDetails(id);
   }
 
   async findDetails(id: string): Promise<VehicleDetails> {
@@ -77,12 +73,12 @@ export class VehiclesService {
   }
 
   async update(id: string, dto: UpdateVehicleDto): Promise<VehicleRecord> {
-    await this.findOne(id);
+    await this.assertExists(id);
     return this.repo.update(id, dto);
   }
 
   async remove(id: string): Promise<void> {
-    await this.findOne(id);
+    await this.assertExists(id);
     return this.repo.remove(id);
   }
 
@@ -141,6 +137,14 @@ export class VehiclesService {
 
     return createFallbackStops();
   }
+
+  private async assertExists(id: string): Promise<VehicleRecord> {
+    const vehicle = await this.repo.findById(id);
+    if (!vehicle) {
+      throw new NotFoundException(`Vehicle "${id}" not found`);
+    }
+    return vehicle;
+  }
 }
 
 function compareStopsForArrivalOrder(
@@ -180,19 +184,11 @@ function toVehicleDetails(vehicle: VehicleRecord): VehicleDetails {
 }
 
 function buildVehiclePlate(vehicleId: string): string {
-  if (vehicleId === 'v-001') {
-    return 'ABC-123';
-  }
-
-  return vehicleId.toUpperCase();
+  return 'ABC-123';
 }
 
 function buildVehicleModel(vehicleId: string): string {
-  if (vehicleId === 'v-001') {
-    return 'Toyota Hilux 2023';
-  }
-
-  return `Vehicle ${vehicleId}`;
+  return 'Toyota Hilux 2023';
 }
 
 function createFallbackStops(): RouteStopSource[] {

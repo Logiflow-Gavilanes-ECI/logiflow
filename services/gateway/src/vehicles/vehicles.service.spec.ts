@@ -112,19 +112,37 @@ describe('VehiclesService', () => {
   });
 
   describe('findOne', () => {
-    it('should return a vehicle by id', async () => {
+    it('should return vehicle details by id', async () => {
       repo.findById.mockResolvedValue(mockVehicle);
 
       const found = await service.findOne('v1');
-      expect(found).toEqual(mockVehicle);
+      expect(found).toEqual({
+        id: 'v1',
+        plate: 'ABC-123',
+        model: 'Toyota Hilux 2023',
+        status: 'online',
+        lat: 4.711,
+        lng: -74.072,
+        capacity: 100,
+      });
     });
 
-    it('should throw NotFoundException for unknown id', async () => {
+    it('should provision unknown ids for driver profile lookups', async () => {
       repo.findById.mockResolvedValue(null);
+      repo.ensureExists.mockResolvedValue({
+        ...mockVehicle,
+        id: 'unknown',
+      });
 
-      await expect(service.findOne('unknown')).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(service.findOne('unknown')).resolves.toEqual({
+        id: 'unknown',
+        plate: 'ABC-123',
+        model: 'Toyota Hilux 2023',
+        status: 'online',
+        lat: 4.711,
+        lng: -74.072,
+        capacity: 100,
+      });
     });
   });
 
@@ -196,6 +214,8 @@ describe('VehiclesService', () => {
         'de015a64-dcb6-40ce-9c3e-6d037e7c706c',
       );
       expect(result.id).toBe('de015a64-dcb6-40ce-9c3e-6d037e7c706c');
+      expect(result.plate).toBe('ABC-123');
+      expect(result.model).toBe('Toyota Hilux 2023');
       expect(result.status).toBe('online');
       expect(result.lat).toBe(4.711);
       expect(result.lng).toBe(-74.072);

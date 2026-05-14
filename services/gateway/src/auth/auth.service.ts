@@ -59,6 +59,8 @@ type VehicleWriteClient = {
         lat: number;
         lng: number;
         capacity: number;
+        plate: string;
+        model: string;
         status: string;
       };
     }) => Promise<{ id: string }>;
@@ -305,6 +307,8 @@ export class AuthService {
             lat: 4.711,
             lng: -74.0721,
             capacity: 1,
+            plate: 'ABC-123',
+            model: 'Toyota Hilux 2023',
             status: 'online',
           },
         });
