@@ -18,13 +18,20 @@ const CHECK_INTERVAL_MS    = 6000;
 
 const PORT = process.env.PORT || 3001;
 
-function normalizeStep(s) {
+function normalizeStep(s, index) {
+  const stopId = s.id || s.stopId;
+  const address =
+    s.address ||
+    s.stopAddress ||
+    (stopId ? `Stop ${index + 1} (${String(stopId).slice(0, 8)})` : undefined);
+
   return {
-    id: s.id || s.stopId,
+    id: stopId,
     lat: s.lat ?? s.location?.lat,
     lng: s.lng ?? s.lon ?? s.location?.lon,
     order: s.arrivalOrder || s.arrival,
     type: s.type,
+    address,
   };
 }
 
@@ -32,7 +39,9 @@ function processRouteUpdate(io, route, incoming) {
   const vehicleId = route.vehicleId || route.vehicle_id;
   if (!vehicleId) return;
 
-  const steps = (route.steps || []).map(normalizeStep);
+  const steps = (route.steps || []).map((step, index) =>
+    normalizeStep(step, index),
+  );
 
   const polyline = steps
     .filter((s) => s.lat != null && s.lng != null)
