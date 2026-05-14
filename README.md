@@ -239,11 +239,14 @@ service RouteOptimizer {
 
 ### JWT + Refresh Token Rotation
 
-1. **Login** → returns `accessToken` + `refreshToken`
-2. **Access token** expires in 1 hour (configurable via `JWT_EXPIRES_IN`)
-3. **Refresh token** stored hashed in PostgreSQL, 7-day TTL
-4. **Token rotation** — each refresh consumes the old token and issues a new pair
-5. **Password hashing** — scrypt with random 16-byte salt for registered users
+1. **Register** -> `POST /auth/register` creates demo users with `{ email, password, role }`
+2. **Login** -> `POST /auth/login` returns `{ accessToken, role }`
+3. **Access token** expires in 1 hour (configurable via `JWT_EXPIRES_IN`)
+4. **Refresh token** stored hashed in PostgreSQL, 7-day TTL
+5. **Token rotation** — each refresh consumes the old token and issues a new pair
+6. **Password hashing** — bcrypt hashes for registered users
+
+The gateway seed creates `admin@logiflow.app` / `Admin2026!` and `conductor@logiflow.app` / `Driver2026!`. The conductor user uses `id = v-001`, so its JWT resolves to `vehicleId: v-001` for the demo vehicle.
 
 ### Google OAuth 2.0 (Identity Provider)
 
@@ -270,7 +273,7 @@ For multi-frontend deployments, start login with `GET /auth/google?app=admin` to
 
 > **Graceful degradation:** If `GOOGLE_CLIENT_ID` is not set, the `/auth/google` endpoint returns a 501 with a helpful message. The gateway starts normally without Google credentials.
 >
-> **Default role:** Users created through Google OAuth are provisioned as `conductor` by default.
+> **Default role:** Users created through Google OAuth are provisioned as `conductor` by default; emails in `GOOGLE_ADMIN_EMAILS` are promoted to `admin`.
 >
 > **Mobile token exchange note:** `POST /auth/google/token` verifies the incoming `idToken` against the configured `GOOGLE_CLIENT_ID` audience.
 

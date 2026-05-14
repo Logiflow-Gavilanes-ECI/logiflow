@@ -17,9 +17,8 @@ async function bootstrap() {
     .split(',')
     .map((origin) => origin.trim())
     .filter((origin) => origin.length > 0);
-  const allowedOrigins = corsOrigins.length > 0
-    ? corsOrigins
-    : defaultCorsOrigins;
+  const allowedOrigins =
+    corsOrigins.length > 0 ? corsOrigins : defaultCorsOrigins;
 
   app.enableCors({
     origin: (origin, callback) => {

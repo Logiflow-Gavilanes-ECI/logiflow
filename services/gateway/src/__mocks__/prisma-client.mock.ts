@@ -23,7 +23,13 @@ type StopEntity = {
 
 type UserEntity = {
   id: string;
+  email?: string | null;
+  name?: string | null;
+  passwordHash?: string | null;
   role: 'admin' | 'conductor';
+  provider?: string;
+  googleId?: string | null;
+  avatar?: string | null;
 };
 
 type RefreshTokenEntity = {
@@ -41,8 +47,26 @@ export class PrismaClient {
   private readonly userStore = new Map<string, UserEntity>();
   private readonly refreshTokenStore = new Map<string, RefreshTokenEntity>();
 
-  private nextId(prefix: 'v' | 's', size: number): string {
+  private nextId(prefix: 'v' | 's' | 'u', size: number): string {
     return `${prefix}-${size + 1}`;
+  }
+
+  private findUserByUnique(where: {
+    id?: string;
+    email?: string;
+    googleId?: string;
+  }) {
+    if (where.id) {
+      return this.userStore.get(where.id) ?? null;
+    }
+
+    return (
+      Array.from(this.userStore.values()).find((user) => {
+        if (where.email && user.email === where.email) return true;
+        if (where.googleId && user.googleId === where.googleId) return true;
+        return false;
+      }) ?? null
+    );
   }
 
   vehicle = {
@@ -297,12 +321,40 @@ export class PrismaClient {
   };
 
   user = {
+    findUnique: jest.fn(
+      ({
+        where,
+      }: {
+        where: { id?: string; email?: string; googleId?: string };
+      }) => {
+        return this.findUserByUnique(where);
+      },
+    ),
     create: jest.fn(
-      ({ data }: { data: { id?: string; role: 'admin' | 'conductor' } }) => {
-        const id = data.id ?? `u-${this.userStore.size + 1}`;
+      ({
+        data,
+      }: {
+        data: {
+          id?: string;
+          email?: string;
+          name?: string | null;
+          passwordHash?: string;
+          role: 'admin' | 'conductor';
+          provider?: string;
+          googleId?: string | null;
+          avatar?: string | null;
+        };
+      }) => {
+        const id = data.id ?? this.nextId('u', this.userStore.size);
         const created: UserEntity = {
           id,
+          email: data.email ?? null,
+          name: data.name ?? null,
+          passwordHash: data.passwordHash ?? null,
           role: data.role,
+          provider: data.provider ?? 'local',
+          googleId: data.googleId ?? null,
+          avatar: data.avatar ?? null,
         };
 
         this.userStore.set(id, created);
@@ -315,26 +367,42 @@ export class PrismaClient {
         update,
         create,
       }: {
-        where: { id: string };
-        update: { role: 'admin' | 'conductor' };
-        create: { id: string; role: 'admin' | 'conductor' };
+        where: { id?: string; email?: string; googleId?: string };
+        update: Partial<UserEntity>;
+        create: {
+          id?: string;
+          email?: string;
+          name?: string | null;
+          passwordHash?: string | null;
+          role: 'admin' | 'conductor';
+          provider?: string;
+          googleId?: string | null;
+          avatar?: string | null;
+        };
       }) => {
-        const existing = this.userStore.get(where.id);
+        const existing = this.findUserByUnique(where);
 
         if (existing) {
           const updated: UserEntity = {
             ...existing,
             ...update,
           };
-          this.userStore.set(where.id, updated);
+          this.userStore.set(existing.id, updated);
           return updated;
         }
 
+        const id = create.id ?? this.nextId('u', this.userStore.size);
         const created: UserEntity = {
-          id: create.id,
+          id,
+          email: create.email ?? null,
+          name: create.name ?? null,
+          passwordHash: create.passwordHash ?? null,
           role: create.role,
+          provider: create.provider ?? 'google',
+          googleId: create.googleId ?? null,
+          avatar: create.avatar ?? null,
         };
-        this.userStore.set(create.id, created);
+        this.userStore.set(id, created);
         return created;
       },
     ),

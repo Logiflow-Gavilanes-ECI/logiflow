@@ -19,7 +19,9 @@ import {
 import { ConfigService } from '@nestjs/config';
 import type { Request, Response } from 'express';
 import { AuthService } from './auth.service';
+import { LoginDto } from './dto/login.dto';
 import { RefreshDto } from './dto/refresh.dto';
+import { RegisterDto } from './dto/register.dto';
 import { GoogleAuthGuard } from './google-auth.guard';
 
 interface GoogleProfile {
@@ -41,6 +43,62 @@ export class AuthController {
     private readonly authService: AuthService,
     private readonly configService: ConfigService,
   ) {}
+
+  @ApiOperation({
+    summary: 'Register test user',
+    description:
+      'Creates a local email/password user for demo access. Passwords are stored as bcrypt hashes.',
+  })
+  @ApiBody({ type: RegisterDto })
+  @ApiResponse({
+    status: HttpStatus.CREATED,
+    description: 'User created.',
+    schema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string' },
+        email: { type: 'string' },
+        role: { type: 'string', enum: ['admin', 'conductor'] },
+      },
+      required: ['id', 'email', 'role'],
+    },
+  })
+  @ApiResponse({
+    status: HttpStatus.CONFLICT,
+    description: 'A user with this email already exists.',
+  })
+  @Post('register')
+  register(@Body() body: RegisterDto) {
+    return this.authService.register(body);
+  }
+
+  @ApiOperation({
+    summary: 'Login with email and password',
+    description:
+      'Validates a local user password and returns an access token for the demo frontend.',
+  })
+  @ApiBody({ type: LoginDto })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Login successful.',
+    schema: {
+      type: 'object',
+      properties: {
+        accessToken: { type: 'string' },
+        role: { type: 'string', enum: ['admin', 'conductor'] },
+      },
+      required: ['accessToken', 'role'],
+    },
+  })
+  @ApiResponse({
+    status: HttpStatus.UNAUTHORIZED,
+    description: 'Email or password is invalid.',
+  })
+  @Post('login')
+  @HttpCode(HttpStatus.OK)
+  login(@Body() body: LoginDto) {
+    return this.authService.login(body);
+  }
 
   @ApiOperation({
     summary: 'Refresh access token',

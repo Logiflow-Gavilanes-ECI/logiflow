@@ -1,10 +1,12 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
+import * as bcrypt from 'bcrypt';
 import { createHash, randomBytes } from 'node:crypto';
 import type { AuthRole } from './auth-roles';
 import { PrismaService } from '../prisma/prisma.service';
@@ -46,9 +48,7 @@ type VehicleWriteClient = {
     findUnique: (args: { where: { id: string } }) => Promise<{
       id: string;
     } | null>;
-    findFirst: (args: {
-      orderBy: { createdAt: 'asc' };
-    }) => Promise<{
+    findFirst: (args: { orderBy: { createdAt: 'asc' } }) => Promise<{
       id: string;
     } | null>;
     upsert: (args: {
@@ -83,6 +83,7 @@ type AuthUserRecord = {
   id: string;
   email: string | null;
   name: string | null;
+  passwordHash: string | null;
   role: AuthRole;
   provider: string;
   googleId: string | null;
@@ -94,6 +95,14 @@ type UserWriteClient = {
     findUnique: (args: {
       where: { googleId?: string; email?: string; id?: string };
     }) => Promise<AuthUserRecord | null>;
+    create: (args: {
+      data: {
+        email: string;
+        passwordHash: string;
+        role: AuthRole;
+        provider: string;
+      };
+    }) => Promise<AuthUserRecord>;
     upsert: (args: {
       where: { id?: string; googleId?: string };
       update: Record<string, unknown>;
@@ -109,6 +118,15 @@ type GoogleProfile = {
   avatar?: string;
 };
 
+type LoginInput = {
+  email: string;
+  password: string;
+};
+
+type RegisterInput = LoginInput & {
+  role: AuthRole;
+};
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -117,8 +135,65 @@ export class AuthService {
     private readonly prismaService: PrismaService,
   ) {}
 
+  async register(input: RegisterInput) {
+    const userClient = this.prismaService as unknown as UserWriteClient;
+    const email = this.normalizeEmail(input.email);
+
+    const existingUser = await userClient.user.findUnique({
+      where: { email },
+    });
+
+    if (existingUser) {
+      throw new ConflictException('User already exists');
+    }
+
+    const passwordHash = await bcrypt.hash(input.password, 10);
+    const user = await userClient.user.create({
+      data: {
+        email,
+        passwordHash,
+        role: input.role,
+        provider: 'local',
+      },
+    });
+
+    return {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+    };
+  }
+
+  async login(input: LoginInput) {
+    const userClient = this.prismaService as unknown as UserWriteClient;
+    const email = this.normalizeEmail(input.email);
+
+    const user = await userClient.user.findUnique({
+      where: { email },
+    });
+
+    if (!user?.passwordHash) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    const passwordMatches = await bcrypt.compare(
+      input.password,
+      user.passwordHash,
+    );
+
+    if (!passwordMatches) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    return {
+      accessToken: await this.issueAccessToken(user),
+      role: user.role,
+    };
+  }
+
   async googleLogin(profile: GoogleProfile) {
     const userClient = this.prismaService as unknown as UserWriteClient;
+    const email = this.normalizeEmail(profile.email);
 
     const adminEmails = (
       this.configService.get<string>('GOOGLE_ADMIN_EMAILS', '') ?? ''
@@ -127,21 +202,30 @@ export class AuthService {
       .map((e) => e.trim().toLowerCase())
       .filter(Boolean);
 
-    const roleForNewUser: AuthRole = adminEmails.includes(
-      profile.email.toLowerCase(),
-    )
-      ? 'admin'
-      : 'conductor';
+    const isAdminEmail = adminEmails.includes(email);
+    const roleForNewUser: AuthRole = isAdminEmail ? 'admin' : 'conductor';
+    const existingUser = await userClient.user.findUnique({
+      where: { email },
+    });
+
+    const updateData: Record<string, unknown> = {
+      email,
+      name: profile.name,
+      avatar: profile.avatar ?? null,
+      googleId: profile.googleId,
+    };
+
+    if (isAdminEmail) {
+      updateData.role = 'admin';
+    }
 
     const user = await userClient.user.upsert({
-      where: { googleId: profile.googleId },
-      update: {
-        email: profile.email,
-        name: profile.name,
-        avatar: profile.avatar ?? null,
-      },
+      where: existingUser
+        ? { id: existingUser.id }
+        : { googleId: profile.googleId },
+      update: updateData,
       create: {
-        email: profile.email,
+        email,
         name: profile.name,
         role: roleForNewUser,
         provider: 'google',
@@ -152,16 +236,8 @@ export class AuthService {
 
     const refreshTokenData = await this.generateRefreshTokenWithTtl(user.id);
 
-    const vehicleId = await this.resolveVehicleIdForUser(user.id, user.role);
-    const payload = {
-      sub: user.id,
-      email: profile.email,
-      role: user.role,
-      vehicleId,
-    };
-
     return {
-      accessToken: await this.jwtService.signAsync(payload),
+      accessToken: await this.issueAccessToken(user),
       refreshToken: refreshTokenData.refreshToken,
       refreshTokenExpiresAt: refreshTokenData.expiresAt,
       tokenType: 'Bearer',
@@ -223,25 +299,34 @@ export class AuthService {
         tx,
       );
 
-      const vehicleId = await this.resolveVehicleIdForUser(
-        storedToken.user.id,
-        storedToken.user.role,
-      );
-      const payload = {
-        sub: storedToken.user.id,
-        email: storedToken.user.email ?? storedToken.user.id,
-        role: storedToken.user.role,
-        vehicleId,
-      };
-
       return {
-        accessToken: await this.jwtService.signAsync(payload),
+        accessToken: await this.issueAccessToken(storedToken.user),
         refreshToken: rotatedToken.refreshToken,
         refreshTokenExpiresAt: rotatedToken.expiresAt,
         tokenType: 'Bearer',
         expiresIn: this.configService.get<string>('JWT_EXPIRES_IN', '1h'),
       };
     });
+  }
+
+  private normalizeEmail(email: string) {
+    return email.trim().toLowerCase();
+  }
+
+  private async issueAccessToken(user: {
+    id: string;
+    email?: string | null;
+    role: AuthRole;
+  }) {
+    const vehicleId = await this.resolveVehicleIdForUser(user.id, user.role);
+    const payload = {
+      sub: user.id,
+      email: user.email ?? user.id,
+      role: user.role,
+      vehicleId,
+    };
+
+    return this.jwtService.signAsync(payload);
   }
 
   private async generateRefreshTokenWithTtl(

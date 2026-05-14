@@ -28,6 +28,22 @@ Frontend (optional reference for OAuth UI only):
 
 1. https://logiflowapp.z13.web.core.windows.net
 
+Required gateway env for the current web-admin demo:
+
+```bash
+CORS_ORIGINS=https://logiflowapp.z13.web.core.windows.net,http://localhost:4200,capacitor://localhost,http://localhost
+GOOGLE_ADMIN_EMAILS=elizabethcorreasuarez@gmail.com
+GOOGLE_REDIRECT_FRONTEND_ADMIN=https://logiflowapp.z13.web.core.windows.net
+```
+
+The gateway seed creates these demo identities after migrations:
+
+1. Admin: `admin@logiflow.app` / `Admin2026!` / role `admin`.
+2. Conductor: `conductor@logiflow.app` / `Driver2026!` / role `conductor`.
+3. Demo vehicle: `v-001`.
+
+The conductor user is created with `id = v-001`, so its JWT contains `vehicleId: v-001`.
+
 Internal service endpoints (containers):
 
 1. Realtime: http://realtime:3001
@@ -66,17 +82,40 @@ curl -sS -i "$BASE_URL/health"
 
 ### 5.2 Obtain JWT for the webhook
 
-Production recommendation: keep `POST /auth/login` disabled. Use the container-based token below for internal smoke tests.
+The seed runs automatically in the gateway container startup command. If you need to run it manually inside the VM:
 
-Option A (only if `/auth/login` is available):
+```bash
+docker-compose -f docker-compose.prod.yml exec -T gateway npm run db:seed
+```
+
+Then log in with email/password.
+
+Admin login:
 
 ```bash
 curl -sS -X POST "$BASE_URL/api/v1/auth/login" \
   -H 'Content-Type: application/json' \
-  -d '{"username":"demo","password":"demo123"}'
+  -d '{"email":"admin@logiflow.app","password":"Admin2026!"}'
 ```
 
-Option B (recommended for the VM): generate a short-lived JWT inside the gateway container (does not expose `JWT_SECRET`).
+Conductor login:
+
+```bash
+curl -sS -X POST "$BASE_URL/api/v1/auth/login" \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"conductor@logiflow.app","password":"Driver2026!"}'
+```
+
+Expected response:
+
+```json
+{
+  "accessToken": "<jwt>",
+  "role": "admin | conductor"
+}
+```
+
+Fallback for internal smoke tests: generate a short-lived JWT inside the gateway container (does not expose `JWT_SECRET`).
 
 ```bash
 TOKEN=$(docker-compose -f docker-compose.prod.yml exec -T gateway node -e "const jwt=require('jsonwebtoken'); const payload={sub:'demo-user', username:'demo', role:'admin'}; console.log(jwt.sign(payload, process.env.JWT_SECRET, {expiresIn:'10m'}));")

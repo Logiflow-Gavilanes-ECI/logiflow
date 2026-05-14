@@ -24,11 +24,23 @@ describe('AppController (e2e)', () => {
     );
     await app.init();
 
+    const demoEmail = process.env.AUTH_DEMO_EMAIL ?? 'demo@logiflow.app';
+    const demoPassword = process.env.AUTH_DEMO_PASSWORD ?? 'demo123';
+
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/register')
+      .send({
+        email: demoEmail,
+        password: demoPassword,
+        role: process.env.AUTH_DEMO_ROLE ?? 'admin',
+      })
+      .expect(201);
+
     const loginResponse = await request(app.getHttpServer())
       .post('/api/v1/auth/login')
       .send({
-        username: process.env.AUTH_DEMO_USERNAME ?? 'demo',
-        password: process.env.AUTH_DEMO_PASSWORD ?? 'demo123',
+        email: demoEmail,
+        password: demoPassword,
       })
       .expect(200);
 
@@ -171,11 +183,15 @@ describe('AppController (e2e)', () => {
         });
     });
 
-    it('GET /api/v1/vehicles/:id should 404 for unknown', () => {
+    it('GET /api/v1/vehicles/:id should provision a profile for unknown driver ids', () => {
       return request(app.getHttpServer())
         .get('/api/v1/vehicles/unknown')
         .set('Authorization', `Bearer ${accessToken}`)
-        .expect(404);
+        .expect(200)
+        .then((res) => {
+          expect(res.body.id).toBe('unknown');
+          expect(res.body.plate).toBe('ABC-123');
+        });
     });
 
     it('PUT /api/v1/vehicles/:id should update', async () => {
@@ -209,7 +225,10 @@ describe('AppController (e2e)', () => {
       return request(app.getHttpServer())
         .get('/api/v1/vehicles/v-del')
         .set('Authorization', `Bearer ${accessToken}`)
-        .expect(404);
+        .expect(200)
+        .then((res) => {
+          expect(res.body.id).toBe('v-del');
+        });
     });
   });
 

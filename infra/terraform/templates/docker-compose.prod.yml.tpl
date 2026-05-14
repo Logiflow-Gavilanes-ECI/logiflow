@@ -111,7 +111,7 @@ services:
     image: node:22-alpine
     container_name: logiflow-gateway
     working_dir: /workspace/services/gateway
-    command: sh -c "npm install && npx prisma generate && npx prisma migrate deploy && npx tsc -p tsconfig.build.json && node dist/src/main.js"
+    command: sh -c "npm install && npx prisma generate && npx prisma migrate deploy && npm run db:seed && npx tsc -p tsconfig.build.json && node dist/src/main.js"
     volumes:
       - ./services/gateway:/workspace/services/gateway
       - ./shared:/workspace/shared
@@ -125,6 +125,7 @@ services:
       SOCKETIO_SERVER_PORT: 3001
       JWT_SECRET: ${jwt_secret}
       JWT_EXPIRES_IN: 1h
+      CORS_ORIGINS: https://logiflowapp.z13.web.core.windows.net,http://localhost:4200,capacitor://localhost,http://localhost
     depends_on:
       postgres:
         condition: service_healthy

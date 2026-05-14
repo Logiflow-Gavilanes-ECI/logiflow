@@ -1,6 +1,7 @@
-import { UnauthorizedException } from '@nestjs/common';
+import { ConflictException, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
+import * as bcrypt from 'bcrypt';
 import { AuthService } from './auth.service';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -8,6 +9,8 @@ type AuthRole = 'admin' | 'conductor';
 
 type PrismaLike = {
   user: {
+    findUnique: jest.Mock;
+    create: jest.Mock;
     upsert: jest.Mock;
   };
   vehicle: {
@@ -44,6 +47,9 @@ describe('AuthService', () => {
   const configGetMock = jest.fn((key: string, defaultValue?: string) => {
     if (key === 'JWT_EXPIRES_IN') return '1h';
     if (key === 'REFRESH_TOKEN_TTL_MINUTES') return '60';
+    if (key === 'GOOGLE_ADMIN_EMAILS') {
+      return 'admin@gmail.com,elizabethcorreasuarez@gmail.com';
+    }
     return defaultValue;
   });
 
@@ -58,6 +64,29 @@ describe('AuthService', () => {
 
   const prismaService: PrismaLike = {
     user: {
+      findUnique: jest.fn(() => Promise.resolve(null)),
+      create: jest.fn(
+        ({
+          data,
+        }: {
+          data: {
+            email: string;
+            passwordHash: string;
+            role: AuthRole;
+            provider: string;
+          };
+        }) =>
+          Promise.resolve({
+            id: 'user-local-1',
+            email: data.email,
+            name: null,
+            passwordHash: data.passwordHash,
+            role: data.role,
+            provider: data.provider,
+            googleId: null,
+            avatar: null,
+          }),
+      ),
       upsert: jest.fn(
         (args: {
           update: Record<string, unknown>;
@@ -71,7 +100,10 @@ describe('AuthService', () => {
             name: (args.update.name ??
               args.create.name ??
               'Test Driver') as string,
-            role: (args.create.role ?? 'conductor') as AuthRole,
+            passwordHash: null,
+            role: (args.update.role ??
+              args.create.role ??
+              'conductor') as AuthRole,
             provider: (args.create.provider ?? 'google') as string,
             googleId: (args.create.googleId ?? 'google-123') as string,
             avatar: (args.update.avatar ?? args.create.avatar ?? null) as
@@ -113,6 +145,7 @@ describe('AuthService', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    prismaService.user.findUnique.mockResolvedValue(null);
     prismaService.refreshToken.findUnique.mockResolvedValue(null);
     prismaService.refreshToken.updateMany.mockResolvedValue({ count: 0 });
     prismaService.vehicle.findUnique.mockResolvedValue(null);
@@ -126,6 +159,107 @@ describe('AuthService', () => {
       jwtService,
       prismaService as unknown as PrismaService,
     );
+  });
+
+  it('registers a local user with a bcrypt password hash', async () => {
+    const result = await authService.register({
+      email: ' Admin@LogiFlow.App ',
+      password: 'demo123',
+      role: 'admin',
+    });
+
+    expect(prismaService.user.findUnique).toHaveBeenCalledWith({
+      where: { email: 'admin@logiflow.app' },
+    });
+    expect(prismaService.user.create).toHaveBeenCalledWith({
+      data: {
+        email: 'admin@logiflow.app',
+        passwordHash: expect.stringMatching(/^\$2[aby]\$/),
+        role: 'admin',
+        provider: 'local',
+      },
+    });
+    expect(result).toEqual({
+      id: 'user-local-1',
+      email: 'admin@logiflow.app',
+      role: 'admin',
+    });
+  });
+
+  it('rejects registering a duplicate email', async () => {
+    prismaService.user.findUnique.mockResolvedValueOnce({
+      id: 'user-existing',
+      email: 'admin@logiflow.app',
+      name: null,
+      passwordHash: 'hash',
+      role: 'admin',
+      provider: 'local',
+      googleId: null,
+      avatar: null,
+    });
+
+    await expect(
+      authService.register({
+        email: 'admin@logiflow.app',
+        password: 'demo123',
+        role: 'admin',
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+
+    expect(prismaService.user.create).not.toHaveBeenCalled();
+  });
+
+  it('logs in a local user and returns the demo response shape', async () => {
+    const passwordHash = await bcrypt.hash('demo123', 10);
+    prismaService.user.findUnique.mockResolvedValueOnce({
+      id: 'user-local-1',
+      email: 'admin@logiflow.app',
+      name: null,
+      passwordHash,
+      role: 'admin',
+      provider: 'local',
+      googleId: null,
+      avatar: null,
+    });
+
+    const result = await authService.login({
+      email: 'ADMIN@LogiFlow.App',
+      password: 'demo123',
+    });
+
+    expect(signAsyncMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sub: 'user-local-1',
+        email: 'admin@logiflow.app',
+        role: 'admin',
+        vehicleId: 'user-local-1',
+      }),
+    );
+    expect(result).toEqual({
+      accessToken: 'signed-token',
+      role: 'admin',
+    });
+  });
+
+  it('rejects login with an invalid password', async () => {
+    const passwordHash = await bcrypt.hash('demo123', 10);
+    prismaService.user.findUnique.mockResolvedValueOnce({
+      id: 'user-local-1',
+      email: 'admin@logiflow.app',
+      name: null,
+      passwordHash,
+      role: 'admin',
+      provider: 'local',
+      googleId: null,
+      avatar: null,
+    });
+
+    await expect(
+      authService.login({
+        email: 'admin@logiflow.app',
+        password: 'wrong-password',
+      }),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
   });
 
   it('creates a user via Google OAuth and returns a signed token pair', async () => {
@@ -142,6 +276,7 @@ describe('AuthService', () => {
         email: 'driver@gmail.com',
         name: 'Test Driver',
         avatar: 'https://photo.url/avatar.jpg',
+        googleId: 'google-123',
       },
       create: {
         email: 'driver@gmail.com',
@@ -174,6 +309,35 @@ describe('AuthService', () => {
       role: 'conductor',
       avatar: 'https://photo.url/avatar.jpg',
     });
+  });
+
+  it('promotes configured Google admin emails on login', async () => {
+    prismaService.user.findUnique.mockResolvedValueOnce({
+      id: 'existing-admin',
+      email: 'admin@gmail.com',
+      name: 'Admin User',
+      passwordHash: null,
+      role: 'conductor',
+      provider: 'google',
+      googleId: 'google-admin',
+      avatar: null,
+    });
+
+    await authService.googleLogin({
+      googleId: 'google-admin',
+      email: 'admin@gmail.com',
+      name: 'Admin User',
+    });
+
+    expect(prismaService.user.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'existing-admin' },
+        update: expect.objectContaining({
+          role: 'admin',
+          googleId: 'google-admin',
+        }),
+      }),
+    );
   });
 
   it('defaults avatar to null when not provided in Google profile', async () => {
