@@ -126,10 +126,12 @@ export class AuthService {
 
     const refreshTokenData = await this.generateRefreshTokenWithTtl(user.id);
 
+    const vehicleId = await this.resolveVehicleIdForUser(user.id);
     const payload = {
       sub: user.id,
       email: profile.email,
       role: user.role,
+      vehicleId,
     };
 
     return {
@@ -195,10 +197,12 @@ export class AuthService {
         tx,
       );
 
+      const vehicleId = await this.resolveVehicleIdForUser(storedToken.user.id);
       const payload = {
         sub: storedToken.user.id,
         email: storedToken.user.email ?? storedToken.user.id,
         role: storedToken.user.role,
+        vehicleId,
       };
 
       return {
@@ -248,5 +252,28 @@ export class AuthService {
 
   private hashRefreshToken(refreshToken: string) {
     return createHash('sha256').update(refreshToken).digest('hex');
+  }
+
+  private async resolveVehicleIdForUser(userId: string) {
+    const trimmed = userId?.trim();
+    if (!trimmed) {
+      return undefined;
+    }
+
+    try {
+      const directMatch = await this.prismaService.vehicle.findUnique({
+        where: { id: trimmed },
+      });
+      if (directMatch) {
+        return directMatch.id;
+      }
+
+      const firstVehicle = await this.prismaService.vehicle.findFirst({
+        orderBy: { createdAt: 'asc' },
+      });
+      return firstVehicle?.id ?? trimmed;
+    } catch {
+      return trimmed;
+    }
   }
 }
