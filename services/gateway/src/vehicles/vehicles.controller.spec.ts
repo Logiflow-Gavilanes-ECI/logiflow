@@ -58,15 +58,20 @@ describe('VehiclesController', () => {
   describe('findOne', () => {
     it('should return mobile vehicle details', async () => {
       service.findDetails.mockResolvedValue({
-        vehicleId: 'v1',
+        id: 'v1',
         plate: 'V1',
         model: 'Vehicle v1',
         status: 'online',
+        lat: 4.711,
+        lng: -74.072,
+        capacity: 100,
       });
 
       const result = await controller.findOne('v1');
-      expect(result.vehicleId).toBe('v1');
+      expect(result.id).toBe('v1');
       expect(result.plate).toBe('V1');
+      expect(result.lat).toBe(4.711);
+      expect(result.capacity).toBe(100);
     });
   });
 

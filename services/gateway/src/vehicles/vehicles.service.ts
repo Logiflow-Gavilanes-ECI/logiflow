@@ -23,10 +23,13 @@ export interface DriverRoute {
 }
 
 export interface VehicleDetails {
-  vehicleId: string;
+  id: string;
   plate: string;
   model: string;
   status: string;
+  lat: number;
+  lng: number;
+  capacity: number;
 }
 
 interface RouteStopSource {
@@ -166,10 +169,13 @@ function resolveStopAddress(stop: RouteStopSource, index: number): string {
 
 function toVehicleDetails(vehicle: VehicleRecord): VehicleDetails {
   return {
-    vehicleId: vehicle.id,
+    id: vehicle.id,
     plate: vehicle.plate?.trim() || buildVehiclePlate(vehicle.id),
     model: vehicle.model?.trim() || buildVehicleModel(vehicle.id),
     status: vehicle.status?.trim() || 'online',
+    lat: vehicle.lat,
+    lng: vehicle.lng,
+    capacity: vehicle.capacity,
   };
 }
 

@@ -171,10 +171,13 @@ describe('VehiclesService', () => {
       });
 
       await expect(service.findDetails('v-001')).resolves.toEqual({
-        vehicleId: 'v-001',
+        id: 'v-001',
         plate: 'ABC-123',
         model: 'Toyota Hilux 2023',
         status: 'online',
+        lat: 4.711,
+        lng: -74.072,
+        capacity: 100,
       });
     });
 
@@ -192,8 +195,11 @@ describe('VehiclesService', () => {
       expect(repo.ensureExists).toHaveBeenCalledWith(
         'de015a64-dcb6-40ce-9c3e-6d037e7c706c',
       );
-      expect(result.vehicleId).toBe('de015a64-dcb6-40ce-9c3e-6d037e7c706c');
+      expect(result.id).toBe('de015a64-dcb6-40ce-9c3e-6d037e7c706c');
       expect(result.status).toBe('online');
+      expect(result.lat).toBe(4.711);
+      expect(result.lng).toBe(-74.072);
+      expect(result.capacity).toBe(100);
     });
   });
 
