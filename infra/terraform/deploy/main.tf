@@ -20,7 +20,7 @@ locals {
 }
 
 resource "local_file" "docker_compose_prod" {
-  filename = "${path.module}/../generated/docker-compose.prod.yml"
+  filename = "${path.module}/../../generated/docker-compose.prod.yml"
   content  = templatefile("${path.module}/templates/docker-compose.prod.yml.tpl", {
     db_password = var.db_password
     jwt_secret  = var.jwt_secret
@@ -29,14 +29,14 @@ resource "local_file" "docker_compose_prod" {
 }
 
 resource "local_file" "nginx_conf" {
-  filename = "${path.module}/../generated/nginx.conf"
+  filename = "${path.module}/../../generated/nginx.conf"
   content  = templatefile("${path.module}/templates/nginx.conf.tpl", {
     fqdn = local.fqdn
   })
 }
 
 resource "local_file" "env_file" {
-  filename        = "${path.module}/../generated/.env.production"
+  filename        = "${path.module}/../../generated/.env.production"
   file_permission = "0600"
   content         = <<-EOF
     POSTGRES_USER=postgres
@@ -91,22 +91,22 @@ resource "null_resource" "deploy" {
   }
 
   provisioner "file" {
-    source      = "${path.module}/../generated/docker-compose.prod.yml"
+    source      = "${path.module}/../../generated/docker-compose.prod.yml"
     destination = "${local.deploy_path}/docker-compose.yml"
   }
 
   provisioner "file" {
-    source      = "${path.module}/../generated/nginx.conf"
+    source      = "${path.module}/../../generated/nginx.conf"
     destination = "${local.deploy_path}/nginx/conf.d/default.conf"
   }
 
   provisioner "file" {
-    source      = "${path.module}/../generated/.env.production"
+    source      = "${path.module}/../../generated/.env.production"
     destination = "${local.deploy_path}/.env"
   }
 
   provisioner "file" {
-    source      = "${path.module}/../scripts/deploy.sh"
+    source      = "${path.module}/../../scripts/deploy.sh"
     destination = "${local.deploy_path}/deploy.sh"
   }
 
