@@ -22,8 +22,16 @@ export interface DriverRoute {
   steps: DriverRouteStep[];
 }
 
+export interface VehicleDetails {
+  vehicleId: string;
+  plate: string;
+  model: string;
+  status: string;
+}
+
 interface RouteStopSource {
   id: string;
+  address?: string | null;
   lat: number;
   lng: number;
   priority: number;
@@ -49,6 +57,11 @@ export class VehiclesService {
     return vehicle;
   }
 
+  async findDetails(id: string): Promise<VehicleDetails> {
+    const vehicle = await this.findOne(id);
+    return toVehicleDetails(vehicle);
+  }
+
   create(dto: CreateVehicleDto): Promise<VehicleRecord> {
     return this.repo.create(dto);
   }
@@ -72,7 +85,7 @@ export class VehiclesService {
       vehicleId: resolvedVehicleId,
       steps: sortedStops.map((stop, index) => ({
         stopId: stop.id,
-        address: buildStopAddress(stop.id, index),
+        address: stop.address?.trim() || buildStopAddress(stop.id, index),
         lat: stop.lat,
         lng: stop.lng,
         arrivalOrder: index + 1,
@@ -135,10 +148,36 @@ function buildStopAddress(stopId: string, index: number): string {
   return `Stop ${index + 1} (${stopId.slice(0, 8)})`;
 }
 
+function toVehicleDetails(vehicle: VehicleRecord): VehicleDetails {
+  return {
+    vehicleId: vehicle.id,
+    plate: vehicle.plate?.trim() || buildVehiclePlate(vehicle.id),
+    model: vehicle.model?.trim() || buildVehicleModel(vehicle.id),
+    status: vehicle.status?.trim() || 'online',
+  };
+}
+
+function buildVehiclePlate(vehicleId: string): string {
+  if (vehicleId === 'v-001') {
+    return 'ABC-123';
+  }
+
+  return vehicleId.toUpperCase();
+}
+
+function buildVehicleModel(vehicleId: string): string {
+  if (vehicleId === 'v-001') {
+    return 'Toyota Hilux 2023';
+  }
+
+  return `Vehicle ${vehicleId}`;
+}
+
 function createFallbackStops(): RouteStopSource[] {
   return [
     {
       id: 'fallback-stop-1',
+      address: 'Cra 7 #45-12, Bogotá',
       lat: 4.6486,
       lng: -74.2479,
       priority: 0,
@@ -146,6 +185,7 @@ function createFallbackStops(): RouteStopSource[] {
     },
     {
       id: 'fallback-stop-2',
+      address: 'Calle 72 #10-34, Bogotá',
       lat: 4.6672,
       lng: -74.0556,
       priority: 1,
@@ -153,6 +193,7 @@ function createFallbackStops(): RouteStopSource[] {
     },
     {
       id: 'fallback-stop-3',
+      address: 'Av. Caracas #26-85, Bogotá',
       lat: 4.711,
       lng: -74.0721,
       priority: 2,

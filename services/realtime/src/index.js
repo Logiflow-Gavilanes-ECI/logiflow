@@ -20,6 +20,7 @@ const PORT = process.env.PORT || 3001;
 
 function normalizeStep(s, index) {
   const stopId = s.id || s.stopId;
+  const arrivalOrder = s.arrivalOrder || s.arrival || s.order || index + 1;
   const address =
     s.address ||
     s.stopAddress ||
@@ -27,11 +28,14 @@ function normalizeStep(s, index) {
 
   return {
     id: stopId,
+    stopId,
+    address,
     lat: s.lat ?? s.location?.lat,
     lng: s.lng ?? s.lon ?? s.location?.lon,
-    order: s.arrivalOrder || s.arrival,
+    order: arrivalOrder,
+    arrivalOrder,
     type: s.type,
-    address,
+    status: s.status || 'pending',
   };
 }
 

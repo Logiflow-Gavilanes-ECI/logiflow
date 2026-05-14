@@ -132,10 +132,12 @@ describe('SocketClientService', () => {
               expect.objectContaining({
                 id: 'j-001',
                 stopId: 'j-001',
+                address: 'Stop 1 (j-001)',
                 lat: 4.711,
                 lng: -74.072,
                 lon: -74.072,
                 arrivalOrder: 2,
+                status: 'pending',
               }),
             ],
           }),

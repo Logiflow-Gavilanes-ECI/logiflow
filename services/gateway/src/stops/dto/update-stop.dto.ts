@@ -1,6 +1,10 @@
-import { IsNumber, IsOptional, Min, Max } from 'class-validator';
+import { IsNumber, IsOptional, IsString, Min, Max } from 'class-validator';
 
 export class UpdateStopDto {
+  @IsOptional()
+  @IsString()
+  address?: string;
+
   @IsOptional()
   @IsNumber()
   @Min(-90)

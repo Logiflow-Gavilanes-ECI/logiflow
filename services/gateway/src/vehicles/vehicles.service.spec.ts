@@ -9,6 +9,9 @@ const mockVehicle: VehicleRecord = {
   lat: 4.711,
   lng: -74.072,
   capacity: 100,
+  plate: null,
+  model: null,
+  status: 'online',
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
 };
@@ -119,6 +122,24 @@ describe('VehiclesService', () => {
       await expect(service.findOne('unknown')).rejects.toThrow(
         NotFoundException,
       );
+    });
+  });
+
+  describe('findDetails', () => {
+    it('should return the mobile vehicle profile contract', async () => {
+      repo.findById.mockResolvedValue({
+        ...mockVehicle,
+        id: 'v-001',
+        plate: 'ABC-123',
+        model: 'Toyota Hilux 2023',
+      });
+
+      await expect(service.findDetails('v-001')).resolves.toEqual({
+        vehicleId: 'v-001',
+        plate: 'ABC-123',
+        model: 'Toyota Hilux 2023',
+        status: 'online',
+      });
     });
   });
 

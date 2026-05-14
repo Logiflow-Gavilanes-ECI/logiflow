@@ -17,11 +17,13 @@ import { UNKNOWN_CORRELATION_ID } from '../common/constants/correlation-id.const
 interface InternalRouteStep {
   id: string;
   stopId: string;
+  address: string;
   lat: number;
   lng: number;
   lon: number;
   type: string;
   arrivalOrder: number;
+  status: 'pending' | 'active' | 'completed';
 }
 
 interface InternalRoute {
@@ -174,11 +176,13 @@ export class SocketClientService implements OnModuleInit, OnModuleDestroy {
     return {
       id: step.id,
       stopId: step.id,
+      address: step.address?.trim() || `Stop ${index + 1} (${step.id.slice(0, 8)})`,
       lat: step.location.lat,
       lng: step.location.lon,
       lon: step.location.lon,
       type: step.type,
       arrivalOrder: step.arrival || index + 1,
+      status: 'pending',
     };
   }
 }

@@ -31,13 +31,27 @@ describe('emitRouteUpdate', () => {
   });
 
   test('payload contains vehicleId, stops and timestamp', () => {
-    const stops = [{ id: 's1', lat: 4.711, lng: -74.072 }];
+    const stops = [
+      {
+        stopId: 's1',
+        address: 'Cra 7 #45-12, Bogotá',
+        lat: 4.711,
+        lng: -74.072,
+        arrivalOrder: 1,
+        status: 'pending',
+      },
+    ];
 
     emitRouteUpdate(mockIo, 'v-001', { stops }, {});
 
     expect(mockIo.emit).toHaveBeenCalledWith('route:update', expect.objectContaining({
       vehicleId: 'v-001',
-      stops: expect.any(Array),
+      stops: [
+        expect.objectContaining({
+          stopId: 's1',
+          address: 'Cra 7 #45-12, Bogotá',
+        }),
+      ],
       timestamp: expect.any(String),
     }));
   });

@@ -12,7 +12,14 @@ const STATUS_KEY_TTL_SECONDS = parsePositiveIntEnv(
   60 * 60,
 );
 
-const VALID_STATUSES = new Set(['en_camino', 'en_parada', 'entregado']);
+const VALID_STATUSES = new Set([
+  'in_transit',
+  'at_stop',
+  'delivered',
+  'en_camino',
+  'en_parada',
+  'entregado',
+]);
 
 /**
  * Validate and normalize an incoming `vehicle:status` payload from a driver client.

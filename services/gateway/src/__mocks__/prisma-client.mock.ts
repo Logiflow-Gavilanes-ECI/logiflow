@@ -3,12 +3,16 @@ type VehicleEntity = {
   lat: number;
   lng: number;
   capacity: number;
+  plate?: string | null;
+  model?: string | null;
+  status: string;
   createdAt: Date;
   updatedAt: Date;
 };
 
 type StopEntity = {
   id: string;
+  address?: string | null;
   lat: number;
   lng: number;
   demand: number;
@@ -59,6 +63,9 @@ export class PrismaClient {
           lat: data.lat,
           lng: data.lng,
           capacity: data.capacity,
+          plate: null,
+          model: null,
+          status: 'online',
           createdAt: now,
           updatedAt: now,
         };
@@ -73,7 +80,14 @@ export class PrismaClient {
         data,
       }: {
         where: { id: string };
-        data: Partial<{ lat: number; lng: number; capacity: number }>;
+        data: Partial<{
+          lat: number;
+          lng: number;
+          capacity: number;
+          plate: string;
+          model: string;
+          status: string;
+        }>;
       }) => {
         const current = this.vehicleStore.get(where.id);
         if (!current) {
@@ -112,6 +126,7 @@ export class PrismaClient {
       }: {
         data: {
           id?: string;
+          address?: string;
           lat: number;
           lng: number;
           demand: number;
@@ -122,6 +137,7 @@ export class PrismaClient {
         const id = data.id ?? this.nextId('s', this.stopStore.size);
         const created: StopEntity = {
           id,
+          address: data.address ?? null,
           lat: data.lat,
           lng: data.lng,
           demand: data.demand,
@@ -145,6 +161,7 @@ export class PrismaClient {
           lng: number;
           demand: number;
           priority: number;
+          address: string;
         }>;
       }) => {
         const current = this.stopStore.get(where.id);

@@ -9,6 +9,7 @@ import { NotFoundException } from '@nestjs/common';
 
 const mockStop: StopRecord = {
   id: 's1',
+  address: null,
   lat: 4.609,
   lng: -74.081,
   demand: 20,

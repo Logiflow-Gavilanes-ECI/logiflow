@@ -28,6 +28,7 @@ export interface Vehicle {
 
 export interface Job {
   id: string;
+  address?: string;
   location: Coordinate;
   service: number;
   amount: number;
@@ -82,6 +83,7 @@ export interface OptimizeRequest {
 export interface RouteStep {
   type: string;
   id: string;
+  address?: string;
   location: Coordinate;
   service: number;
   waitingTime: number;

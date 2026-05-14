@@ -8,6 +8,9 @@ const mockVehicle: VehicleRecord = {
   lat: 4.711,
   lng: -74.072,
   capacity: 100,
+  plate: null,
+  model: null,
+  status: 'online',
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
 };
@@ -25,6 +28,7 @@ describe('VehiclesController', () => {
           useValue: {
             findAll: jest.fn(),
             findOne: jest.fn(),
+            findDetails: jest.fn(),
             create: jest.fn(),
             update: jest.fn(),
             remove: jest.fn(),
@@ -52,11 +56,17 @@ describe('VehiclesController', () => {
   });
 
   describe('findOne', () => {
-    it('should return a single vehicle', async () => {
-      service.findOne.mockResolvedValue(mockVehicle);
+    it('should return mobile vehicle details', async () => {
+      service.findDetails.mockResolvedValue({
+        vehicleId: 'v1',
+        plate: 'V1',
+        model: 'Vehicle v1',
+        status: 'online',
+      });
 
       const result = await controller.findOne('v1');
-      expect(result.id).toBe('v1');
+      expect(result.vehicleId).toBe('v1');
+      expect(result.plate).toBe('V1');
     });
   });
 

@@ -6,6 +6,7 @@ import { UpdateStopDto } from './dto/update-stop.dto';
 
 export interface StopRecord {
   id: string;
+  address: string | null;
   lat: number;
   lng: number;
   demand: number;
@@ -39,6 +40,7 @@ export class StopsRepository {
     const stop = await this.prisma.stop.create({
       data: {
         id: dto.id,
+        address: dto.address,
         lat: dto.lat,
         lng: dto.lng,
         demand: dto.demand,
@@ -57,6 +59,7 @@ export class StopsRepository {
         ...(dto.lng !== undefined && { lng: dto.lng }),
         ...(dto.demand !== undefined && { demand: dto.demand }),
         ...(dto.priority !== undefined && { priority: dto.priority }),
+        ...(dto.address !== undefined && { address: dto.address }),
       },
     });
 
@@ -81,6 +84,7 @@ export class StopsRepository {
   private toRecord(stop: Stop): StopRecord {
     return {
       id: stop.id,
+      address: stop.address ?? null,
       lat: stop.lat,
       lng: stop.lng,
       demand: stop.demand,

@@ -4,6 +4,10 @@ export class StopDto {
   @IsString()
   id!: string;
 
+  @IsOptional()
+  @IsString()
+  address?: string;
+
   @IsNumber()
   @Min(-90)
   @Max(90)

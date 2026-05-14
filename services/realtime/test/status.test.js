@@ -11,7 +11,7 @@ function makeMockIo() {
 
 describe('normalizeStatusPayload', () => {
   test('rejects missing vehicleId', () => {
-    expect(normalizeStatusPayload({ status: 'en_camino' })).toBeNull();
+    expect(normalizeStatusPayload({ status: 'in_transit' })).toBeNull();
   });
 
   test('rejects unknown status', () => {
@@ -24,8 +24,8 @@ describe('normalizeStatusPayload', () => {
     expect(normalizeStatusPayload('not-an-object')).toBeNull();
   });
 
-  test('accepts each valid status and trims fields', () => {
-    for (const status of ['en_camino', 'en_parada', 'entregado']) {
+  test('accepts each valid mobile status and trims fields', () => {
+    for (const status of ['in_transit', 'at_stop', 'delivered']) {
       const out = normalizeStatusPayload({
         vehicleId: '  v-001  ',
         status,
@@ -37,7 +37,7 @@ describe('normalizeStatusPayload', () => {
   });
 
   test('coerces missing stopId to null and fills timestamp', () => {
-    const out = normalizeStatusPayload({ vehicleId: 'v-1', status: 'en_camino' });
+    const out = normalizeStatusPayload({ vehicleId: 'v-1', status: 'in_transit' });
     expect(out.stopId).toBeNull();
     expect(out.timestamp).toEqual(expect.any(String));
   });
@@ -46,7 +46,7 @@ describe('normalizeStatusPayload', () => {
     const ts = '2026-05-12T17:00:00.000Z';
     const out = normalizeStatusPayload({
       vehicleId: 'v-1',
-      status: 'entregado',
+      status: 'delivered',
       timestamp: ts,
     });
     expect(out.timestamp).toBe(ts);
@@ -59,13 +59,13 @@ describe('handleIncomingStatus', () => {
 
     const payload = handleIncomingStatus(io, {
       vehicleId: 'v-001',
-      status: 'en_parada',
+      status: 'at_stop',
       stopId: 's-3',
     });
 
     expect(payload).toMatchObject({
       vehicleId: 'v-001',
-      status: 'en_parada',
+      status: 'at_stop',
       stopId: 's-3',
     });
     expect(io.to).toHaveBeenCalledWith('fleet');
@@ -88,7 +88,7 @@ describe('handleIncomingStatus', () => {
 
     handleIncomingStatus(
       io,
-      { vehicleId: 'v-001', status: 'entregado', stopId: 's-1' },
+      { vehicleId: 'v-001', status: 'delivered', stopId: 's-1' },
       { redisClient },
     );
 
@@ -96,7 +96,7 @@ describe('handleIncomingStatus', () => {
 
     expect(set).toHaveBeenCalledWith(
       'vehicle:v-001:status',
-      expect.stringContaining('"status":"entregado"'),
+      expect.stringContaining('"status":"delivered"'),
       'EX',
       expect.any(Number),
     );

@@ -14,6 +14,10 @@ export class JobDto {
   @IsString()
   id!: string;
 
+  @IsOptional()
+  @IsString()
+  address?: string;
+
   @ValidateNested()
   @Type(() => CoordinateDto)
   location!: CoordinateDto;

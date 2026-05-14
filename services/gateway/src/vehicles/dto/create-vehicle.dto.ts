@@ -5,6 +5,18 @@ export class CreateVehicleDto {
   @IsString()
   id?: string;
 
+  @IsOptional()
+  @IsString()
+  plate?: string;
+
+  @IsOptional()
+  @IsString()
+  model?: string;
+
+  @IsOptional()
+  @IsString()
+  status?: string;
+
   @IsNumber()
   @Min(-90)
   @Max(90)

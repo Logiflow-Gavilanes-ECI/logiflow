@@ -72,6 +72,8 @@ export class WebhookService {
       optimizedRoutes = this.buildMockResponse(grpcRequest);
     }
 
+    optimizedRoutes = this.attachRouteStepAddresses(optimizedRoutes, event);
+
     try {
       await this.retryService.execute(
         () => {
@@ -155,6 +157,7 @@ export class WebhookService {
 
     const jobsFromPayload: Job[] = (event.jobs ?? []).map((job) => ({
       id: job.id,
+      address: job.address,
       location: {
         lat: job.location.lat,
         lon: job.location.lon,
@@ -169,6 +172,7 @@ export class WebhookService {
 
     const jobsFromLegacyStops: Job[] = (event.stops ?? []).map((stop) => ({
       id: stop.id,
+      address: stop.address,
       location: {
         lat: stop.lat,
         lon: stop.lng,
@@ -264,6 +268,7 @@ export class WebhookService {
           .map((job, order) => ({
             type: 'job',
             id: job.id,
+            address: job.address,
             location: {
               lat: job.location.lat,
               lon: job.location.lon,
@@ -281,6 +286,40 @@ export class WebhookService {
       unassigned: [],
       routingDistance: Math.floor(Math.random() * 50000 + 10000),
       routingDuration: Math.floor(Math.random() * 3600 + 900),
+    };
+  }
+
+  private attachRouteStepAddresses(
+    response: OptimizeResponse,
+    event: WebhookEventDto,
+  ): OptimizeResponse {
+    const addressByStopId = new Map<string, string>();
+
+    for (const stop of event.stops ?? []) {
+      if (stop.address?.trim()) {
+        addressByStopId.set(stop.id, stop.address.trim());
+      }
+    }
+
+    for (const job of event.jobs ?? []) {
+      if (job.address?.trim()) {
+        addressByStopId.set(job.id, job.address.trim());
+      }
+    }
+
+    if (addressByStopId.size === 0) {
+      return response;
+    }
+
+    return {
+      ...response,
+      routes: (response.routes ?? []).map((route) => ({
+        ...route,
+        steps: (route.steps ?? []).map((step) => ({
+          ...step,
+          address: step.address ?? addressByStopId.get(step.id),
+        })),
+      })),
     };
   }
 }

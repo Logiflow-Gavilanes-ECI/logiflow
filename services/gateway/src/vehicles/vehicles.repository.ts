@@ -9,6 +9,9 @@ export interface VehicleRecord {
   lat: number;
   lng: number;
   capacity: number;
+  plate: string | null;
+  model: string | null;
+  status: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -40,6 +43,9 @@ export class VehiclesRepository {
         lat: dto.lat,
         lng: dto.lng,
         capacity: dto.capacity,
+        plate: dto.plate,
+        model: dto.model,
+        status: dto.status,
       },
     });
 
@@ -53,6 +59,9 @@ export class VehiclesRepository {
         ...(dto.lat !== undefined && { lat: dto.lat }),
         ...(dto.lng !== undefined && { lng: dto.lng }),
         ...(dto.capacity !== undefined && { capacity: dto.capacity }),
+        ...(dto.plate !== undefined && { plate: dto.plate }),
+        ...(dto.model !== undefined && { model: dto.model }),
+        ...(dto.status !== undefined && { status: dto.status }),
       },
     });
 
@@ -71,6 +80,9 @@ export class VehiclesRepository {
       lat: vehicle.lat,
       lng: vehicle.lng,
       capacity: vehicle.capacity,
+      plate: vehicle.plate ?? null,
+      model: vehicle.model ?? null,
+      status: vehicle.status ?? 'online',
       createdAt: vehicle.createdAt.toISOString(),
       updatedAt: vehicle.updatedAt.toISOString(),
     };

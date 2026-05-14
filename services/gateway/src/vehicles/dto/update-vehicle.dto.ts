@@ -1,6 +1,18 @@
-import { IsNumber, IsOptional, Min, Max } from 'class-validator';
+import { IsNumber, IsOptional, IsString, Min, Max } from 'class-validator';
 
 export class UpdateVehicleDto {
+  @IsOptional()
+  @IsString()
+  plate?: string;
+
+  @IsOptional()
+  @IsString()
+  model?: string;
+
+  @IsOptional()
+  @IsString()
+  status?: string;
+
   @IsOptional()
   @IsNumber()
   @Min(-90)
