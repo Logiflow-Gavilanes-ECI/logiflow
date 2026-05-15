@@ -16,6 +16,12 @@ function isFiniteNumber(value) {
   return typeof value === 'number' && Number.isFinite(value);
 }
 
+function optionalFiniteNumber(value) {
+  if (value === undefined || value === null || value === '') return null;
+  const parsed = Number(value);
+  return isFiniteNumber(parsed) ? parsed : null;
+}
+
 /**
  * Validate and normalize an incoming `vehicle:position` payload from a driver client.
  * Returns a sanitized payload or null when the input is unusable.
@@ -31,9 +37,9 @@ function normalizePositionPayload(input) {
   if (!isFiniteNumber(lat) || !isFiniteNumber(lng)) return null;
   if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
 
-  const speed = isFiniteNumber(Number(input.speed)) ? Number(input.speed) : null;
-  const heading = isFiniteNumber(Number(input.heading)) ? Number(input.heading) : null;
-  const accuracy = isFiniteNumber(Number(input.accuracy)) ? Number(input.accuracy) : null;
+  const speed = optionalFiniteNumber(input.speed);
+  const heading = optionalFiniteNumber(input.heading);
+  const accuracy = optionalFiniteNumber(input.accuracy);
   const timestamp =
     typeof input.timestamp === 'string' && input.timestamp
       ? input.timestamp

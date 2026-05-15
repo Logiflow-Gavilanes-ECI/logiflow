@@ -81,7 +81,7 @@ async function main() {
 
   io.use(authMiddleware);
 
-  registerRooms(io);
+  registerRooms(io, { redisClient: pubClient });
   startPositionBroadcast(io, vehicleHeartbeats);
 
   app.use(require('express').json());
