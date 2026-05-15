@@ -221,7 +221,7 @@ services:
     networks: [logiflow-prod]
 
   n8n:
-    image: n8nio/n8n:latest
+    image: n8nio/n8n:1.66.0
     container_name: logiflow-n8n
     environment:
       N8N_BASIC_AUTH_ACTIVE: "false"
@@ -229,23 +229,50 @@ services:
       N8N_PORT: 5678
       N8N_PROTOCOL: ${N8N_PROTOCOL:-https}
       N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
-      WEBHOOK_TARGET: ${WEBHOOK_TARGET:-}
+      N8N_USER_MANAGEMENT_DISABLED: "true"
+      N8N_SECURE_COOKIE: "false"
+      DB_TYPE: sqlite
+      DB_SQLITE_VACUUM_ON_STARTUP: "false"
+      WEBHOOK_TARGET: ${WEBHOOK_TARGET:-http://gateway:3002/api/v1/webhook}
       GATEWAY_AUTH_EMAIL: ${GATEWAY_AUTH_EMAIL:-admin@logiflow.app}
       GATEWAY_AUTH_PASSWORD: ${GATEWAY_AUTH_PASSWORD:-Admin2026!}
       GOOGLE_MAPS_API_KEY: ${GOOGLE_MAPS_API_KEY:-}
-      OPENCLAW_WEBHOOK_URL: ${OPENCLAW_WEBHOOK_URL:-}
+      OPENCLAW_WEBHOOK_URL: ${OPENCLAW_WEBHOOK_URL:-http://openclaw:18789}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
     ports:
       - "5678:5678"
     volumes:
       - n8n_data:/home/node/.n8n
+      - ./services/automation/n8n/workflows:/workflows:ro
+      - ./services/automation/n8n/entrypoint.sh:/entrypoint.sh:ro
+    entrypoint: ["/bin/sh", "/entrypoint.sh"]
+    depends_on:
+      gateway:
+        condition: service_started
+    restart: unless-stopped
+    networks: [logiflow-prod]
+
+  openclaw:
+    image: alpine/openclaw:latest
+    container_name: logiflow-openclaw
+    environment:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      OPENCLAW_GATEWAY_MODE: local
+      OPENCLAW_CHANNEL: telegram
+    ports:
+      - "18789:18789"
+    volumes:
+      - openclaw_data:/home/node/.openclaw
+      - ./services/automation/openclaw/skills:/home/node/.openclaw/skills
     restart: unless-stopped
     networks: [logiflow-prod]
 
 volumes:
   postgres_data:
   n8n_data:
+  openclaw_data:
   redis_data:
 
 networks:

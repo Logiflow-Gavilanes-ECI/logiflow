@@ -179,11 +179,79 @@ Expected response:
 3. optimizedRoutes.code equal to 0.
 4. routes[0].vehicleId equal to v-001.
 
-### 5.4 Redis verification
+### 5.4 n8n automation path
+
+Use this only after confirming the direct gateway path in section 5.3 works. This validates the product automation path:
+
+```text
+external event -> n8n webhook -> gateway -> optimizer/VROOM -> realtime -> Redis
+```
+
+Confirm n8n is running and the workflow was imported:
 
 ```bash
-docker exec logiflow-redis redis-cli --raw KEYS 'route:vehicle:*'
-docker exec logiflow-redis redis-cli --raw GET route:vehicle:v-001
+docker-compose -f docker-compose.prod.yml ps n8n
+docker-compose -f docker-compose.prod.yml logs --tail 120 n8n
+docker-compose -f docker-compose.prod.yml exec -T n8n n8n list:workflow
+```
+
+Expected log evidence:
+
+1. `[entrypoint] importing workflows from /workflows`
+2. `[entrypoint] activating imported workflows`
+3. `Traffic Event Trigger` listed by the n8n CLI.
+
+Trigger the workflow from inside the VM:
+
+```bash
+curl -sS -i -X POST "http://localhost:5678/webhook/logiflow/traffic-event" \
+  -H 'Content-Type: application/json' \
+  -H 'x-correlation-id: n8n-smoke-001' \
+  --data @services/automation/sample-data/traffic-event.json
+```
+
+Expected:
+
+1. n8n responds 2xx.
+2. Gateway logs an inbound `POST /api/v1/webhook`.
+3. Realtime logs route updates for `v-001` and `v-002`.
+
+Public webhook check:
+
+```bash
+curl -sS -i -X POST "$BASE_URL/webhook/logiflow/traffic-event" \
+  -H 'Content-Type: application/json' \
+  -H 'x-correlation-id: n8n-public-smoke-001' \
+  --data @services/automation/sample-data/traffic-event.json
+```
+
+If this returns `Cannot POST /webhook/logiflow/traffic-event`, Nginx is forwarding `/webhook/*` to the gateway instead of n8n. Add a reverse-proxy location on the VM that sends `/webhook/` to `http://127.0.0.1:5678`, then reload Nginx:
+
+```nginx
+location /webhook/ {
+    proxy_pass http://127.0.0.1:5678;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+```
+
+```bash
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+### 5.5 Redis verification
+
+```bash
+set -a
+source .env
+set +a
+
+docker exec -e REDISCLI_AUTH="$DB_PASSWORD" logiflow-redis redis-cli --raw KEYS 'route:vehicle:*'
+docker exec -e REDISCLI_AUTH="$DB_PASSWORD" logiflow-redis redis-cli --raw GET route:vehicle:v-001
 ```
 
 Expected:
@@ -191,12 +259,13 @@ Expected:
 1. Key route:vehicle:v-001 exists.
 2. Payload includes vehicleId v-001.
 
-### 5.5 Log verification (evidence for stakeholders)
+### 5.6 Log verification (evidence for stakeholders)
 
 ```bash
 docker-compose -f docker-compose.prod.yml logs --tail 120 gateway
 docker-compose -f docker-compose.prod.yml logs --tail 120 optimizer
 docker-compose -f docker-compose.prod.yml logs --tail 120 realtime
+docker-compose -f docker-compose.prod.yml logs --tail 120 n8n
 ```
 
 Look for evidence of:
@@ -205,6 +274,7 @@ Look for evidence of:
 2. Gateway sends VRP to optimizer and receives routes code 0.
 3. SocketClientService emits route-update.
 4. Optimizer processes without timeout.
+5. n8n receives the external webhook and calls `WEBHOOK_TARGET`.
 
 ## 6. Optional demo with and without AI (backend only)
 
