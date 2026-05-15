@@ -21,6 +21,7 @@ import { ApiBearerAuth } from '@nestjs/swagger';
 interface RequestUserPayload {
   userId?: string;
   username?: string;
+  vehicleId?: string;
 }
 
 type AuthenticatedRequest = Request & { user?: RequestUserPayload };
@@ -39,7 +40,7 @@ export class VehiclesController {
   @Get('me/route')
   getMyRoute(@Req() request: AuthenticatedRequest) {
     const user = request.user;
-    const routeLookupId = user?.userId ?? user?.username;
+    const routeLookupId = user?.vehicleId ?? user?.userId ?? user?.username;
     return this.vehiclesService.getAssignedRoute(routeLookupId);
   }
 

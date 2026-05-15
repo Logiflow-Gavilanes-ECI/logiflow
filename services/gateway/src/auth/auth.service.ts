@@ -78,6 +78,7 @@ type StoredRefreshToken = {
     role: AuthRole;
     email?: string | null;
     name?: string | null;
+    vehicleId?: string | null;
   };
 };
 
@@ -87,6 +88,7 @@ type AuthUserRecord = {
   name: string | null;
   passwordHash: string | null;
   role: AuthRole;
+  vehicleId?: string | null;
   provider: string;
   googleId: string | null;
   avatar: string | null;
@@ -103,6 +105,7 @@ type UserWriteClient = {
         email: string;
         passwordHash: string;
         role: AuthRole;
+        vehicleId?: string | null;
         provider: string;
       };
     }) => Promise<AuthUserRecord>;
@@ -372,8 +375,13 @@ export class AuthService {
     email?: string | null;
     name?: string | null;
     role: AuthRole;
+    vehicleId?: string | null;
   }) {
-    const vehicleId = await this.resolveVehicleIdForUser(user.id, user.role);
+    const vehicleId = await this.resolveVehicleIdForUser(
+      user.id,
+      user.role,
+      user.vehicleId,
+    );
     const payload = {
       sub: user.id,
       email: user.email ?? user.id,
@@ -424,7 +432,11 @@ export class AuthService {
     return createHash('sha256').update(refreshToken).digest('hex');
   }
 
-  private async resolveVehicleIdForUser(userId: string, role?: AuthRole) {
+  private async resolveVehicleIdForUser(
+    userId: string,
+    role?: AuthRole,
+    assignedVehicleId?: string | null,
+  ) {
     const trimmed = userId?.trim();
     if (!trimmed) {
       return undefined;
@@ -432,6 +444,31 @@ export class AuthService {
 
     try {
       const vehicleClient = this.prismaService as unknown as VehicleWriteClient;
+      const assigned = assignedVehicleId?.trim();
+      if (assigned) {
+        const assignedVehicle = await vehicleClient.vehicle.findUnique({
+          where: { id: assigned },
+        });
+        if (assignedVehicle) {
+          return assignedVehicle.id;
+        }
+
+        if (role === 'conductor') {
+          const defaults = buildVehicleProfileDefaults(assigned);
+          const created = await vehicleClient.vehicle.upsert({
+            where: { id: assigned },
+            update: {},
+            create: {
+              id: assigned,
+              ...defaults,
+            },
+          });
+          return created.id;
+        }
+
+        return assigned;
+      }
+
       const directMatch = await vehicleClient.vehicle.findUnique({
         where: { id: trimmed },
       });

@@ -73,6 +73,7 @@ describe('AuthService', () => {
             email: string;
             passwordHash: string;
             role: AuthRole;
+            vehicleId?: string | null;
             provider: string;
           };
         }) =>
@@ -82,6 +83,7 @@ describe('AuthService', () => {
             name: null,
             passwordHash: data.passwordHash,
             role: data.role,
+            vehicleId: data.vehicleId ?? null,
             provider: data.provider,
             googleId: null,
             avatar: null,
@@ -104,6 +106,9 @@ describe('AuthService', () => {
             role: (args.update.role ??
               args.create.role ??
               'conductor') as AuthRole,
+            vehicleId: (args.update.vehicleId ??
+              args.create.vehicleId ??
+              null) as string | null,
             provider: (args.create.provider ?? 'google') as string,
             googleId: (args.create.googleId ?? 'google-123') as string,
             avatar: (args.update.avatar ?? args.create.avatar ?? null) as
@@ -240,6 +245,37 @@ describe('AuthService', () => {
       accessToken: 'signed-token',
       role: 'admin',
     });
+  });
+
+  it('uses an assigned vehicleId from the user record in JWTs', async () => {
+    const passwordHash = await bcrypt.hash('demo123', 10);
+    prismaService.user.findUnique.mockResolvedValueOnce({
+      id: 'google-user-1',
+      email: 'correasuarezelizabeth@gmail.com',
+      name: 'Elizabeth Correa',
+      passwordHash,
+      role: 'conductor',
+      vehicleId: 'v-001',
+      provider: 'google',
+      googleId: 'google-elizabeth',
+      avatar: null,
+    });
+    prismaService.vehicle.findUnique.mockResolvedValueOnce({ id: 'v-001' });
+
+    await authService.login({
+      email: 'correasuarezelizabeth@gmail.com',
+      password: 'demo123',
+    });
+
+    expect(signAsyncMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sub: 'google-user-1',
+        email: 'correasuarezelizabeth@gmail.com',
+        role: 'conductor',
+        vehicleId: 'v-001',
+      }),
+    );
+    expect(prismaService.vehicle.upsert).not.toHaveBeenCalled();
   });
 
   it('rejects login with an invalid password', async () => {

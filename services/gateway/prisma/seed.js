@@ -8,6 +8,17 @@ const ADMIN_NAME = 'Admin LogiFlow';
 const ADMIN_PASSWORD = 'Admin2026!';
 const DRIVER_PASSWORD = 'Driver2026!';
 
+const GOOGLE_DRIVER_ASSIGNMENTS = [
+  {
+    email: 'correasuarezelizabeth@gmail.com',
+    vehicleId: 'v-001',
+  },
+  {
+    email: 'cristiantseci@gmail.com',
+    vehicleId: 'v-002',
+  },
+];
+
 const DEMO_VEHICLES = [
   {
     id: 'v-001',
@@ -93,6 +104,8 @@ async function seedDemoData(prisma) {
     await seedDemoDriver(prisma, vehicle, driverPasswordHashes[index]);
   }
 
+  await seedGoogleDriverAssignments(prisma);
+
   await prisma.user.upsert({
     where: { email: ADMIN_EMAIL },
     update: {
@@ -114,6 +127,33 @@ async function seedDemoData(prisma) {
   for (const vehicle of DEMO_VEHICLES) {
     console.log(
       `Seeded demo conductor: ${vehicle.driver.email} vehicleId=${vehicle.id} plate=${vehicle.plate}`,
+    );
+  }
+}
+
+async function seedGoogleDriverAssignments(prisma) {
+  for (const assignment of GOOGLE_DRIVER_ASSIGNMENTS) {
+    const user = await prisma.user.findUnique({
+      where: { email: assignment.email },
+    });
+
+    if (!user) {
+      console.log(
+        `Skipped OAuth conductor assignment: ${assignment.email} does not exist yet.`,
+      );
+      continue;
+    }
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        role: 'conductor',
+        vehicleId: assignment.vehicleId,
+      },
+    });
+
+    console.log(
+      `Assigned OAuth conductor: ${assignment.email} vehicleId=${assignment.vehicleId}`,
     );
   }
 }
@@ -150,6 +190,7 @@ async function seedDemoDriver(prisma, vehicle, passwordHash) {
     name: driver.name,
     passwordHash,
     role: 'conductor',
+    vehicleId: vehicle.id,
     provider: 'local',
   };
 

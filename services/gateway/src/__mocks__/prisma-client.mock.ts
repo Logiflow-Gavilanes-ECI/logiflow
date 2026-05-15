@@ -27,6 +27,7 @@ type UserEntity = {
   name?: string | null;
   passwordHash?: string | null;
   role: 'admin' | 'conductor';
+  vehicleId?: string | null;
   provider?: string;
   googleId?: string | null;
   avatar?: string | null;
@@ -340,6 +341,7 @@ export class PrismaClient {
           name?: string | null;
           passwordHash?: string;
           role: 'admin' | 'conductor';
+          vehicleId?: string | null;
           provider?: string;
           googleId?: string | null;
           avatar?: string | null;
@@ -352,6 +354,7 @@ export class PrismaClient {
           name: data.name ?? null,
           passwordHash: data.passwordHash ?? null,
           role: data.role,
+          vehicleId: data.vehicleId ?? null,
           provider: data.provider ?? 'local',
           googleId: data.googleId ?? null,
           avatar: data.avatar ?? null,
@@ -375,6 +378,7 @@ export class PrismaClient {
           name?: string | null;
           passwordHash?: string | null;
           role: 'admin' | 'conductor';
+          vehicleId?: string | null;
           provider?: string;
           googleId?: string | null;
           avatar?: string | null;
@@ -398,6 +402,7 @@ export class PrismaClient {
           name: create.name ?? null,
           passwordHash: create.passwordHash ?? null,
           role: create.role,
+          vehicleId: create.vehicleId ?? null,
           provider: create.provider ?? 'google',
           googleId: create.googleId ?? null,
           avatar: create.avatar ?? null,

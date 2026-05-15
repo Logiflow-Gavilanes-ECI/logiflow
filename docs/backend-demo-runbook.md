@@ -550,9 +550,152 @@ curl -sS -i -X POST "$BASE_URL/webhook/logiflow/traffic-event" \
 
 In the n8n GUI, the `Notify via Telegram` node should return a Telegram payload with `"ok": true`, and the `Notification Delivered?` node should take the success branch.
 
-## 8. Common issues and solutions
+## 8. Optional n8n GUI test scenarios
 
-### 8.1 npm install fails with EACCES in realtime
+Use these scenarios when you want to watch the workflow execute node by node in the n8n editor.
+
+GUI steps for every scenario:
+
+1. Open the `Traffic Event Trigger - LogiFlow` workflow.
+2. Go back to the canvas.
+3. Click `Test workflow`.
+4. Run exactly one `curl` against `/webhook-test/logiflow/traffic-event`.
+5. Wait for the nodes to turn green or red.
+6. Click individual nodes to inspect input/output.
+7. To run another scenario, click `Test workflow` again before sending the next `curl`.
+
+The test webhook is one-shot. If you send a second request without clicking `Test workflow` again, n8n returns 404 for the test URL.
+
+Set the test URL:
+
+```bash
+cd /home/ubuntu/logiflow
+export N8N_TEST_URL=http://localhost:5678/webhook-test/logiflow/traffic-event
+```
+
+### 8.1 CRITICAL traffic event - reoptimize and notify Telegram
+
+Expected visual path:
+
+1. Main route optimization branch succeeds.
+2. `Risk Matrix Switch` takes the notification branch.
+3. `Notify via Telegram` succeeds.
+4. `Notification Delivered?` takes the success branch.
+5. `Success - Route Re-optimization` succeeds.
+
+```bash
+curl -sS -i -X POST "$N8N_TEST_URL" \
+  -H 'Content-Type: application/json' \
+  -H 'x-correlation-id: n8n-gui-critical-traffic' \
+  --data-binary @services/automation/sample-data/traffic-event.json
+```
+
+### 8.2 HIGH traffic jam - reoptimize but skip notification
+
+The risk matrix maps `HIGH + traffic_jam` to `MEDIUM`, so the notification branch should be skipped.
+
+Expected visual path:
+
+1. Main route optimization branch succeeds.
+2. `Risk Matrix Switch` takes the false branch.
+3. `Notification Skipped Log` succeeds.
+4. `Notify via Telegram` is not executed.
+
+```bash
+curl -sS -i -X POST "$N8N_TEST_URL" \
+  -H 'Content-Type: application/json' \
+  -H 'x-correlation-id: n8n-gui-high-traffic' \
+  -d '{
+    "eventType": "traffic_jam",
+    "severity": "HIGH",
+    "locationDescription": "Autopista Norte - Calle 100, Bogotá",
+    "vehicles": [
+      { "id": "v-001", "lat": 4.711, "lng": -74.0721, "capacity": 12 },
+      { "id": "v-002", "lat": 4.695, "lng": -74.063, "capacity": 8 }
+    ],
+    "stops": [
+      { "id": "s-101", "lat": 4.705, "lng": -74.068, "demand": 2, "priority": 1 },
+      { "id": "s-102", "lat": 4.688, "lng": -74.056, "demand": 3, "priority": 2 }
+    ]
+  }'
+```
+
+### 8.3 LOW weather alert - map to gateway `weather_change`
+
+Expected visual path:
+
+1. `Evaluate Risk Matrix` outputs `riskLevel: LOW`.
+2. `Assess Detour` maps the gateway event type to `weather_change`.
+3. Main route optimization branch succeeds.
+4. Notification is skipped.
+
+```bash
+curl -sS -i -X POST "$N8N_TEST_URL" \
+  -H 'Content-Type: application/json' \
+  -H 'x-correlation-id: n8n-gui-low-weather' \
+  -d '{
+    "eventType": "weather_alert",
+    "severity": "LOW",
+    "locationDescription": "Avenida El Dorado, Bogotá, Colombia",
+    "vehicles": [
+      { "id": "v-001", "lat": 4.711, "lng": -74.0721, "capacity": 12 }
+    ],
+    "stops": [
+      { "id": "s-weather-1", "lat": 4.701, "lng": -74.09, "demand": 1, "priority": 1 }
+    ]
+  }'
+```
+
+### 8.4 CRITICAL road closure - map to gateway `traffic_jam` and notify
+
+Expected visual path:
+
+1. `Evaluate Risk Matrix` outputs `riskLevel: HIGH`.
+2. `Assess Detour` maps `road_closure` to gateway `traffic_jam`.
+3. Main route optimization branch succeeds.
+4. Telegram notification succeeds when Telegram env vars are configured.
+
+```bash
+curl -sS -i -X POST "$N8N_TEST_URL" \
+  -H 'Content-Type: application/json' \
+  -H 'x-correlation-id: n8n-gui-road-closure' \
+  -d '{
+    "eventType": "road_closure",
+    "severity": "CRITICAL",
+    "locationDescription": "Carrera Séptima con Calle 72, Bogotá, Colombia",
+    "vehicles": [
+      { "id": "v-001", "lat": 4.711, "lng": -74.0721, "capacity": 12 },
+      { "id": "v-002", "lat": 4.695, "lng": -74.063, "capacity": 8 }
+    ],
+    "stops": [
+      { "id": "s-closure-1", "lat": 4.657, "lng": -74.06, "demand": 2, "priority": 1 },
+      { "id": "s-closure-2", "lat": 4.676, "lng": -74.048, "demand": 2, "priority": 2 }
+    ]
+  }'
+```
+
+### 8.5 Invalid payload - see failure handling
+
+Use this to inspect how a bad event fails. Expected result: the workflow should fail or stop around `POST to Webhook`, because the gateway requires at least one vehicle.
+
+```bash
+curl -sS -i -X POST "$N8N_TEST_URL" \
+  -H 'Content-Type: application/json' \
+  -H 'x-correlation-id: n8n-gui-invalid-payload' \
+  -d '{
+    "eventType": "traffic_jam",
+    "severity": "MEDIUM",
+    "locationDescription": "Invalid payload test",
+    "vehicles": [],
+    "stops": [
+      { "id": "s-invalid-1", "lat": 4.705, "lng": -74.068, "demand": 1, "priority": 1 }
+    ]
+  }'
+```
+
+## 9. Common issues and solutions
+
+### 9.1 npm install fails with EACCES in realtime
 
 If services/realtime/node_modules was left with root ownership from running in a container:
 
@@ -560,17 +703,17 @@ If services/realtime/node_modules was left with root ownership from running in a
 docker run --rm -v "$PWD":/workspace alpine sh -c "chown -R $(id -u):$(id -g) /workspace/services/realtime/node_modules"
 ```
 
-### 8.2 Socket does not connect (Unauthorized)
+### 9.2 Socket does not connect (Unauthorized)
 
 1. Verify that realtime has JWT_SECRET in compose.
 2. Verify that gateway uses the same JWT_SECRET.
 
-### 8.3 Optimizer does not write to Redis
+### 9.3 Optimizer does not write to Redis
 
 1. Confirm REDIS_URL in optimizer.
 2. Check optimizer logs for persistence errors.
 
-## 9. Shutdown commands
+## 10. Shutdown commands
 
 ```bash
 docker-compose -f docker-compose.prod.yml down --remove-orphans

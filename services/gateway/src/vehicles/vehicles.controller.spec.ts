@@ -29,6 +29,7 @@ describe('VehiclesController', () => {
             findAll: jest.fn(),
             findOne: jest.fn(),
             findDetails: jest.fn(),
+            getAssignedRoute: jest.fn(),
             create: jest.fn(),
             update: jest.fn(),
             remove: jest.fn(),
@@ -72,6 +73,24 @@ describe('VehiclesController', () => {
       expect(result.plate).toBe('V1');
       expect(result.lat).toBe(4.711);
       expect(result.capacity).toBe(100);
+    });
+  });
+
+  describe('getMyRoute', () => {
+    it('should prefer the JWT vehicleId over the user id', async () => {
+      service.getAssignedRoute.mockResolvedValue({
+        vehicleId: 'v-001',
+        steps: [],
+      });
+
+      await controller.getMyRoute({
+        user: {
+          userId: 'google-user-1',
+          vehicleId: 'v-001',
+        },
+      } as never);
+
+      expect(service.getAssignedRoute).toHaveBeenCalledWith('v-001');
     });
   });
 
