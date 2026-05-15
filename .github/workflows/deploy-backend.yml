@@ -1,4 +1,4 @@
-name: Deploy backend (SSH → Azure VM)
+|name: Deploy backend (SSH → Azure VM)
 
 on:
   push:
@@ -33,7 +33,7 @@ jobs:
         run: |
           mkdir -p "$HOME/.ssh"
           install -m 600 /dev/null "$HOME/.ssh/deploy_key"
-          printf '%s\n' "${{ secrets.SSH_PRIVATE_KEY }}" > "$HOME/.ssh/deploy_key"
+          printf '%s' "${{ secrets.SSH_PRIVATE_KEY }}" | base64 -d > "$HOME/.ssh/deploy_key"
           ssh-keyscan -H "${{ secrets.SERVER_IP }}" >> "$HOME/.ssh/known_hosts"
         shell: bash
 
