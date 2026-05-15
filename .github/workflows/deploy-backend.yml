@@ -1,0 +1,94 @@
+|name: Deploy backend (SSH → Azure VM)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'services/**'
+      - 'shared/**'
+      - 'docker-compose.prod.yml'
+      - '.github/workflows/deploy-backend.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-backend
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: rsync + docker compose
+    runs-on: ubuntu-latest
+
+    env:
+      DEPLOY_PATH: /home/ubuntu/logiflow
+      # Azure asigna gratis este FQDN a la VM; el cert Let's Encrypt está
+      # emitido contra él y nginx en el host hace TLS termination.
+      PUBLIC_FQDN: logiflow-api.eastus2.cloudapp.azure.com
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup SSH
+        run: |
+          mkdir -p "$HOME/.ssh"
+          install -m 600 /dev/null "$HOME/.ssh/deploy_key"
+          printf '%s' "${{ secrets.SSH_PRIVATE_KEY }}" | base64 -d > "$HOME/.ssh/deploy_key"
+          ssh-keyscan -H "${{ secrets.SERVER_IP }}" >> "$HOME/.ssh/known_hosts"
+        shell: bash
+
+      - name: Rsync source to VM
+        # `.env` viene con secretos manejados en la VM (DB_PASSWORD, JWT_SECRET, ...)
+        # → NO se sobreescribe. `nginx/` y `certbot/` son root-owned y guardan
+        # el TLS vivo de Let's Encrypt → tampoco se tocan. `backups/` es estado
+        # generado en VM, no en repo.
+        run: |
+          rsync -az --delete-after \
+            --exclude='.git/' \
+            --exclude='.github/' \
+            --exclude='node_modules/' \
+            --exclude='services/optimizer/osrm-data/' \
+            --exclude='.env' \
+            --exclude='.env.local' \
+            --exclude='.env.prod' \
+            --exclude='dist/' \
+            --exclude='*.log' \
+            --exclude='infra/generated/' \
+            --exclude='.terraform/' \
+            --exclude='nginx/' \
+            --exclude='certbot/' \
+            --exclude='backups/' \
+            -e "ssh -i $HOME/.ssh/deploy_key -o StrictHostKeyChecking=no" \
+            ./ \
+            ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }}:${{ env.DEPLOY_PATH }}/
+        shell: bash
+
+      - name: Rebuild & restart containers
+        # Usamos -f docker-compose.prod.yml explícito — el stack en VM corre
+        # con ese archivo (network "logiflow-prod", n8n/openclaw always-on).
+        run: |
+          ssh -i "$HOME/.ssh/deploy_key" -o StrictHostKeyChecking=no \
+            ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} \
+            "cd ${{ env.DEPLOY_PATH }} && \
+             docker compose -f docker-compose.prod.yml pull --ignore-buildable 2>/dev/null || true && \
+             docker compose -f docker-compose.prod.yml up -d --build --remove-orphans && \
+             docker compose -f docker-compose.prod.yml ps"
+        shell: bash
+
+      - name: Smoke test gateway (HTTPS via nginx)
+        # El gateway compila + corre migraciones en boot (~60s). Damos tiempo.
+        # Pegamos al FQDN público → nginx → gateway, así verificamos toda la cadena.
+        run: |
+          url="https://${{ env.PUBLIC_FQDN }}/api/v1"
+          for i in 1 2 3 4 5 6 7 8; do
+            code=$(curl -s -o /dev/null -w "%{http_code}" "$url" 2>/dev/null || echo "000")
+            echo "attempt $i → $code"
+            # 401/404 también cuentan: significan que NestJS contestó.
+            if [ "$code" = "200" ] || [ "$code" = "401" ] || [ "$code" = "404" ]; then
+              echo "Gateway responding ✓"
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "::warning::Gateway did not respond at $url — check 'docker logs logiflow-gateway' on the VM"
+        shell: bash
