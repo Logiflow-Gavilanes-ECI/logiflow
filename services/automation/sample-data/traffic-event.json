@@ -1,5 +1,5 @@
 {
-  "eventType": "road_closure",
+  "eventType": "traffic_jam",
   "severity": "CRITICAL",
   "locationDescription": "Autopista Norte - Calle 100, Bogotá",
   "vehicles": [

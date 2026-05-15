@@ -131,43 +131,55 @@ OPENCLAW_WEBHOOK_URL=http://openclaw:18789
 
 Also create `services/automation/n8n/.env` from `n8n/.env.example` for the Docker Compose variables used by n8n.
 
-### 3 — Start n8n
+### 3 — Start n8n + the rest of the stack
+
+n8n and OpenClaw live in the root `docker-compose.yml` under the `automation` profile, so they share the platform network and reach the gateway at `http://gateway:3002` directly:
 
 ```bash
-docker network create logiflow-net
-cd services/automation/n8n
-docker compose up -d
+cd ../..                                   # back to logiflow/
+docker compose --profile automation up -d  # brings up postgres, redis, vroom,
+                                           # optimizer, ai-predictor, realtime,
+                                           # gateway, n8n, openclaw
 ```
 
-n8n UI available at: `http://localhost:5678`
+n8n UI: `http://localhost:5678` · OpenClaw notifier: `http://localhost:18789`
 
-### 4 — Import the workflow
+### 4 — Workflow auto-import and one-time activation
 
-1. Open `http://localhost:5678`
-2. Go to **Workflows → Import from File**
-3. Select `n8n/workflows/traffic-event-trigger.json`
-4. **Activate** the workflow (toggle top-right)
+`docker-compose.yml` mounts `services/automation/n8n/workflows/` into the container; the entrypoint at `services/automation/n8n/entrypoint.sh` runs `n8n import:workflow --separate --input=/workflows` on every boot, so the workflow lands in the UI ready to use.
 
-> If you modify the JSON file locally, re-import and re-activate. n8n stores workflows in its own database.
+**Known quirk in current n8n versions**: CLI activation (`n8n update:workflow --all --active=true`) flips the `active` flag in the DB but doesn't fully register the webhook in the runtime registry. On the **first** boot of a new dev box, open `http://localhost:5678`, complete the owner setup with throwaway creds, click into the workflow, and toggle **Active** in the UI once. That state then persists in the `logiflow_n8n_data` volume across container restarts.
 
 ### 5 — Send a test event
 
+Two paths — pick whichever you need:
+
 ```bash
-curl -X POST "http://localhost:5678/webhook/logiflow/traffic-event" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "eventType": "road_closure",
-    "severity": "CRITICAL",
-    "locationDescription": "Autopista Norte - Calle 100, Bogota",
-    "vehicles": [{"id": "v-001", "lat": 4.7110, "lng": -74.0721, "capacity": 12}],
-    "stops": [{"id": "s-101", "lat": 4.7050, "lng": -74.0680, "demand": 2, "priority": 1}]
-  }'
+# --direct: bypasses n8n entirely, POSTs straight to the gateway webhook.
+# This is the recommended path for frontend dev because it doesn't depend
+# on the n8n workflow being activated.
+./services/automation/scripts/trigger-event.sh --direct
+
+# default: hits the n8n webhook → workflow → gateway. Only works after the
+# one-time UI activation step above.
+./services/automation/scripts/trigger-event.sh
 ```
 
-**Expected result:**
-- Workflow runs end-to-end ✅
-- Gateway receives the reroute trigger ✅
-- Telegram alert arrives on your phone ✅
+**Expected result for either path:**
+- Gateway logs the inbound webhook (`POST /api/v1/webhook`) ✅
+- Optimizer mock-computes a haversine matrix and solves via VROOM (`matrixSource: "mock"`) ✅
+- Realtime emits `route:update` over Socket.io ✅
+- Web-admin (if running) sees the updated polyline on the map ✅
+- (If `TELEGRAM_BOT_TOKEN` is set, only on the n8n path) Telegram alert arrives ✅
+
+Watch progress with:
+
+```bash
+docker logs -f logiflow-gateway      # webhook handling
+docker logs -f logiflow-optimizer    # VROOM call + matrix
+docker logs -f logiflow-realtime     # route:update emit
+docker logs -f logiflow-n8n          # only relevant on the non-direct path
+```
 
 ---
 

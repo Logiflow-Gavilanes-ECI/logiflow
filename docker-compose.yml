@@ -47,8 +47,12 @@ services:
       VROOM_URL: http://vroom:3000
       REDIS_URL: redis://redis:6379
       OPTIMIZER_PROTO_PATH: /app/shared/proto/optimizer.proto
-      MATRIX_SOURCE: request
-      GOOGLE_ROUTES_ENABLED: "false"
+      # Dev compose: gateway webhook events don't carry a matrix, so the
+      # optimizer needs to fabricate one. Set MATRIX_SOURCE=google with
+      # mock mode + no live calls — the GoogleRoutesClient mock falls back
+      # to a haversine matrix so VROOM never tries to reach OSRM.
+      MATRIX_SOURCE: google
+      GOOGLE_ROUTES_ENABLED: "true"
       GOOGLE_ROUTES_ALLOW_CALLS: "false"
       GOOGLE_ROUTES_MOCK: "true"
       AI_PREDICTOR_ENABLED: "false"
@@ -126,5 +130,69 @@ services:
       realtime:
         condition: service_started
 
+  # Automations live under the `automation` profile so the platform
+  # starts in 7-container mode by default. Bring them up with:
+  #   docker compose --profile automation up -d
+  n8n:
+    # Pinned to the version the workflow JSON was authored against — newer
+    # versions changed webhook registration and the imported workflow comes
+    # up active in the DB but its webhook never registers.
+    image: n8nio/n8n:1.66.0
+    container_name: logiflow-n8n
+    profiles: [automation]
+    environment:
+      N8N_BASIC_AUTH_ACTIVE: "false"
+      N8N_HOST: ${N8N_HOST:-localhost}
+      N8N_PORT: 5678
+      N8N_PROTOCOL: ${N8N_PROTOCOL:-http}
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
+      # Skip owner-setup UI on first boot so the imported workflow can
+      # register its webhook without a human clicking through n8n's onboarding.
+      N8N_USER_MANAGEMENT_DISABLED: "true"
+      N8N_SECURE_COOKIE: "false"
+      DB_TYPE: sqlite
+      DB_SQLITE_VACUUM_ON_STARTUP: "false"
+      WEBHOOK_TARGET: ${WEBHOOK_TARGET:-http://gateway:3002/api/v1/webhook}
+      GATEWAY_AUTH_EMAIL: ${GATEWAY_AUTH_EMAIL:-admin@logiflow.app}
+      GATEWAY_AUTH_PASSWORD: ${GATEWAY_AUTH_PASSWORD:-Admin2026!}
+      GOOGLE_MAPS_API_KEY: ${GOOGLE_MAPS_API_KEY:-}
+      OPENCLAW_WEBHOOK_URL: ${OPENCLAW_WEBHOOK_URL:-http://openclaw:18789}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+    ports:
+      - "5678:5678"
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./services/automation/n8n/workflows:/workflows:ro
+      - ./services/automation/n8n/entrypoint.sh:/entrypoint.sh:ro
+    # The official n8n image entrypoint dispatches the first CMD arg as
+    # an n8n subcommand (start / import / etc.), which collides with our
+    # bootstrap script. Override it directly; the script `exec`s into
+    # `n8n start` so the server still ends up as PID 1.
+    entrypoint: ["/bin/sh", "/entrypoint.sh"]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      gateway:
+        condition: service_started
+
+  openclaw:
+    image: alpine/openclaw:latest
+    container_name: logiflow-openclaw
+    profiles: [automation]
+    environment:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      OPENCLAW_GATEWAY_MODE: local
+      OPENCLAW_CHANNEL: telegram
+    ports:
+      - "18789:18789"
+    volumes:
+      - openclaw_data:/home/node/.openclaw
+      - ./services/automation/openclaw/skills:/home/node/.openclaw/skills
+    restart: unless-stopped
+
 volumes:
   postgres_data:
+  n8n_data:
+  openclaw_data:
