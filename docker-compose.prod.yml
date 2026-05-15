@@ -231,6 +231,7 @@ services:
       N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
       N8N_USER_MANAGEMENT_DISABLED: "true"
       N8N_SECURE_COOKIE: "false"
+      N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS: "true"
       DB_TYPE: sqlite
       DB_SQLITE_VACUUM_ON_STARTUP: "false"
       WEBHOOK_TARGET: ${WEBHOOK_TARGET:-http://gateway:3002/api/v1/webhook}

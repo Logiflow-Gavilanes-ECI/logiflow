@@ -63,7 +63,162 @@ cd /home/ubuntu/logiflow
 docker-compose -f docker-compose.prod.yml ps
 ```
 
+### 4.2 Full n8n end-to-end validation
+
+This is the recommended command sequence for stakeholder demos. It validates the full production-like backend path:
+
+```text
+public POST /webhook/logiflow/traffic-event
+-> Nginx
+-> n8n workflow
+-> Gateway /api/v1/webhook
+-> Optimizer gRPC
+-> VROOM
+-> Realtime Socket.io
+-> Redis route:vehicle:* keys
+```
+
+Start from the VM project directory and define the public base URL:
+
+```bash
+cd /home/ubuntu/logiflow
+export BASE_URL=https://logiflow-api.eastus2.cloudapp.azure.com
+```
+
+Bring the stack up with the current compose definition. This restarts changed services without deleting database, Redis, or n8n volumes:
+
+```bash
+docker-compose -f docker-compose.prod.yml up -d --build
+docker-compose -f docker-compose.prod.yml ps
+```
+
+Expected service state:
+
+1. `gateway`, `optimizer`, `realtime`, `n8n`, `redis`, `postgres`, `vroom`, and `ai-predictor` are `Up`.
+2. `redis`, `postgres`, `optimizer`, and `vroom` are healthy when health status is shown.
+3. `openclaw` may be present and healthy, but it is not required for the current n8n -> gateway route optimization flow.
+
+Check public Gateway health:
+
+```bash
+curl -sS -i "$BASE_URL/api/v1/health"
+```
+
+Expected:
+
+1. HTTP 200.
+2. Body contains `"status":"ok"`.
+
+Check that Nginx is routing the public n8n webhook path to n8n:
+
+```bash
+sudo nginx -t
+sudo nginx -T | grep -n "server_name\|location /webhook/\|proxy_pass http://127.0.0.1:5678"
+```
+
+Expected:
+
+1. Nginx syntax is OK.
+2. The active config contains `location /webhook/`.
+3. That location proxies to `http://127.0.0.1:5678`.
+
+Check that n8n imported and activated the workflow:
+
+```bash
+docker-compose -f docker-compose.prod.yml logs --tail 120 n8n
+docker-compose -f docker-compose.prod.yml exec -T n8n n8n list:workflow
+```
+
+Expected:
+
+1. Logs include `Successfully imported 1 workflow`.
+2. Logs include `Start Active Workflows`.
+3. Logs include `Traffic Event Trigger - LogiFlow` or `Traffic Event Trigger – LogiFlow`.
+4. `n8n list:workflow` prints `logiflow-traffic-event-trigger|Traffic Event Trigger`.
+
+Optional: clear the demo route keys before triggering the full flow, so the Redis evidence is fresh:
+
+```bash
+set -a
+source .env
+set +a
+
+docker exec -e REDISCLI_AUTH="$DB_PASSWORD" logiflow-redis redis-cli --raw DEL route:vehicle:v-001 route:vehicle:v-002
+docker exec -e REDISCLI_AUTH="$DB_PASSWORD" logiflow-redis redis-cli --raw KEYS 'route:vehicle:*'
+```
+
+Trigger the full public n8n flow:
+
+```bash
+curl -sS -i -X POST "$BASE_URL/webhook/logiflow/traffic-event" \
+  -H 'Content-Type: application/json' \
+  -H 'x-correlation-id: n8n-full-smoke-001' \
+  --data-binary @services/automation/sample-data/traffic-event.json
+```
+
+Expected immediate response:
+
+```json
+{"message":"Workflow was started"}
+```
+
+n8n uses `responseMode: onReceived`, so the 200 response only confirms the workflow accepted the event. Give the async execution a few seconds, then inspect service evidence:
+
+```bash
+sleep 5
+docker-compose -f docker-compose.prod.yml logs --tail 220 gateway optimizer realtime n8n | grep -E "Incoming webhook|Received event|Sending VRP|Optimizer returned|Emitted route-update|Route update emitted|optimize_started|optimize_completed|Start Active Workflows|Successfully imported"
+```
+
+Expected log evidence:
+
+1. Gateway logs `Incoming webhook: traffic_jam`.
+2. Gateway logs `vehicles: 2 | jobs: 2`.
+3. Gateway logs `Optimizer returned 2 routes, code: 0`.
+4. Gateway logs `Emitted route-update: 2 routes`.
+5. Optimizer logs `optimize_started` with `vehicles:2` and `jobs:2`.
+6. Optimizer logs `optimize_completed` with `routes:2`.
+7. Realtime logs `Route update emitted for vehicle v-001`.
+8. Realtime logs `Route update emitted for vehicle v-002`.
+
+Verify route persistence in Redis:
+
+```bash
+docker exec -e REDISCLI_AUTH="$DB_PASSWORD" logiflow-redis redis-cli --raw KEYS 'route:vehicle:*'
+docker exec -e REDISCLI_AUTH="$DB_PASSWORD" logiflow-redis redis-cli --raw GET route:vehicle:v-001
+docker exec -e REDISCLI_AUTH="$DB_PASSWORD" logiflow-redis redis-cli --raw GET route:vehicle:v-002
+```
+
+Expected Redis evidence:
+
+1. Keys include `route:vehicle:v-001`.
+2. Keys include `route:vehicle:v-002`.
+3. The `v-001` payload contains `"vehicleId":"v-001"`.
+4. The `v-002` payload contains `"vehicleId":"v-002"`.
+5. Both payloads have a recent `persistedAt`.
+
+Optional control test: bypass n8n and call Gateway directly with JWT. Use this only to isolate Gateway/Optimizer/Realtime issues from n8n issues:
+
+```bash
+TOKEN=$(docker-compose -f docker-compose.prod.yml exec -T gateway node -e "const jwt=require('jsonwebtoken'); const payload={sub:'demo-user', username:'demo', role:'admin'}; console.log(jwt.sign(payload, process.env.JWT_SECRET, {expiresIn:'10m'}));")
+
+curl -sS -X POST "$BASE_URL/api/v1/webhook" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' \
+  -H 'x-correlation-id: direct-gateway-smoke-001' \
+  -d '{
+    "eventType":"traffic_jam",
+    "vehicles":[
+      { "id":"v-001", "lat":4.711, "lng":-74.072, "capacity":10 }
+    ],
+    "stops":[
+      { "id":"s-101", "lat":4.705, "lng":-74.068, "demand":2, "priority":1 }
+    ]
+  }'
+```
+
 ## 5. Backend demo smoke tests
+
+The commands in this section are extra smoke/debug checks. For a normal stakeholder demo, section 4.2 is enough. Do not run troubleshooting reset blocks unless the expected error is actually present.
 
 ### 5.1 Health check (public)
 
@@ -133,7 +288,9 @@ TOKEN=$(docker-compose -f docker-compose.prod.yml exec -T gateway node -e "const
 
 ### 5.3 Authenticated end-to-end webhook (VROOM)
 
-The webhook is protected with JWT. For PowerShell/curl.exe, first request a token:
+The webhook is protected with JWT. On the deployed VM, use the Linux/macOS commands. The PowerShell/curl.exe examples are only for running the same smoke test from a Windows terminal, not from the VM bash shell.
+
+For PowerShell/curl.exe, first request a token:
 
 ```powershell
 $TOKEN = (curl.exe -sS -X POST "$BASE_URL/api/v1/auth/login" `
@@ -209,13 +366,48 @@ Expected log evidence:
 2. `[entrypoint] activating imported workflows`
 3. `Traffic Event Trigger` listed by the n8n CLI.
 
+Troubleshooting only: if the import logs show `SQLITE_ERROR: no such column: User.role`, the `n8n_data` volume was likely created by a different n8n version before the image was pinned. Do not run this block when `n8n list:workflow` already prints the workflow. Back up and recreate only the n8n volume:
+
+```bash
+docker volume ls | grep n8n
+
+mkdir -p backups
+docker-compose -f docker-compose.prod.yml stop n8n
+docker run --rm \
+  -v logiflow_n8n_data:/data \
+  -v "$PWD/backups:/backup" \
+  alpine sh -c 'tar czf /backup/n8n_data_$(date +%Y%m%d_%H%M%S).tgz -C /data .'
+
+docker-compose -f docker-compose.prod.yml rm -sf n8n
+docker volume rm logiflow_n8n_data
+docker-compose -f docker-compose.prod.yml up -d n8n
+docker-compose -f docker-compose.prod.yml logs -f n8n
+```
+
+Wait until the n8n logs show both `n8n ready` and `=> Started`, then stop following logs with `Ctrl+C` and run:
+
+```bash
+docker-compose -f docker-compose.prod.yml exec -T n8n n8n list:workflow
+```
+
+After the reset, `n8n list:workflow` should print the imported workflow instead of returning an empty response.
+
+If you run `n8n list:workflow` too early and get `SQLITE_BUSY: database is locked`, n8n was still migrating/importing. Wait for it to finish or restart only n8n:
+
+```bash
+docker-compose -f docker-compose.prod.yml restart n8n
+docker-compose -f docker-compose.prod.yml logs -f n8n
+```
+
+Again, wait for `n8n ready` and `=> Started` before testing the webhook.
+
 Trigger the workflow from inside the VM:
 
 ```bash
 curl -sS -i -X POST "http://localhost:5678/webhook/logiflow/traffic-event" \
   -H 'Content-Type: application/json' \
   -H 'x-correlation-id: n8n-smoke-001' \
-  --data @services/automation/sample-data/traffic-event.json
+  --data-binary @services/automation/sample-data/traffic-event.json
 ```
 
 Expected:
@@ -230,10 +422,10 @@ Public webhook check:
 curl -sS -i -X POST "$BASE_URL/webhook/logiflow/traffic-event" \
   -H 'Content-Type: application/json' \
   -H 'x-correlation-id: n8n-public-smoke-001' \
-  --data @services/automation/sample-data/traffic-event.json
+  --data-binary @services/automation/sample-data/traffic-event.json
 ```
 
-If this returns `Cannot POST /webhook/logiflow/traffic-event`, Nginx is forwarding `/webhook/*` to the gateway instead of n8n. Add a reverse-proxy location on the VM that sends `/webhook/` to `http://127.0.0.1:5678`, then reload Nginx:
+If this returns `Cannot POST /webhook/logiflow/traffic-event`, Nginx is forwarding `/webhook/*` to the gateway instead of n8n. This block is Nginx configuration, not a shell command. Add it inside the HTTPS `server { ... }` block on the VM, before the catch-all `location /`, then reload Nginx:
 
 ```nginx
 location /webhook/ {
@@ -245,6 +437,17 @@ location /webhook/ {
     proxy_set_header X-Forwarded-Proto $scheme;
 }
 ```
+
+Useful commands to find and edit the active config:
+
+```bash
+sudo nginx -T | grep -n "server_name\|proxy_pass\|configuration file"
+sudo mkdir -p /etc/nginx/backups
+sudo cp /etc/nginx/sites-enabled/logiflow /etc/nginx/backups/logiflow.bak.$(date +%Y%m%d_%H%M%S)
+sudo nano /etc/nginx/sites-enabled/logiflow
+```
+
+Keep backup files outside `/etc/nginx/sites-enabled`; Nginx loads every file in that directory.
 
 ```bash
 sudo nginx -t
