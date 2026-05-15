@@ -5,14 +5,15 @@
       "parameters": {
         "httpMethod": "POST",
         "path": "logiflow/traffic-event",
-        "responseMode": "lastNode",
+        "responseMode": "onReceived",
         "options": {}
       },
       "id": "a1b2c3d4-0001-0001-0001-000000000001",
-      "name": "Traffic Event Webhook",
+      "name": "traffic-event-webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [240, 300]
+      "position": [240, 300],
+      "webhookId": "logiflow-traffic-event"
     },
     {
       "parameters": {
@@ -456,7 +457,7 @@
     }
   ],
   "connections": {
-    "Traffic Event Webhook": {
+    "traffic-event-webhook": {
       "main": [
         [
           {
