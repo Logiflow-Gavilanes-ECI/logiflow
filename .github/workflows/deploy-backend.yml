@@ -1,0 +1,84 @@
+name: Deploy backend (SSH → Azure VM)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'services/**'
+      - 'shared/**'
+      - 'docker-compose.yml'
+      - '.github/workflows/deploy-backend.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-backend
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: rsync + docker compose
+    runs-on: ubuntu-latest
+
+    env:
+      DEPLOY_PATH: /home/ubuntu/logiflow
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup SSH
+        run: |
+          mkdir -p "$HOME/.ssh"
+          install -m 600 /dev/null "$HOME/.ssh/deploy_key"
+          printf '%s\n' "${{ secrets.SSH_PRIVATE_KEY }}" > "$HOME/.ssh/deploy_key"
+          ssh-keyscan -H "${{ secrets.SERVER_IP }}" >> "$HOME/.ssh/known_hosts"
+        shell: bash
+
+      - name: Rsync source to VM
+        # El `.env` de la VM tiene los secretos en uso (DB, JWT, etc.) y NO
+        # debe sobreescribirse desde el runner — por eso va en --exclude.
+        # Tampoco sincronizamos node_modules ni dist (cada container los
+        # construye dentro), ni los datos de OSRM (~200 MB que ya viven en VM).
+        run: |
+          rsync -az --delete-after \
+            --exclude='.git/' \
+            --exclude='.github/' \
+            --exclude='node_modules/' \
+            --exclude='services/optimizer/osrm-data/' \
+            --exclude='.env' \
+            --exclude='.env.local' \
+            --exclude='dist/' \
+            --exclude='*.log' \
+            --exclude='infra/generated/' \
+            --exclude='.terraform/' \
+            -e "ssh -i $HOME/.ssh/deploy_key -o StrictHostKeyChecking=no" \
+            ./ \
+            ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }}:${{ env.DEPLOY_PATH }}/
+        shell: bash
+
+      - name: Rebuild & restart containers
+        run: |
+          ssh -i "$HOME/.ssh/deploy_key" -o StrictHostKeyChecking=no \
+            ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} \
+            "cd ${{ env.DEPLOY_PATH }} && \
+             docker compose pull --ignore-buildable 2>/dev/null || true && \
+             docker compose up -d --build --remove-orphans && \
+             docker compose ps"
+        shell: bash
+
+      - name: Smoke test gateway
+        # El gateway compila + corre migraciones en boot (~60s). Damos tiempo.
+        run: |
+          url="http://${{ secrets.SERVER_IP }}:3002/api/v1"
+          for i in 1 2 3 4 5 6 7 8; do
+            code=$(curl -s -o /dev/null -w "%{http_code}" "$url" 2>/dev/null || echo "000")
+            echo "attempt $i → $code"
+            # 401/404 también cuentan: significan que NestJS contestó.
+            if [ "$code" = "200" ] || [ "$code" = "401" ] || [ "$code" = "404" ]; then
+              echo "Gateway responding ✓"
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "::warning::Gateway did not respond on :3002 — check 'docker logs logiflow-gateway' on the VM"
+        shell: bash
