@@ -1,4 +1,4 @@
-|name: Deploy backend (SSH → Azure VM)
+name: Deploy backend (SSH → Azure VM)
 
 on:
   push:
