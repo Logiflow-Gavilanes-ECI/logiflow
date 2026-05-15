@@ -7,6 +7,10 @@ import {
   buildVehicleModel,
   buildVehiclePlate,
 } from './vehicle-profile.defaults';
+import {
+  ActiveRouteRepository,
+  ActiveRouteStep,
+} from './active-route.repository';
 
 export type { VehicleRecord as VehicleEntity } from './vehicles.repository';
 
@@ -42,6 +46,7 @@ interface RouteStopSource {
   lat: number;
   lng: number;
   priority: number;
+  completedAt?: string | null;
   createdAt?: string;
 }
 
@@ -50,6 +55,7 @@ export class VehiclesService {
   constructor(
     private readonly repo: VehiclesRepository,
     private readonly stopsService: StopsService,
+    private readonly activeRouteRepository: ActiveRouteRepository,
   ) {}
 
   findAll(): Promise<VehicleRecord[]> {
@@ -88,6 +94,11 @@ export class VehiclesService {
 
   async getAssignedRoute(vehicleId?: string): Promise<DriverRoute> {
     const resolvedVehicleId = await this.resolveVehicleIdForRoute(vehicleId);
+    const activeRoute = await this.resolveActiveRoute(resolvedVehicleId);
+    if (activeRoute) {
+      return activeRoute;
+    }
+
     const stops = await this.resolveStopsForRoute();
     const sortedStops = [...stops].sort(compareStopsForArrivalOrder);
 
@@ -142,6 +153,45 @@ export class VehiclesService {
     return createFallbackStops();
   }
 
+  private async resolveActiveRoute(vehicleId: string): Promise<DriverRoute | null> {
+    try {
+      const activeRoute =
+        await this.activeRouteRepository.findByVehicleId(vehicleId);
+      const steps = activeRoute?.route?.steps;
+      if (!Array.isArray(steps)) return null;
+
+      const stopMetadata = await this.resolveStopMetadataById();
+      const routeStops = steps
+        .filter(isRouteJobStep)
+        .map((step) => toRouteStopSource(step, stopMetadata))
+        .filter((stop): stop is RouteStopSource => Boolean(stop))
+        .filter((stop) => !stop.completedAt);
+
+      return {
+        vehicleId,
+        steps: routeStops.map((stop, index) => ({
+          stopId: stop.id,
+          address: resolveStopAddress(stop, index),
+          lat: stop.lat,
+          lng: stop.lng,
+          arrivalOrder: index + 1,
+          status: index === 0 ? 'active' : 'pending',
+        })),
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  private async resolveStopMetadataById(): Promise<Map<string, RouteStopSource>> {
+    try {
+      const stops = await this.stopsService.findAll();
+      return new Map(stops.map((stop) => [stop.id, stop]));
+    } catch {
+      return new Map();
+    }
+  }
+
   private async assertExists(id: string): Promise<VehicleRecord> {
     const vehicle = await this.repo.findById(id);
     if (!vehicle) {
@@ -149,6 +199,35 @@ export class VehiclesService {
     }
     return vehicle;
   }
+}
+
+function isRouteJobStep(step: ActiveRouteStep): boolean {
+  const stepType = step.type?.trim().toLowerCase();
+  const stepId = step.id?.trim();
+  return stepType === 'job' && Boolean(stepId);
+}
+
+function toRouteStopSource(
+  step: ActiveRouteStep,
+  stopMetadata: Map<string, RouteStopSource>,
+): RouteStopSource | null {
+  const id = step.id?.trim();
+  if (!id) return null;
+
+  const lat = Number(step.location?.lat);
+  const lng = Number(step.location?.lon ?? step.location?.lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+
+  const metadata = stopMetadata.get(id);
+  return {
+    id,
+    address: metadata?.address ?? null,
+    lat,
+    lng,
+    priority: metadata?.priority ?? Number(step.arrival ?? 0),
+    completedAt: metadata?.completedAt ?? null,
+    createdAt: metadata?.createdAt,
+  };
 }
 
 function compareStopsForArrivalOrder(

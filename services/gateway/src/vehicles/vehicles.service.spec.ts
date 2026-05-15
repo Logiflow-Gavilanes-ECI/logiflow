@@ -7,6 +7,7 @@ import {
   buildVehicleModel,
   buildVehiclePlate,
 } from './vehicle-profile.defaults';
+import { ActiveRouteRepository } from './active-route.repository';
 
 const mockVehicle: VehicleRecord = {
   id: 'v1',
@@ -24,6 +25,7 @@ describe('VehiclesService', () => {
   let service: VehiclesService;
   let repo: jest.Mocked<VehiclesRepository>;
   let stopsService: jest.Mocked<StopsService>;
+  let activeRouteRepository: jest.Mocked<ActiveRouteRepository>;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -46,12 +48,20 @@ describe('VehiclesService', () => {
             findAll: jest.fn(),
           },
         },
+        {
+          provide: ActiveRouteRepository,
+          useValue: {
+            findByVehicleId: jest.fn(),
+          },
+        },
       ],
     }).compile();
 
     service = module.get<VehiclesService>(VehiclesService);
     repo = module.get(VehiclesRepository);
     stopsService = module.get(StopsService);
+    activeRouteRepository = module.get(ActiveRouteRepository);
+    activeRouteRepository.findByVehicleId.mockResolvedValue(null);
   });
 
   it('should be defined', () => {
@@ -169,6 +179,85 @@ describe('VehiclesService', () => {
   });
 
   describe('getAssignedRoute', () => {
+    it('should return only the latest active cached route for the vehicle', async () => {
+      repo.findById.mockResolvedValue(mockVehicle);
+      activeRouteRepository.findByVehicleId.mockResolvedValue({
+        vehicleId: 'v1',
+        route: {
+          steps: [
+            {
+              type: 'start',
+              location: { lat: 4.711, lon: -74.081 },
+            },
+            {
+              type: 'job',
+              id: 'current-stop',
+              location: { lat: 4.72, lon: -74.065 },
+            },
+            {
+              type: 'job',
+              id: 'completed-stop',
+              location: { lat: 4.73, lon: -74.06 },
+            },
+            {
+              type: 'end',
+              location: { lat: 4.73, lon: -74.06 },
+            },
+          ],
+        },
+      });
+      stopsService.findAll.mockResolvedValue([
+        {
+          id: 'historical-stop',
+          address: 'Old stop',
+          lat: 4.1,
+          lng: -74.1,
+          demand: 1,
+          priority: 1,
+          completedAt: null,
+          createdAt: '2026-05-14T09:00:00.000Z',
+          updatedAt: '2026-05-14T09:00:00.000Z',
+        },
+        {
+          id: 'current-stop',
+          address: 'Calle 72 #10-34, Bogota',
+          lat: 4.72,
+          lng: -74.065,
+          demand: 1,
+          priority: 1,
+          completedAt: null,
+          createdAt: '2026-05-14T10:00:00.000Z',
+          updatedAt: '2026-05-14T10:00:00.000Z',
+        },
+        {
+          id: 'completed-stop',
+          address: 'Completed stop',
+          lat: 4.73,
+          lng: -74.06,
+          demand: 1,
+          priority: 2,
+          completedAt: '2026-05-14T11:00:00.000Z',
+          createdAt: '2026-05-14T10:05:00.000Z',
+          updatedAt: '2026-05-14T11:00:00.000Z',
+        },
+      ]);
+
+      await expect(service.getAssignedRoute('v1')).resolves.toEqual({
+        vehicleId: 'v1',
+        steps: [
+          {
+            stopId: 'current-stop',
+            address: 'Calle 72 #10-34, Bogota',
+            lat: 4.72,
+            lng: -74.065,
+            arrivalOrder: 1,
+            status: 'active',
+          },
+        ],
+      });
+      expect(activeRouteRepository.findByVehicleId).toHaveBeenCalledWith('v1');
+    });
+
     it('should return persisted stop addresses without synthetic labels', async () => {
       repo.findById.mockResolvedValue(mockVehicle);
       stopsService.findAll.mockResolvedValue([

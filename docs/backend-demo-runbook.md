@@ -502,9 +502,57 @@ docker-compose -f docker-compose.prod.yml up -d --build optimizer
 
 3. Execute the same webhook twice (AI true and AI false) and compare matrixSource in response/logs.
 
-## 7. Common issues and solutions
+## 7. Optional Telegram notification validation
 
-### 7.1 npm install fails with EACCES in realtime
+The current n8n workflow has a direct `Notify via Telegram` branch for HIGH or CRITICAL risk events. This is independent from the re-optimization branch: Telegram can fail while `POST to Webhook`, route optimization, realtime, and Redis still succeed.
+
+After adding or changing `TELEGRAM_BOT_TOKEN` or `TELEGRAM_CHAT_ID` in `.env`, recreate n8n so the container receives the new environment variables:
+
+```bash
+docker-compose -f docker-compose.prod.yml up -d --force-recreate n8n
+docker-compose -f docker-compose.prod.yml logs -f n8n
+```
+
+Wait for `n8n ready` and `=> Started`, then stop following logs with `Ctrl+C`.
+
+Confirm the variables exist inside the n8n container without printing secret values:
+
+```bash
+docker-compose -f docker-compose.prod.yml exec -T n8n sh -lc '[ -n "$TELEGRAM_BOT_TOKEN" ] && echo "TELEGRAM_BOT_TOKEN=present" || echo "TELEGRAM_BOT_TOKEN=missing"; [ -n "$TELEGRAM_CHAT_ID" ] && echo "TELEGRAM_CHAT_ID=present" || echo "TELEGRAM_CHAT_ID=missing"'
+```
+
+Send a direct Telegram smoke message from inside the n8n container:
+
+```bash
+docker-compose -f docker-compose.prod.yml exec -T n8n node -e "const https=require('https'); const token=process.env.TELEGRAM_BOT_TOKEN; const chatId=process.env.TELEGRAM_CHAT_ID; if(!token||!chatId){console.error('Missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID'); process.exit(1);} const body=JSON.stringify({chat_id:chatId,text:'LogiFlow Telegram smoke '+new Date().toISOString()}); const req=https.request({hostname:'api.telegram.org',path:'/bot'+token+'/sendMessage',method:'POST',headers:{'Content-Type':'application/json','Content-Length':Buffer.byteLength(body)}},res=>{let data='';res.on('data',chunk=>data+=chunk);res.on('end',()=>{console.log('status='+res.statusCode); console.log(data);});}); req.on('error',err=>{console.error(err.message); process.exit(1);}); req.write(body); req.end();"
+```
+
+Expected:
+
+1. `status=200`.
+2. Telegram response includes `"ok":true`.
+3. The configured chat receives the smoke message.
+
+Common Telegram failures:
+
+1. `401 Unauthorized`: bot token is invalid or was revoked.
+2. `400 Bad Request: chat not found`: chat ID is wrong, or the user has not opened the bot and sent `/start`.
+3. `403 Forbidden`: the bot was blocked or removed from the chat.
+
+After direct Telegram succeeds, run the full n8n event again with a CRITICAL payload:
+
+```bash
+curl -sS -i -X POST "$BASE_URL/webhook/logiflow/traffic-event" \
+  -H 'Content-Type: application/json' \
+  -H 'x-correlation-id: n8n-telegram-smoke-001' \
+  --data-binary @services/automation/sample-data/traffic-event.json
+```
+
+In the n8n GUI, the `Notify via Telegram` node should return a Telegram payload with `"ok": true`, and the `Notification Delivered?` node should take the success branch.
+
+## 8. Common issues and solutions
+
+### 8.1 npm install fails with EACCES in realtime
 
 If services/realtime/node_modules was left with root ownership from running in a container:
 
@@ -512,17 +560,17 @@ If services/realtime/node_modules was left with root ownership from running in a
 docker run --rm -v "$PWD":/workspace alpine sh -c "chown -R $(id -u):$(id -g) /workspace/services/realtime/node_modules"
 ```
 
-### 7.2 Socket does not connect (Unauthorized)
+### 8.2 Socket does not connect (Unauthorized)
 
 1. Verify that realtime has JWT_SECRET in compose.
 2. Verify that gateway uses the same JWT_SECRET.
 
-### 7.3 Optimizer does not write to Redis
+### 8.3 Optimizer does not write to Redis
 
 1. Confirm REDIS_URL in optimizer.
 2. Check optimizer logs for persistence errors.
 
-## 8. Shutdown commands
+## 9. Shutdown commands
 
 ```bash
 docker-compose -f docker-compose.prod.yml down --remove-orphans

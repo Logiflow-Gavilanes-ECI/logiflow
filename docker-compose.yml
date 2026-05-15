@@ -107,6 +107,7 @@ services:
       GRPC_OPTIMIZER_PROTO_PATH: ../../shared/proto/optimizer.proto
       SOCKETIO_SERVER_HOST: realtime
       SOCKETIO_SERVER_PORT: 3001
+      REDIS_URL: redis://redis:6379
       JWT_SECRET: your-super-secret-key-change-this-in-production
       JWT_EXPIRES_IN: 1h
       CORS_ORIGINS: "${CORS_ORIGINS:-https://logiflowapp.z13.web.core.windows.net,http://localhost:4200,capacitor://localhost,http://localhost,https://localhost}"
