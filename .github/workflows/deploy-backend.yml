@@ -6,7 +6,7 @@ on:
     paths:
       - 'services/**'
       - 'shared/**'
-      - 'docker-compose.yml'
+      - 'docker-compose.prod.yml'
       - '.github/workflows/deploy-backend.yml'
   workflow_dispatch:
 
@@ -21,6 +21,9 @@ jobs:
 
     env:
       DEPLOY_PATH: /home/ubuntu/logiflow
+      # Azure asigna gratis este FQDN a la VM; el cert Let's Encrypt está
+      # emitido contra él y nginx en el host hace TLS termination.
+      PUBLIC_FQDN: logiflow-api.eastus2.cloudapp.azure.com
 
     steps:
       - name: Checkout
@@ -35,10 +38,10 @@ jobs:
         shell: bash
 
       - name: Rsync source to VM
-        # El `.env` de la VM tiene los secretos en uso (DB, JWT, etc.) y NO
-        # debe sobreescribirse desde el runner — por eso va en --exclude.
-        # Tampoco sincronizamos node_modules ni dist (cada container los
-        # construye dentro), ni los datos de OSRM (~200 MB que ya viven en VM).
+        # `.env` viene con secretos manejados en la VM (DB_PASSWORD, JWT_SECRET, ...)
+        # → NO se sobreescribe. `nginx/` y `certbot/` son root-owned y guardan
+        # el TLS vivo de Let's Encrypt → tampoco se tocan. `backups/` es estado
+        # generado en VM, no en repo.
         run: |
           rsync -az --delete-after \
             --exclude='.git/' \
@@ -47,29 +50,36 @@ jobs:
             --exclude='services/optimizer/osrm-data/' \
             --exclude='.env' \
             --exclude='.env.local' \
+            --exclude='.env.prod' \
             --exclude='dist/' \
             --exclude='*.log' \
             --exclude='infra/generated/' \
             --exclude='.terraform/' \
+            --exclude='nginx/' \
+            --exclude='certbot/' \
+            --exclude='backups/' \
             -e "ssh -i $HOME/.ssh/deploy_key -o StrictHostKeyChecking=no" \
             ./ \
             ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }}:${{ env.DEPLOY_PATH }}/
         shell: bash
 
       - name: Rebuild & restart containers
+        # Usamos -f docker-compose.prod.yml explícito — el stack en VM corre
+        # con ese archivo (network "logiflow-prod", n8n/openclaw always-on).
         run: |
           ssh -i "$HOME/.ssh/deploy_key" -o StrictHostKeyChecking=no \
             ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} \
             "cd ${{ env.DEPLOY_PATH }} && \
-             docker compose pull --ignore-buildable 2>/dev/null || true && \
-             docker compose up -d --build --remove-orphans && \
-             docker compose ps"
+             docker compose -f docker-compose.prod.yml pull --ignore-buildable 2>/dev/null || true && \
+             docker compose -f docker-compose.prod.yml up -d --build --remove-orphans && \
+             docker compose -f docker-compose.prod.yml ps"
         shell: bash
 
-      - name: Smoke test gateway
+      - name: Smoke test gateway (HTTPS via nginx)
         # El gateway compila + corre migraciones en boot (~60s). Damos tiempo.
+        # Pegamos al FQDN público → nginx → gateway, así verificamos toda la cadena.
         run: |
-          url="http://${{ secrets.SERVER_IP }}:3002/api/v1"
+          url="https://${{ env.PUBLIC_FQDN }}/api/v1"
           for i in 1 2 3 4 5 6 7 8; do
             code=$(curl -s -o /dev/null -w "%{http_code}" "$url" 2>/dev/null || echo "000")
             echo "attempt $i → $code"
@@ -80,5 +90,5 @@ jobs:
             fi
             sleep 15
           done
-          echo "::warning::Gateway did not respond on :3002 — check 'docker logs logiflow-gateway' on the VM"
+          echo "::warning::Gateway did not respond at $url — check 'docker logs logiflow-gateway' on the VM"
         shell: bash
