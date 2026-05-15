@@ -5,6 +5,7 @@ Real-time communication service for LogiFlow. Handles WebSocket connections usin
 ## What this service does
 
 - Broadcasts live vehicle GPS positions every 5 seconds to connected clients
+- Re-emits driver status updates to dispatchers and the driver's vehicle room
 - Emits route update events when the routing optimizer (NestJS) calculates a new route
 - Manages rooms so each client only receives relevant events
 - Exposes an HTTP endpoint for NestJS to trigger route updates
@@ -54,8 +55,8 @@ Socket Gateway running on port 3001
 
 | Room | Who joins | What they receive |
 |---|---|---|
-| `fleet` | Dispatchers | All vehicle positions + all route updates |
-| `vehicle:v-001` | Driver of v-001 | Only v-001 position + v-001 route updates |
+| `fleet` | Dispatchers | All vehicle positions, status updates, and route updates |
+| `vehicle:v-001` | Driver of v-001 | Only v-001 position, status updates, and route updates |
 
 ## Socket.io Events
 
@@ -71,6 +72,16 @@ socket.emit('join:fleet')
 socket.emit('join:vehicle', { vehicleId: 'v-001' })
 ```
 
+**Driver status update:**
+```js
+socket.emit('vehicle:status', {
+  vehicleId: 'v-001',
+  status: 'ARRIVED',
+  stopId: 's-101',
+  timestamp: '2026-05-12T17:00:00.000Z'
+})
+```
+
 ### Events the client receives
 
 **Vehicle position (every 5 seconds):**
@@ -83,6 +94,19 @@ socket.on('vehicle:position', (data) => {
   //   lng: -74.0721,
   //   speed: 45,
   //   timestamp: '2026-03-05T10:00:00Z'
+  // }
+})
+```
+
+**Vehicle status:**
+```js
+socket.on('vehicle:status', (data) => {
+  console.log(data)
+  // {
+  //   vehicleId: 'v-001',
+  //   status: 'START',
+  //   stopId: 's-101',
+  //   timestamp: '2026-05-12T17:00:00.000Z'
   // }
 })
 ```
@@ -176,6 +200,7 @@ src/
 ├── rooms.js          ← room management (fleet, vehicle:{id})
 └── events/
     ├── position.js   ← GPS position broadcast every 5s
+    ├── status.js     ← driver status update broadcast
     └── routeUpdate.js ← route update event emission
 test/
 └── client.html       ← HTML test client

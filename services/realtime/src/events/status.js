@@ -13,6 +13,9 @@ const STATUS_KEY_TTL_SECONDS = parsePositiveIntEnv(
 );
 
 const VALID_STATUSES = new Set([
+  'START',
+  'ARRIVED',
+  'DELIVERED',
   'in_transit',
   'at_stop',
   'delivered',
