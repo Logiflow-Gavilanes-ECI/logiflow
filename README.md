@@ -246,7 +246,7 @@ service RouteOptimizer {
 5. **Token rotation** — each refresh consumes the old token and issues a new pair
 6. **Password hashing** — bcrypt hashes for registered users
 
-The gateway seed creates `admin@logiflow.app` / `Admin2026!` and `conductor@logiflow.app` / `Driver2026!`. The conductor user uses `id = v-001`, so its JWT resolves to `vehicleId: v-001` for the demo vehicle.
+The gateway seed creates `admin@logiflow.app` / `Admin2026!`, `conductor@logiflow.app` / `Driver2026!`, and `conductor2@logiflow.app` / `Driver2026!`. The demo conductors use `id = v-001` and `id = v-002`, so their JWTs resolve to different vehicle IDs with distinct plates (`ABC-123` and `DEF-456`).
 
 ### Google OAuth 2.0 (Identity Provider)
 

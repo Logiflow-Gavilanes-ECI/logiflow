@@ -190,7 +190,8 @@ describe('AppController (e2e)', () => {
         .expect(200)
         .then((res) => {
           expect(res.body.id).toBe('unknown');
-          expect(res.body.plate).toBe('ABC-123');
+          expect(res.body.plate).toMatch(/^LF-\d{6}$/);
+          expect(res.body.plate).not.toBe('ABC-123');
         });
     });
 

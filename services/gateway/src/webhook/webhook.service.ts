@@ -19,6 +19,7 @@ import {
 import { RetryExhaustedException } from '../common/retry/retry-exhausted.exception';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { buildVehicleProfileDefaults } from '../vehicles/vehicle-profile.defaults';
 
 @Injectable()
 export class WebhookService {
@@ -303,6 +304,7 @@ export class WebhookService {
         ...event.vehicles.map((vehicle) => {
           const lat = vehicle.lat ?? vehicle.start?.lat ?? 4.711;
           const lng = vehicle.lng ?? vehicle.start?.lon ?? -74.0721;
+          const defaults = buildVehicleProfileDefaults(vehicle.id);
 
           return this.prismaService.vehicle.upsert({
             where: { id: vehicle.id },
@@ -317,9 +319,9 @@ export class WebhookService {
               lat,
               lng,
               capacity: vehicle.capacity,
-              plate: 'ABC-123',
-              model: 'Toyota Hilux 2023',
-              status: 'online',
+              plate: defaults.plate,
+              model: defaults.model,
+              status: defaults.status,
             },
           });
         }),

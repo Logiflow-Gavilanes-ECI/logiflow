@@ -170,6 +170,14 @@ The seed creates demo users for the web/admin demo:
 | ------------------------ | ------------- | ----------- | ------------------- |
 | `admin@logiflow.app`     | `Admin2026!`  | `admin`     | resolved by backend |
 | `conductor@logiflow.app` | `Driver2026!` | `conductor` | `v-001`             |
+| `conductor2@logiflow.app` | `Driver2026!` | `conductor` | `v-002`            |
+
+The seeded vehicles use distinct plates:
+
+| Vehicle ID | Plate     | Model               |
+| ---------- | --------- | ------------------- |
+| `v-001`    | `ABC-123` | `Toyota Hilux 2023` |
+| `v-002`    | `DEF-456` | `Renault Kangoo 2022` |
 
 ### Run the App
 

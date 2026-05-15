@@ -41,10 +41,10 @@ GOOGLE_REDIRECT_FRONTEND_ADMIN=https://logiflowapp.z13.web.core.windows.net
 The gateway seed creates these demo identities after migrations:
 
 1. Admin: `admin@logiflow.app` / `Admin2026!` / role `admin`.
-2. Conductor: `conductor@logiflow.app` / `Driver2026!` / role `conductor`.
-3. Demo vehicle: `v-001`.
+2. Conductor 1: `conductor@logiflow.app` / `Driver2026!` / role `conductor` / vehicle `v-001` / plate `ABC-123`.
+3. Conductor 2: `conductor2@logiflow.app` / `Driver2026!` / role `conductor` / vehicle `v-002` / plate `DEF-456`.
 
-The conductor user is created with `id = v-001`, so its JWT contains `vehicleId: v-001`.
+The conductor users are created with IDs matching their vehicles, so their JWTs contain `vehicleId: v-001` and `vehicleId: v-002`.
 
 Internal service endpoints (containers):
 
@@ -106,6 +106,14 @@ Conductor login:
 curl -sS -X POST "$BASE_URL/api/v1/auth/login" \
   -H 'Content-Type: application/json' \
   -d '{"email":"conductor@logiflow.app","password":"Driver2026!"}'
+```
+
+Second conductor login:
+
+```bash
+curl -sS -X POST "$BASE_URL/api/v1/auth/login" \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"conductor2@logiflow.app","password":"Driver2026!"}'
 ```
 
 Expected response:

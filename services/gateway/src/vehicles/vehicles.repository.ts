@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateVehicleDto } from './dto/create-vehicle.dto';
 import { UpdateVehicleDto } from './dto/update-vehicle.dto';
 import { Vehicle } from '@prisma/client';
+import { buildVehicleProfileDefaults } from './vehicle-profile.defaults';
 
 export interface VehicleRecord {
   id: string;
@@ -37,17 +38,13 @@ export class VehiclesRepository {
   }
 
   async ensureExists(id: string): Promise<VehicleRecord> {
+    const defaults = buildVehicleProfileDefaults(id);
     const vehicle = await this.prisma.vehicle.upsert({
       where: { id },
       update: {},
       create: {
         id,
-        lat: 4.711,
-        lng: -74.0721,
-        capacity: 1,
-        plate: 'ABC-123',
-        model: 'Toyota Hilux 2023',
-        status: 'online',
+        ...defaults,
       },
     });
 

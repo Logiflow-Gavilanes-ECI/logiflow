@@ -3,6 +3,10 @@ import { CreateVehicleDto } from './dto/create-vehicle.dto';
 import { UpdateVehicleDto } from './dto/update-vehicle.dto';
 import { VehiclesRepository, VehicleRecord } from './vehicles.repository';
 import { StopsService } from '../stops/stops.service';
+import {
+  buildVehicleModel,
+  buildVehiclePlate,
+} from './vehicle-profile.defaults';
 
 export type { VehicleRecord as VehicleEntity } from './vehicles.repository';
 
@@ -189,14 +193,6 @@ function toVehicleDetails(vehicle: VehicleRecord): VehicleDetails {
     lng: vehicle.lng,
     capacity: vehicle.capacity,
   };
-}
-
-function buildVehiclePlate(vehicleId: string): string {
-  return 'ABC-123';
-}
-
-function buildVehicleModel(vehicleId: string): string {
-  return 'Toyota Hilux 2023';
 }
 
 function createFallbackStops(): RouteStopSource[] {

@@ -3,6 +3,10 @@ import { VehiclesService } from './vehicles.service';
 import { VehiclesRepository, VehicleRecord } from './vehicles.repository';
 import { NotFoundException } from '@nestjs/common';
 import { StopsService } from '../stops/stops.service';
+import {
+  buildVehicleModel,
+  buildVehiclePlate,
+} from './vehicle-profile.defaults';
 
 const mockVehicle: VehicleRecord = {
   id: 'v1',
@@ -118,8 +122,8 @@ describe('VehiclesService', () => {
       const found = await service.findOne('v1');
       expect(found).toEqual({
         id: 'v1',
-        plate: 'ABC-123',
-        model: 'Toyota Hilux 2023',
+        plate: buildVehiclePlate('v1'),
+        model: buildVehicleModel('v1'),
         status: 'online',
         lat: 4.711,
         lng: -74.072,
@@ -136,13 +140,31 @@ describe('VehiclesService', () => {
 
       await expect(service.findOne('unknown')).resolves.toEqual({
         id: 'unknown',
-        plate: 'ABC-123',
-        model: 'Toyota Hilux 2023',
+        plate: buildVehiclePlate('unknown'),
+        model: buildVehicleModel('unknown'),
         status: 'online',
         lat: 4.711,
         lng: -74.072,
         capacity: 100,
       });
+    });
+
+    it('should use distinct demo plates for distinct demo vehicle ids', async () => {
+      repo.findById.mockImplementation((id: string) =>
+        Promise.resolve({
+          ...mockVehicle,
+          id,
+          plate: null,
+          model: null,
+        }),
+      );
+
+      const first = await service.findOne('v-001');
+      const second = await service.findOne('v-002');
+
+      expect(first.plate).toBe('ABC-123');
+      expect(second.plate).toBe('DEF-456');
+      expect(first.plate).not.toBe(second.plate);
     });
   });
 
@@ -234,8 +256,12 @@ describe('VehiclesService', () => {
         'de015a64-dcb6-40ce-9c3e-6d037e7c706c',
       );
       expect(result.id).toBe('de015a64-dcb6-40ce-9c3e-6d037e7c706c');
-      expect(result.plate).toBe('ABC-123');
-      expect(result.model).toBe('Toyota Hilux 2023');
+      expect(result.plate).toBe(
+        buildVehiclePlate('de015a64-dcb6-40ce-9c3e-6d037e7c706c'),
+      );
+      expect(result.model).toBe(
+        buildVehicleModel('de015a64-dcb6-40ce-9c3e-6d037e7c706c'),
+      );
       expect(result.status).toBe('online');
       expect(result.lat).toBe(4.711);
       expect(result.lng).toBe(-74.072);

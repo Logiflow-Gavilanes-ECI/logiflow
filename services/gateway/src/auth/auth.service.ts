@@ -10,6 +10,7 @@ import * as bcrypt from 'bcrypt';
 import { createHash, randomBytes } from 'node:crypto';
 import type { AuthRole } from './auth-roles';
 import { PrismaService } from '../prisma/prisma.service';
+import { buildVehicleProfileDefaults } from '../vehicles/vehicle-profile.defaults';
 
 type RefreshTokenWriteClient = {
   refreshToken: {
@@ -439,17 +440,13 @@ export class AuthService {
       }
 
       if (role === 'conductor') {
+        const defaults = buildVehicleProfileDefaults(trimmed);
         const created = await vehicleClient.vehicle.upsert({
           where: { id: trimmed },
           update: {},
           create: {
             id: trimmed,
-            lat: 4.711,
-            lng: -74.0721,
-            capacity: 1,
-            plate: 'ABC-123',
-            model: 'Toyota Hilux 2023',
-            status: 'online',
+            ...defaults,
           },
         });
         return created.id;
