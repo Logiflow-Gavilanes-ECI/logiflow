@@ -8,6 +8,17 @@ services/optimizer/osrm-data/
 .env
 .env.local
 
+# Terraform — never commit state, plans, or real tfvars
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+crash.*.log
+*.tfvars
+!*.tfvars.example
+infra/generated/
+
 # Logs
 *.log
 
