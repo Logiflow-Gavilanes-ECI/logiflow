@@ -119,7 +119,7 @@
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
-        "jsonBody": "={{ ({ username: $env.AUTH_DEMO_USERNAME || 'demo', password: $env.AUTH_DEMO_PASSWORD || 'demo123' }) }}",
+        "jsonBody": "={{ ({ email: $env.GATEWAY_AUTH_EMAIL || 'admin@logiflow.app', password: $env.GATEWAY_AUTH_PASSWORD || 'Admin2026!' }) }}",
         "options": {}
       },
       "id": "a1b2c3d4-0017-0017-0017-000000000017",

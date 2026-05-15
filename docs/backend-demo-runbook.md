@@ -28,6 +28,8 @@ Frontend (optional reference for OAuth UI only):
 
 1. https://logiflowapp.z13.web.core.windows.net
 
+The project does not use a custom frontend domain. Keep the public web admin URL on the Azure Storage Account endpoint above.
+
 Required gateway env for the current web-admin demo:
 
 ```bash
@@ -122,6 +124,25 @@ TOKEN=$(docker-compose -f docker-compose.prod.yml exec -T gateway node -e "const
 ```
 
 ### 5.3 Authenticated end-to-end webhook (VROOM)
+
+The webhook is protected with JWT. For PowerShell/curl.exe, first request a token:
+
+```powershell
+$TOKEN = (curl.exe -sS -X POST "$BASE_URL/api/v1/auth/login" `
+  -H "Content-Type: application/json" `
+  -d '{\"email\":\"admin@logiflow.app\",\"password\":\"Admin2026!\"}' | ConvertFrom-Json).accessToken
+```
+
+Then send the webhook event:
+
+```powershell
+curl.exe -X POST "$BASE_URL/api/v1/webhook" `
+  -H "Authorization: Bearer $TOKEN" `
+  -H "Content-Type: application/json" `
+  -d '{\"eventType\":\"traffic_jam\",\"vehicles\":[{\"id\":\"v-001\",\"lat\":4.711,\"lng\":-74.0721,\"capacity\":100}],\"stops\":[{\"id\":\"s-1\",\"lat\":4.720,\"lng\":-74.065,\"demand\":10,\"priority\":1},{\"id\":\"s-2\",\"lat\":4.730,\"lng\":-74.060,\"demand\":10,\"priority\":2},{\"id\":\"s-3\",\"lat\":4.740,\"lng\":-74.055,\"demand\":10,\"priority\":3}]}'
+```
+
+For Linux/macOS shells:
 
 ```bash
 curl -sS -X POST "$BASE_URL/api/v1/webhook" \
