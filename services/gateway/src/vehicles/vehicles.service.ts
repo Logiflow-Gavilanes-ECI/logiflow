@@ -99,19 +99,9 @@ export class VehiclesService {
       return activeRoute;
     }
 
-    const stops = await this.resolveStopsForRoute();
-    const sortedStops = [...stops].sort(compareStopsForArrivalOrder);
-
     return {
       vehicleId: resolvedVehicleId,
-      steps: sortedStops.map((stop, index) => ({
-        stopId: stop.id,
-        address: resolveStopAddress(stop, index),
-        lat: stop.lat,
-        lng: stop.lng,
-        arrivalOrder: index + 1,
-        status: index === 0 ? 'active' : 'pending',
-      })),
+      steps: [],
     };
   }
 
@@ -138,19 +128,6 @@ export class VehiclesService {
     }
 
     return fallbackVehicleId;
-  }
-
-  private async resolveStopsForRoute(): Promise<RouteStopSource[]> {
-    try {
-      const stops = await this.stopsService.findAll();
-      if (stops.length > 0) {
-        return stops;
-      }
-    } catch {
-      return createFallbackStops();
-    }
-
-    return createFallbackStops();
   }
 
   private async resolveActiveRoute(vehicleId: string): Promise<DriverRoute | null> {
@@ -230,17 +207,6 @@ function toRouteStopSource(
   };
 }
 
-function compareStopsForArrivalOrder(
-  left: RouteStopSource,
-  right: RouteStopSource,
-): number {
-  if (left.priority !== right.priority) {
-    return left.priority - right.priority;
-  }
-
-  return (left.createdAt ?? '').localeCompare(right.createdAt ?? '');
-}
-
 function resolveStopAddress(stop: RouteStopSource, index: number): string {
   const address = stop.address?.trim();
   if (address) {
@@ -272,33 +238,4 @@ function toVehicleDetails(vehicle: VehicleRecord): VehicleDetails {
     lng: vehicle.lng,
     capacity: vehicle.capacity,
   };
-}
-
-function createFallbackStops(): RouteStopSource[] {
-  return [
-    {
-      id: 'fallback-stop-1',
-      address: 'Cra 7 #45-12, Bogotá',
-      lat: 4.6486,
-      lng: -74.2479,
-      priority: 0,
-      createdAt: '2026-01-01T00:00:00.000Z',
-    },
-    {
-      id: 'fallback-stop-2',
-      address: 'Calle 72 #10-34, Bogotá',
-      lat: 4.6672,
-      lng: -74.0556,
-      priority: 1,
-      createdAt: '2026-01-01T00:05:00.000Z',
-    },
-    {
-      id: 'fallback-stop-3',
-      address: 'Av. Caracas #26-85, Bogotá',
-      lat: 4.711,
-      lng: -74.0721,
-      priority: 2,
-      createdAt: '2026-01-01T00:10:00.000Z',
-    },
-  ];
 }

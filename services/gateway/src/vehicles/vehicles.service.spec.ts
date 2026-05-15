@@ -258,12 +258,12 @@ describe('VehiclesService', () => {
       expect(activeRouteRepository.findByVehicleId).toHaveBeenCalledWith('v1');
     });
 
-    it('should return persisted stop addresses without synthetic labels', async () => {
+    it('should return an empty route when no active route is cached', async () => {
       repo.findById.mockResolvedValue(mockVehicle);
       stopsService.findAll.mockResolvedValue([
         {
-          id: 's-201',
-          address: 'Cra 7 #45-12, Bogotá',
+          id: 'historical-stop',
+          address: 'Old stop',
           lat: 4.7,
           lng: -74.0,
           demand: 1,
@@ -276,34 +276,26 @@ describe('VehiclesService', () => {
 
       await expect(service.getAssignedRoute('v1')).resolves.toEqual({
         vehicleId: 'v1',
-        steps: [
-          {
-            stopId: 's-201',
-            address: 'Cra 7 #45-12, Bogotá',
-            lat: 4.7,
-            lng: -74.0,
-            arrivalOrder: 1,
-            status: 'active',
-          },
-        ],
+        steps: [],
       });
+      expect(activeRouteRepository.findByVehicleId).toHaveBeenCalledWith('v1');
     });
 
-    it('should use demo delivery addresses when stored stops have no address yet', async () => {
+    it('should use demo delivery addresses when active route stops have no address yet', async () => {
       repo.findById.mockResolvedValue(mockVehicle);
-      stopsService.findAll.mockResolvedValue([
-        {
-          id: 's-201',
-          address: null,
-          lat: 4.7,
-          lng: -74.0,
-          demand: 1,
-          priority: 1,
-          completedAt: null,
-          createdAt: '2026-05-14T10:00:00.000Z',
-          updatedAt: '2026-05-14T10:00:00.000Z',
+      activeRouteRepository.findByVehicleId.mockResolvedValue({
+        vehicleId: 'v1',
+        route: {
+          steps: [
+            {
+              type: 'job',
+              id: 's-201',
+              location: { lat: 4.7, lon: -74.0 },
+            },
+          ],
         },
-      ]);
+      });
+      stopsService.findAll.mockResolvedValue([]);
 
       const route = await service.getAssignedRoute('v1');
       expect(route.steps[0].address).toBe('Cra 7 #45-12, Bogotá');
