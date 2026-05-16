@@ -64,15 +64,16 @@ jobs:
         shell: bash
 
       - name: Rebuild & restart containers
-        # Usamos -f docker-compose.prod.yml explícito — el stack en VM corre
-        # con ese archivo (network "logiflow-prod", n8n/openclaw always-on).
+        # La VM tiene docker-compose v1.29.2 standalone (con guion), no el
+        # plugin v2. v1 no soporta --ignore-buildable, y `up --build` ya
+        # descarga las imágenes base que necesite, así que el pull explícito
+        # se omite.
         run: |
           ssh -i "$HOME/.ssh/deploy_key" -o StrictHostKeyChecking=no \
             ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} \
             "cd ${{ env.DEPLOY_PATH }} && \
-             docker compose -f docker-compose.prod.yml pull --ignore-buildable 2>/dev/null || true && \
-             docker compose -f docker-compose.prod.yml up -d --build --remove-orphans && \
-             docker compose -f docker-compose.prod.yml ps"
+             docker-compose -f docker-compose.prod.yml up -d --build --remove-orphans && \
+             docker-compose -f docker-compose.prod.yml ps"
         shell: bash
 
       - name: Smoke test gateway (HTTPS via nginx)
