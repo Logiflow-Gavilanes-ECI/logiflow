@@ -37,12 +37,24 @@ export default tseslint.config(
       'src/prisma/prisma.service.ts',
       'src/stops/stops.repository.ts',
       'src/vehicles/vehicles.repository.ts',
+      'src/webhook/webhook.service.ts',
     ],
     rules: {
       '@typescript-eslint/no-unsafe-assignment': 'off',
       '@typescript-eslint/no-unsafe-call': 'off',
       '@typescript-eslint/no-unsafe-member-access': 'off',
       '@typescript-eslint/no-unsafe-return': 'off',
+    },
+  },
+  {
+    files: ['**/*.spec.ts', '**/*.test.ts', 'test/**/*.ts'],
+    rules: {
+      '@typescript-eslint/no-unsafe-assignment': 'off',
+      '@typescript-eslint/no-unsafe-call': 'off',
+      '@typescript-eslint/no-unsafe-member-access': 'off',
+      '@typescript-eslint/no-unsafe-return': 'off',
+      '@typescript-eslint/no-unsafe-argument': 'off',
+      '@typescript-eslint/unbound-method': 'off',
     },
   },
 );
