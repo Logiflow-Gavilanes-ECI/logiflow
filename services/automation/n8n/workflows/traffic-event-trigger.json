@@ -1,0 +1,637 @@
+{
+  "name": "Traffic Event Trigger \u2013 LogiFlow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "logiflow/traffic-event",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "a1b2c3d4-0001-0001-0001-000000000001",
+      "name": "traffic-event-webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "logiflow-traffic-event"
+    },
+    {
+      "parameters": {
+        "jsCode": "const payload = $json.body ?? $json;\nreturn [{ json: payload }];"
+      },
+      "id": "a1b2c3d4-0002-0002-0002-000000000002",
+      "name": "Normalize Incoming Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const payload = $json;\n\nconst severityRaw = String(payload.severity ?? 'MEDIUM').toUpperCase();\nconst eventTypeRaw = String(payload.eventType ?? 'traffic_jam').toUpperCase();\n\nconst severity = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'].includes(severityRaw) ? severityRaw : 'MEDIUM';\nconst eventTypeAliases = {\n  TRAFFIC_JAM: 'TRAFFIC_JAM',\n  TRAFFIC: 'TRAFFIC_JAM',\n  ROAD_CLOSURE: 'ROAD_CLOSURE',\n  CLOSURE: 'ROAD_CLOSURE',\n  WEATHER_ALERT: 'WEATHER_ALERT',\n  WEATHER: 'WEATHER_ALERT'\n};\nconst eventType = eventTypeAliases[eventTypeRaw] || eventTypeRaw;\n\nconst exactMatrix = {\n  'CRITICAL::ROAD_CLOSURE': { riskLevel: 'HIGH', riskColor: 'red', recommendedAction: 'Reroute immediately and notify operations/driver' },\n  'HIGH::TRAFFIC_JAM': { riskLevel: 'MEDIUM', riskColor: 'orange', recommendedAction: 'Calculate detour and monitor ETA impact' },\n  'LOW::WEATHER_ALERT': { riskLevel: 'LOW', riskColor: 'yellow', recommendedAction: 'Monitor conditions and keep current route' }\n};\n\nconst severityFallback = {\n  CRITICAL: { riskLevel: 'HIGH', riskColor: 'red', recommendedAction: 'Reroute immediately and notify operations/driver' },\n  HIGH: { riskLevel: 'MEDIUM', riskColor: 'orange', recommendedAction: 'Calculate detour and monitor ETA impact' },\n  MEDIUM: { riskLevel: 'MEDIUM', riskColor: 'orange', recommendedAction: 'Assess detour options and continue monitoring' },\n  LOW: { riskLevel: 'LOW', riskColor: 'yellow', recommendedAction: 'Monitor conditions and keep current route' }\n};\n\nconst gatewayEventTypeMap = {\n  TRAFFIC_JAM: 'traffic_jam',\n  ROAD_CLOSURE: 'traffic_jam',\n  WEATHER_ALERT: 'weather_change'\n};\nconst gatewayEventType = gatewayEventTypeMap[eventType] || 'traffic_jam';\n\nconst key = `${severity}::${eventType}`;\nconst result = exactMatrix[key] || severityFallback[severity] || severityFallback.MEDIUM;\n\nreturn [{\n  json: {\n    ...payload,\n    severity,\n    gatewayEventType,\n    risk: {\n      eventType,\n      severity,\n      riskLevel: result.riskLevel,\n      riskColor: result.riskColor,\n      recommendedAction: result.recommendedAction\n    }\n  }\n}];"
+      },
+      "id": "a1b2c3d4-0010-0010-0010-000000000010",
+      "name": "Evaluate Risk Matrix",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [570, 120]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://maps.googleapis.com/maps/api/geocode/json",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "address",
+              "value": "={{ $json.locationDescription || $json.location?.description || 'Autopista Norte - Calle 100, Bogota, Colombia' }}"
+            },
+            {
+              "name": "key",
+              "value": "={{ $env.GOOGLE_MAPS_API_KEY }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0007-0007-0007-000000000007",
+      "name": "Geocode Incident",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [680, 300],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://maps.googleapis.com/maps/api/directions/json",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "origin",
+              "value": "={{ ($('Normalize Incoming Payload').item.json.vehicles?.[0]?.lat ?? 4.711) + ',' + ($('Normalize Incoming Payload').item.json.vehicles?.[0]?.lng ?? -74.0721) }}"
+            },
+            {
+              "name": "destination",
+              "value": "={{ ($('Normalize Incoming Payload').item.json.stops?.[0]?.lat ?? 4.705) + ',' + ($('Normalize Incoming Payload').item.json.stops?.[0]?.lng ?? -74.068) }}"
+            },
+            {
+              "name": "alternatives",
+              "value": "true"
+            },
+            {
+              "name": "departure_time",
+              "value": "now"
+            },
+            {
+              "name": "traffic_model",
+              "value": "best_guess"
+            },
+            {
+              "name": "key",
+              "value": "={{ $env.GOOGLE_MAPS_API_KEY }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0008-0008-0008-000000000008",
+      "name": "Get Detour Alternatives",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [900, 300],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const payload = $('Evaluate Risk Matrix').item.json;\nconst geocodeItem = $('Geocode Incident').item ?? {};\nconst directionsItem = $('Get Detour Alternatives').item ?? {};\n\nconst geocode = geocodeItem.json ?? {};\nconst directions = directionsItem.json ?? {};\nconst geocodeError = geocodeItem.error ?? null;\nconst directionsError = directionsItem.error ?? null;\n\nconst blockedStatuses = ['REQUEST_DENIED', 'OVER_QUERY_LIMIT'];\nconst geocodeStatus = geocode.status ?? 'UNKNOWN';\nconst directionsStatus = directions.status ?? 'UNKNOWN';\nconst geocodeBlocked = blockedStatuses.includes(geocodeStatus);\nconst directionsBlocked = blockedStatuses.includes(directionsStatus);\n\nconst mapsFallback = Boolean(geocodeError || directionsError || geocodeBlocked || directionsBlocked);\n\nconst routes = Array.isArray(directions.routes) ? directions.routes : [];\nconst bestRoute = routes[0] || null;\nconst alternativeRoutes = mapsFallback ? 0 : Math.max(routes.length - 1, 0);\n\nlet incidentLocation = null;\nlet formattedAddress = payload.locationDescription || payload.location?.description || null;\nif (!mapsFallback && Array.isArray(geocode.results) && geocode.results.length > 0) {\n  const first = geocode.results[0];\n  formattedAddress = first.formatted_address ?? formattedAddress;\n  incidentLocation = first.geometry?.location ?? null;\n}\n\nconst durationInTrafficSec = mapsFallback ? null : (bestRoute?.legs?.[0]?.duration_in_traffic?.value ?? bestRoute?.legs?.[0]?.duration?.value ?? null);\nconst distanceMeters = mapsFallback ? null : (bestRoute?.legs?.[0]?.distance?.value ?? null);\n\nconst detourRecommended = mapsFallback ? false : alternativeRoutes > 0;\nconst legacyStops = Array.isArray(payload.stops) ? payload.stops : [];\nconst jobs = legacyStops.map((stop) => ({\n  id: String(stop.id),\n  location: {\n    lat: Number(stop.lat),\n    lon: Number(stop.lng),\n  },\n  amount: Number(stop.demand ?? 0),\n  priority: Number(stop.priority ?? 0),\n  service: 0,\n  skills: [],\n  timeWindowStart: 0,\n  timeWindowEnd: 4294967295,\n}));\n\nreturn [{\n  json: {\n    eventType: payload.gatewayEventType || payload.eventType,\n    sourceEventType: payload.eventType,\n    severity: payload.severity,\n    risk: payload.risk,\n    vehicles: payload.vehicles,\n    stops: legacyStops,\n    jobs,\n    options: {\n      geometry: false,\n      metric: 'duration',\n      optimize: true,\n      algorithm: 'greedy',\n      maxJobsPerRoute: 0\n    },\n    maps: {\n      geocodingStatus: geocodeStatus,\n      directionsStatus: directionsStatus,\n      fallbackApplied: mapsFallback,\n      fallbackReason: mapsFallback ? (geocodeError?.message || directionsError?.message || geocodeStatus || directionsStatus) : null,\n      incidentAddress: formattedAddress,\n      incidentLocation,\n      alternativeRoutes,\n      detourRecommended,\n      bestRoute: {\n        durationInTrafficSec,\n        distanceMeters\n      }\n    }\n  }\n}];"
+      },
+      "id": "a1b2c3d4-0009-0009-0009-000000000009",
+      "name": "Assess Detour",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.WEBHOOK_TARGET || '').replace('/api/v1/webhook', '/api/v1/auth/login') }}",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ ({ email: $env.GATEWAY_AUTH_EMAIL || 'admin@logiflow.app', password: $env.GATEWAY_AUTH_PASSWORD || 'Admin2026!' }) }}",
+        "options": {}
+      },
+      "id": "a1b2c3d4-0017-0017-0017-000000000017",
+      "name": "Login for Gateway JWT",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1240, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.WEBHOOK_TARGET }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ 'Bearer ' + $('Login for Gateway JWT').item.json.accessToken }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ ({\n  eventType: $('Assess Detour').item.json.eventType,\n  severity: $('Assess Detour').item.json.severity,\n  locationDescription: $('Normalize Incoming Payload').item.json.locationDescription || $('Normalize Incoming Payload').item.json.location?.description || null,\n  vehicles: $('Normalize Incoming Payload').item.json.vehicles,\n  stops: $('Normalize Incoming Payload').item.json.stops,\n  risk: {\n    riskLevel: $('Evaluate Risk Matrix').item.json.risk?.riskLevel,\n    recommendedAction: $('Evaluate Risk Matrix').item.json.risk?.recommendedAction\n  },\n  maps: {\n    incidentAddress: $('Assess Detour').item.json.maps?.incidentAddress,\n    incidentLat: $('Assess Detour').item.json.maps?.incidentLocation?.lat ?? $('Normalize Incoming Payload').item.json.location?.lat ?? null,\n    incidentLng: $('Assess Detour').item.json.maps?.incidentLocation?.lng ?? $('Normalize Incoming Payload').item.json.location?.lng ?? null,\n    detourRecommended: $('Assess Detour').item.json.maps?.detourRecommended,\n    alternativeRoutes: $('Assess Detour').item.json.maps?.alternativeRoutes,\n    bestRoute: {\n      durationInTrafficSec: $('Assess Detour').item.json.maps?.bestRoute?.durationInTrafficSec\n    }\n  },\n  timestamp: $now.toISO()\n}) }}",
+        "options": {}
+      },
+      "id": "a1b2c3d4-0003-0003-0003-000000000003",
+      "name": "POST to Webhook",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cond-001",
+              "leftValue": "={{ String($json.received) }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0004-0004-0004-000000000004",
+      "name": "Check Webhook Response",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1560, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "s001",
+              "name": "message",
+              "value": "Route re-optimization triggered successfully",
+              "type": "string"
+            },
+            {
+              "id": "s002",
+              "name": "vehiclesAffected",
+              "value": "={{ $('POST to Webhook').item.json.vehicleCount }}",
+              "type": "number"
+            },
+            {
+              "id": "s003",
+              "name": "triggeredAt",
+              "value": "={{ $('POST to Webhook').item.json.timestamp }}",
+              "type": "string"
+            },
+            {
+              "id": "s004",
+              "name": "detourRecommended",
+              "value": "={{ $('Assess Detour').item.json.maps.detourRecommended }}",
+              "type": "boolean"
+            },
+            {
+              "id": "s005",
+              "name": "alternativeRoutes",
+              "value": "={{ $('Assess Detour').item.json.maps.alternativeRoutes }}",
+              "type": "number"
+            },
+            {
+              "id": "s006",
+              "name": "incidentAddress",
+              "value": "={{ $('Assess Detour').item.json.maps.incidentAddress }}",
+              "type": "string"
+            },
+            {
+              "id": "s007",
+              "name": "riskLevel",
+              "value": "={{ $('Assess Detour').item.json.risk.riskLevel }}",
+              "type": "string"
+            },
+            {
+              "id": "s008",
+              "name": "recommendedAction",
+              "value": "={{ $('Assess Detour').item.json.risk.recommendedAction }}",
+              "type": "string"
+            },
+            {
+              "id": "s009",
+              "name": "severity",
+              "value": "={{ $('Assess Detour').item.json.severity }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0005-0005-0005-000000000005",
+      "name": "Success \u2013 Route Re-optimization",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [1780, 200]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "e001",
+              "name": "message",
+              "value": "Webhook delivery failed",
+              "type": "string"
+            },
+            {
+              "id": "e002",
+              "name": "statusCode",
+              "value": "={{ $('POST to Webhook').item.json.statusCode ?? 500 }}",
+              "type": "number"
+            },
+            {
+              "id": "e003",
+              "name": "errorDetail",
+              "value": "={{ $('POST to Webhook').item.json.error ?? 'Unknown error' }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0006-0006-0006-000000000006",
+      "name": "Error \u2013 Webhook Delivery Failed",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [1780, 420]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "rm-001",
+              "leftValue": "={{ $json.risk.riskLevel }}",
+              "rightValue": "HIGH",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "rm-002",
+              "leftValue": "={{ $json.risk.riskLevel }}",
+              "rightValue": "CRITICAL",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0011-0011-0011-000000000011",
+      "name": "Risk Matrix Switch",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1340, 80]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://api.telegram.org/bot' + $env.TELEGRAM_BOT_TOKEN + '/sendMessage' }}",
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "chat_id",
+              "value": "={{ $env.TELEGRAM_CHAT_ID }}"
+            },
+            {
+              "name": "text",
+              "value": "={{ [\n  'LogiFlow Alert',\n  'Risk: ' + ($json.risk?.riskLevel ?? 'N/A'),\n  'Event: ' + ($json.risk?.eventType ?? $json.eventType ?? 'N/A'),\n  'Severity: ' + ($json.severity ?? 'N/A'),\n  'Address: ' + ($json.maps?.incidentAddress ?? $json.locationDescription ?? 'N/A'),\n  'Alternative routes: ' + String($json.maps?.alternativeRoutes ?? 0),\n  'Detour recommended: ' + (($json.maps?.detourRecommended ?? false) ? 'Yes' : 'No'),\n  'Action: ' + ($json.risk?.recommendedAction ?? 'Monitor conditions'),\n  'Timestamp: ' + $now.toISO()\n].join('\\n') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0012-0012-0012-000000000012",
+      "name": "Notify via Telegram",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1560, 40],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "nd-001",
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0013-0013-0013-000000000013",
+      "name": "Notification Delivered?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1780, 40]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ns-001",
+              "name": "notified",
+              "value": true,
+              "type": "boolean"
+            },
+            {
+              "id": "ns-002",
+              "name": "channel",
+              "value": "telegram",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0014-0014-0014-000000000014",
+      "name": "Notification Success Log",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [2000, -20]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "nf-001",
+              "name": "notified",
+              "value": false,
+              "type": "boolean"
+            },
+            {
+              "id": "nf-002",
+              "name": "error",
+              "value": "={{ $json.description || 'Telegram send failed' }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0015-0015-0015-000000000015",
+      "name": "Notification Failure Log",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [2000, 100]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "nk-001",
+              "name": "notified",
+              "value": false,
+              "type": "boolean"
+            },
+            {
+              "id": "nk-002",
+              "name": "reason",
+              "value": "Risk below HIGH - notification skipped",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0016-0016-0016-000000000016",
+      "name": "Notification Skipped Log",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [1560, 180]
+    }
+  ],
+  "connections": {
+    "traffic-event-webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Incoming Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Incoming Payload": {
+      "main": [
+        [
+          {
+            "node": "Evaluate Risk Matrix",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evaluate Risk Matrix": {
+      "main": [
+        [
+          {
+            "node": "Geocode Incident",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Geocode Incident": {
+      "main": [
+        [
+          {
+            "node": "Get Detour Alternatives",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Detour Alternatives": {
+      "main": [
+        [
+          {
+            "node": "Assess Detour",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Assess Detour": {
+      "main": [
+        [
+          {
+            "node": "Login for Gateway JWT",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Risk Matrix Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Login for Gateway JWT": {
+      "main": [
+        [
+          {
+            "node": "POST to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "POST to Webhook": {
+      "main": [
+        [
+          {
+            "node": "Check Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Webhook Response": {
+      "main": [
+        [
+          {
+            "node": "Success \u2013 Route Re-optimization",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error \u2013 Webhook Delivery Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Risk Matrix Switch": {
+      "main": [
+        [
+          {
+            "node": "Notify via Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Notification Skipped Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify via Telegram": {
+      "main": [
+        [
+          {
+            "node": "Notification Delivered?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notification Delivered?": {
+      "main": [
+        [
+          {
+            "node": "Notification Success Log",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Notification Failure Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "logiflow-sprint2-openclaw-telegram-v1",
+  "meta": {
+    "instanceId": "logiflow-n8n-ci",
+    "templateId": "logiflow-traffic-event-trigger"
+  },
+  "id": "logiflow-traffic-event-trigger",
+  "tags": [
+    {
+      "createdAt": "2026-03-02T00:00:00.000Z",
+      "updatedAt": "2026-03-02T00:00:00.000Z",
+      "id": "tag-logiflow",
+      "name": "logiflow"
+    }
+  ]
+}

@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>LogiFlow Socket Test Client</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; background: #1a1a2e; color: #eee; }
+    h1 { color: #00d4ff; }
+    .panel { background: #16213e; padding: 15px; border-radius: 8px; margin-bottom: 15px; }
+    button { background: #00d4ff; color: #000; border: none; padding: 10px 20px; 
+             border-radius: 5px; cursor: pointer; margin: 5px; font-weight: bold; }
+    button:hover { background: #0099bb; }
+    #log { background: #0f3460; padding: 10px; border-radius: 5px; 
+           height: 300px; overflow-y: auto; font-family: monospace; font-size: 13px; }
+    .event-position { color: #00ff88; }
+    .event-route { color: #ffaa00; }
+    .event-joined { color: #00d4ff; }
+    .status-connected { color: #00ff88; }
+    .status-disconnected { color: #ff4444; }
+  </style>
+</head>
+<body>
+  <h1>LogiFlow Socket Test Client</h1>
+
+  <div class="panel">
+    <strong>Status: </strong>
+    <span id="status" class="status-disconnected">Disconnected</span>
+  </div>
+
+  <div class="panel">
+    <strong>Rooms:</strong><br><br>
+    <button onclick="joinFleet()">Join Fleet Room</button>
+    <button onclick="joinVehicle('v-001')">Join Vehicle v-001</button>
+    <button onclick="joinVehicle('v-002')">Join Vehicle v-002</button>
+  </div>
+
+  <div class="panel">
+    <strong>Simulate Route Update:</strong><br><br>
+    <button onclick="triggerRouteUpdate()">Trigger Route Update for v-001</button>
+  </div>
+
+  <div class="panel">
+    <strong>Event Log:</strong>
+    <div id="log"></div>
+  </div>
+
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  <script>
+    const socket = io('http://localhost:3001');
+
+    socket.on('connect', () => {
+      document.getElementById('status').textContent = 'Connected - ID: ' + socket.id;
+      document.getElementById('status').className = 'status-connected';
+      addLog('system', 'Connected to server');
+    });
+
+    socket.on('disconnect', () => {
+      document.getElementById('status').textContent = 'Disconnected';
+      document.getElementById('status').className = 'status-disconnected';
+      addLog('system', 'Disconnected from server');
+    });
+
+    socket.on('joined', (data) => {
+      addLog('event-joined', 'Joined room: ' + data.room);
+    });
+
+    socket.on('vehicle:position', (data) => {
+      addLog('event-position',
+        `${data.vehicleId} → lat: ${data.lat.toFixed(4)}, lng: ${data.lng.toFixed(4)}, speed: ${data.speed} km/h`
+      );
+    });
+
+    socket.on('route:update', (data) => {
+      addLog('event-route',`Route update for ${data.vehicleId} → ${data.stops.length} stops, ETA: ${data.estimatedTime} min, polyline: ${data.polyline.length} points, distance: ${data.totalDistance}m, event: ${data.eventType}`
+      );
+    });
+
+    function joinFleet() {
+      socket.emit('join:fleet');
+      addLog('system', 'Joining fleet room...');
+    }
+
+    function joinVehicle(id) {
+      socket.emit('join:vehicle', { vehicleId: id });
+      addLog('system', 'Joining vehicle room: ' + id);
+    }
+
+    async function triggerRouteUpdate() {
+      const response = await fetch('http://localhost:3001/emit/route-update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          vehicleId: 'v-001',
+          stops: [
+            { lat: 4.7110, lng: -74.0721, address: 'Calle 72' },
+            { lat: 4.6800, lng: -74.0500, address: 'Av. El Dorado' }
+          ],
+          polyline: [
+            { lat: 4.7110, lng: -74.0721 },
+            { lat: 4.7050, lng: -74.0680 },
+            { lat: 4.6900, lng: -74.0600 },
+            { lat: 4.6800, lng: -74.0500 }
+          ],
+          estimatedTime: 35,
+          totalDistance: 8500,
+          eventType: 'traffic_jam',
+          totalCost: 120,
+          solvedAt: new Date().toISOString()
+        })
+      });
+      const result = await response.json();
+      addLog('system', 'Route update triggered: ' + JSON.stringify(result));
+    }
+
+    function addLog(cssClass, message) {
+      const log = document.getElementById('log');
+      const time = new Date().toLocaleTimeString();
+      log.innerHTML += `<div class="${cssClass}">[${time}] ${message}</div>`;
+      log.scrollTop = log.scrollHeight;
+    }
+  </script>
+</body>
+</html>

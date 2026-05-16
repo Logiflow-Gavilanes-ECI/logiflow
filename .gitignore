@@ -1,0 +1,41 @@
+# Dependencies
+node_modules/
+
+# OSRM map data (never commit — ~200MB+)
+services/optimizer/osrm-data/
+
+# Environment files
+.env
+.env.local
+
+# Terraform — never commit state, plans, or real tfvars
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+crash.*.log
+*.tfvars
+!*.tfvars.example
+infra/generated/
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+
+# Python (ai-predictor)
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.mypy_cache/
+.ruff_cache/
+venv/
+.venv/
+
+CLAUDE.md

@@ -1,0 +1,19 @@
+# Copy to terraform.tfvars and fill in. NEVER commit terraform.tfvars.
+
+subscription_id = "00000000-0000-0000-0000-000000000000"
+
+# Public half of the team SSH key. Generate from the .pem with:
+#   ssh-keygen -y -f ~/.ssh/logiflow-backend_key.pem > ~/.ssh/logiflow-backend_key.pub
+ssh_public_key = "ssh-rsa AAAA... team@logiflow"
+
+# Optional overrides (defaults shown — only set if you want to change):
+# resource_group_name = "logiflow-rg"
+# location            = "eastus2"
+# vm_name             = "logiflow-backend"
+# vm_size             = "Standard_D2s_v3"
+# admin_username      = "ubuntu"
+# allowed_ports = {
+#   "default-allow-ssh" = { port = 22, priority = 1000 }
+#   "HTTP"              = { port = 80, priority = 1010 }
+#   ...
+# }

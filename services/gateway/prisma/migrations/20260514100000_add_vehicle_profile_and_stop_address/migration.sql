@@ -1,0 +1,5 @@
+ALTER TABLE "Vehicle" ADD COLUMN "plate" TEXT;
+ALTER TABLE "Vehicle" ADD COLUMN "model" TEXT;
+ALTER TABLE "Vehicle" ADD COLUMN "status" TEXT NOT NULL DEFAULT 'online';
+
+ALTER TABLE "Stop" ADD COLUMN "address" TEXT;

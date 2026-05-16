@@ -1,0 +1,507 @@
+type VehicleEntity = {
+  id: string;
+  lat: number;
+  lng: number;
+  capacity: number;
+  plate?: string | null;
+  model?: string | null;
+  status: string;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+type StopEntity = {
+  id: string;
+  address?: string | null;
+  lat: number;
+  lng: number;
+  demand: number;
+  priority: number;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+type UserEntity = {
+  id: string;
+  email?: string | null;
+  name?: string | null;
+  passwordHash?: string | null;
+  role: 'admin' | 'conductor';
+  vehicleId?: string | null;
+  provider?: string;
+  googleId?: string | null;
+  avatar?: string | null;
+};
+
+type RefreshTokenEntity = {
+  id: string;
+  tokenHash: string;
+  userId: string;
+  expiresAt: Date;
+  createdAt: Date;
+  consumedAt?: Date;
+};
+
+export class PrismaClient {
+  private readonly vehicleStore = new Map<string, VehicleEntity>();
+  private readonly stopStore = new Map<string, StopEntity>();
+  private readonly userStore = new Map<string, UserEntity>();
+  private readonly refreshTokenStore = new Map<string, RefreshTokenEntity>();
+
+  private nextId(prefix: 'v' | 's' | 'u', size: number): string {
+    return `${prefix}-${size + 1}`;
+  }
+
+  private findUserByUnique(where: {
+    id?: string;
+    email?: string;
+    googleId?: string;
+  }) {
+    if (where.id) {
+      return this.userStore.get(where.id) ?? null;
+    }
+
+    return (
+      Array.from(this.userStore.values()).find((user) => {
+        if (where.email && user.email === where.email) return true;
+        if (where.googleId && user.googleId === where.googleId) return true;
+        return false;
+      }) ?? null
+    );
+  }
+
+  vehicle = {
+    findMany: jest.fn(() => Array.from(this.vehicleStore.values())),
+    findUnique: jest.fn(({ where }: { where: { id: string } }) => {
+      return this.vehicleStore.get(where.id) ?? null;
+    }),
+    findFirst: jest.fn(() => {
+      return Array.from(this.vehicleStore.values())[0] ?? null;
+    }),
+    upsert: jest.fn(
+      ({
+        where,
+        update,
+        create,
+      }: {
+        where: { id: string };
+        update: Partial<{
+          lat: number;
+          lng: number;
+          capacity: number;
+          plate: string;
+          model: string;
+          status: string;
+        }>;
+        create: {
+          id: string;
+          lat: number;
+          lng: number;
+          capacity: number;
+          plate?: string;
+          model?: string;
+          status?: string;
+        };
+      }) => {
+        const now = new Date();
+        const current = this.vehicleStore.get(where.id);
+        if (current) {
+          const updated: VehicleEntity = {
+            ...current,
+            ...update,
+            updatedAt: now,
+          };
+          this.vehicleStore.set(where.id, updated);
+          return updated;
+        }
+
+        const created: VehicleEntity = {
+          id: create.id,
+          lat: create.lat,
+          lng: create.lng,
+          capacity: create.capacity,
+          plate: create.plate ?? null,
+          model: create.model ?? null,
+          status: create.status ?? 'online',
+          createdAt: now,
+          updatedAt: now,
+        };
+
+        this.vehicleStore.set(where.id, created);
+        return created;
+      },
+    ),
+    create: jest.fn(
+      ({
+        data,
+      }: {
+        data: { id?: string; lat: number; lng: number; capacity: number };
+      }) => {
+        const now = new Date();
+        const id = data.id ?? this.nextId('v', this.vehicleStore.size);
+        const created: VehicleEntity = {
+          id,
+          lat: data.lat,
+          lng: data.lng,
+          capacity: data.capacity,
+          plate: null,
+          model: null,
+          status: 'online',
+          createdAt: now,
+          updatedAt: now,
+        };
+
+        this.vehicleStore.set(id, created);
+        return created;
+      },
+    ),
+    update: jest.fn(
+      ({
+        where,
+        data,
+      }: {
+        where: { id: string };
+        data: Partial<{
+          lat: number;
+          lng: number;
+          capacity: number;
+          plate: string;
+          model: string;
+          status: string;
+        }>;
+      }) => {
+        const current = this.vehicleStore.get(where.id);
+        if (!current) {
+          throw new Error(`Vehicle not found: ${where.id}`);
+        }
+
+        const updated: VehicleEntity = {
+          ...current,
+          ...data,
+          updatedAt: new Date(),
+        };
+
+        this.vehicleStore.set(where.id, updated);
+        return updated;
+      },
+    ),
+    delete: jest.fn(({ where }: { where: { id: string } }) => {
+      const existing = this.vehicleStore.get(where.id);
+      if (!existing) {
+        throw new Error(`Vehicle not found: ${where.id}`);
+      }
+
+      this.vehicleStore.delete(where.id);
+      return existing;
+    }),
+  };
+
+  stop = {
+    findMany: jest.fn(() => Array.from(this.stopStore.values())),
+    findUnique: jest.fn(({ where }: { where: { id: string } }) => {
+      return this.stopStore.get(where.id) ?? null;
+    }),
+    upsert: jest.fn(
+      ({
+        where,
+        update,
+        create,
+      }: {
+        where: { id: string };
+        update: Partial<{
+          address: string;
+          lat: number;
+          lng: number;
+          demand: number;
+          priority: number;
+        }>;
+        create: {
+          id: string;
+          address?: string;
+          lat: number;
+          lng: number;
+          demand: number;
+          priority?: number;
+        };
+      }) => {
+        const now = new Date();
+        const current = this.stopStore.get(where.id);
+        if (current) {
+          const updated: StopEntity = {
+            ...current,
+            ...update,
+            updatedAt: now,
+          };
+          this.stopStore.set(where.id, updated);
+          return updated;
+        }
+
+        const created: StopEntity = {
+          id: create.id,
+          address: create.address ?? null,
+          lat: create.lat,
+          lng: create.lng,
+          demand: create.demand,
+          priority: create.priority ?? 0,
+          createdAt: now,
+          updatedAt: now,
+        };
+
+        this.stopStore.set(where.id, created);
+        return created;
+      },
+    ),
+    create: jest.fn(
+      ({
+        data,
+      }: {
+        data: {
+          id?: string;
+          address?: string;
+          lat: number;
+          lng: number;
+          demand: number;
+          priority?: number;
+        };
+      }) => {
+        const now = new Date();
+        const id = data.id ?? this.nextId('s', this.stopStore.size);
+        const created: StopEntity = {
+          id,
+          address: data.address ?? null,
+          lat: data.lat,
+          lng: data.lng,
+          demand: data.demand,
+          priority: data.priority ?? 0,
+          createdAt: now,
+          updatedAt: now,
+        };
+
+        this.stopStore.set(id, created);
+        return created;
+      },
+    ),
+    update: jest.fn(
+      ({
+        where,
+        data,
+      }: {
+        where: { id: string };
+        data: Partial<{
+          lat: number;
+          lng: number;
+          demand: number;
+          priority: number;
+          address: string;
+        }>;
+      }) => {
+        const current = this.stopStore.get(where.id);
+        if (!current) {
+          throw new Error(`Stop not found: ${where.id}`);
+        }
+
+        const updated: StopEntity = {
+          ...current,
+          ...data,
+          updatedAt: new Date(),
+        };
+
+        this.stopStore.set(where.id, updated);
+        return updated;
+      },
+    ),
+    delete: jest.fn(({ where }: { where: { id: string } }) => {
+      const existing = this.stopStore.get(where.id);
+      if (!existing) {
+        throw new Error(`Stop not found: ${where.id}`);
+      }
+
+      this.stopStore.delete(where.id);
+      return existing;
+    }),
+  };
+
+  user = {
+    findUnique: jest.fn(
+      ({
+        where,
+      }: {
+        where: { id?: string; email?: string; googleId?: string };
+      }) => {
+        return this.findUserByUnique(where);
+      },
+    ),
+    create: jest.fn(
+      ({
+        data,
+      }: {
+        data: {
+          id?: string;
+          email?: string;
+          name?: string | null;
+          passwordHash?: string;
+          role: 'admin' | 'conductor';
+          vehicleId?: string | null;
+          provider?: string;
+          googleId?: string | null;
+          avatar?: string | null;
+        };
+      }) => {
+        const id = data.id ?? this.nextId('u', this.userStore.size);
+        const created: UserEntity = {
+          id,
+          email: data.email ?? null,
+          name: data.name ?? null,
+          passwordHash: data.passwordHash ?? null,
+          role: data.role,
+          vehicleId: data.vehicleId ?? null,
+          provider: data.provider ?? 'local',
+          googleId: data.googleId ?? null,
+          avatar: data.avatar ?? null,
+        };
+
+        this.userStore.set(id, created);
+        return created;
+      },
+    ),
+    upsert: jest.fn(
+      ({
+        where,
+        update,
+        create,
+      }: {
+        where: { id?: string; email?: string; googleId?: string };
+        update: Partial<UserEntity>;
+        create: {
+          id?: string;
+          email?: string;
+          name?: string | null;
+          passwordHash?: string | null;
+          role: 'admin' | 'conductor';
+          vehicleId?: string | null;
+          provider?: string;
+          googleId?: string | null;
+          avatar?: string | null;
+        };
+      }) => {
+        const existing = this.findUserByUnique(where);
+
+        if (existing) {
+          const updated: UserEntity = {
+            ...existing,
+            ...update,
+          };
+          this.userStore.set(existing.id, updated);
+          return updated;
+        }
+
+        const id = create.id ?? this.nextId('u', this.userStore.size);
+        const created: UserEntity = {
+          id,
+          email: create.email ?? null,
+          name: create.name ?? null,
+          passwordHash: create.passwordHash ?? null,
+          role: create.role,
+          vehicleId: create.vehicleId ?? null,
+          provider: create.provider ?? 'google',
+          googleId: create.googleId ?? null,
+          avatar: create.avatar ?? null,
+        };
+        this.userStore.set(id, created);
+        return created;
+      },
+    ),
+  };
+
+  refreshToken = {
+    create: jest.fn(
+      ({
+        data,
+      }: {
+        data: {
+          userId: string;
+          tokenHash: string;
+          expiresAt: Date;
+        };
+      }) => {
+        const created: RefreshTokenEntity = {
+          id: `rt-${this.refreshTokenStore.size + 1}`,
+          userId: data.userId,
+          tokenHash: data.tokenHash,
+          expiresAt: data.expiresAt,
+          createdAt: new Date(),
+        };
+
+        this.refreshTokenStore.set(created.id, created);
+        return created;
+      },
+    ),
+    findUnique: jest.fn(
+      ({
+        where,
+      }: {
+        where: {
+          tokenHash: string;
+        };
+        include?: {
+          user: true;
+        };
+      }) => {
+        const found = Array.from(this.refreshTokenStore.values()).find(
+          (token) => token.tokenHash === where.tokenHash,
+        );
+
+        if (!found) {
+          return null;
+        }
+
+        const user = this.userStore.get(found.userId);
+
+        if (!user) {
+          return null;
+        }
+
+        return {
+          ...found,
+          consumedAt: found.consumedAt ?? null,
+          user,
+        };
+      },
+    ),
+    updateMany: jest.fn(
+      ({
+        where,
+        data,
+      }: {
+        where: {
+          id: string;
+          consumedAt: null;
+        };
+        data: {
+          consumedAt: Date;
+        };
+      }) => {
+        const current = this.refreshTokenStore.get(where.id);
+
+        if (!current || current.consumedAt) {
+          return { count: 0 };
+        }
+
+        const updated: RefreshTokenEntity = {
+          ...current,
+          consumedAt: data.consumedAt,
+        };
+
+        this.refreshTokenStore.set(where.id, updated);
+        return { count: 1 };
+      },
+    ),
+  };
+
+  $transaction = jest.fn((callback: (tx: PrismaClient) => Promise<unknown>) => {
+    return callback(this);
+  });
+
+  $connect = jest.fn(() => Promise.resolve(undefined));
+  $disconnect = jest.fn(() => Promise.resolve(undefined));
+}

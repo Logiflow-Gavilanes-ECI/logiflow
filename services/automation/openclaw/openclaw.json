@@ -1,0 +1,54 @@
+{
+  "gateway": {
+    "mode": "local",
+    "bind": "loopback",
+    "port": 18789
+  },
+  "model": {
+    "provider": "anthropic",
+    "model": "claude-sonnet-4-20250514",
+    "maxTokens": 512
+  },
+  "channels": [
+    {
+      "type": "telegram",
+      "token": "${TELEGRAM_BOT_TOKEN}",
+      "enabled": true
+    },
+    {
+      "type": "discord",
+      "webhookUrl": "${DISCORD_WEBHOOK_URL}",
+      "enabled": true
+    },
+    {
+      "type": "slack",
+      "webhookUrl": "${SLACK_WEBHOOK_URL}",
+      "enabled": true
+    },
+    {
+      "type": "email",
+      "webhookUrl": "${EMAIL_WEBHOOK_URL}",
+      "recipients": "${EMAIL_RECIPIENTS}",
+      "enabled": true
+    },
+    {
+      "type": "firebase-push",
+      "gatewayUrl": "${GATEWAY_URL}",
+      "gatewayInternalKey": "${GATEWAY_INTERNAL_KEY}",
+      "enabled": true
+    }
+  ],
+  "agents": {
+    "defaults": {
+      "memorySearch": {
+        "enabled": false
+      }
+    }
+  },
+  "skills": {
+    "logiflow-notify": {
+      "enabled": true,
+      "webhookPath": "/skills/logiflow-notify"
+    }
+  }
+}

@@ -1,0 +1,57 @@
+# syntax=docker/dockerfile:1.7
+# Real VROOM solver image. Uses the upstream vroomvrp/vroom-docker image
+# as the runtime base so all native deps (libssl, libglpk, libtbb, libboost)
+# come pre-installed, then layers Node.js + vroom-express on top to expose
+# the solver over HTTP at :3000.
+#
+# The optimizer always forwards a precomputed `matrix` (Google Routes /
+# AI predictor / Haversine fallback), so VROOM never needs OSRM at run
+# time and the image stays self-contained.
+
+ARG TARGETPLATFORM=linux/amd64
+ARG VROOM_VERSION=v1.13.0
+ARG VROOM_EXPRESS_REF=v0.12.0
+
+FROM --platform=${TARGETPLATFORM} vroomvrp/vroom-docker:${VROOM_VERSION} AS runtime
+
+ARG VROOM_EXPRESS_REF
+
+USER root
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+         curl ca-certificates gnupg git dumb-init netcat-openbsd \
+    && mkdir -p /etc/apt/keyrings \
+    && curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key \
+         | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg \
+    && echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_20.x nodistro main" \
+         > /etc/apt/sources.list.d/nodesource.list \
+    && apt-get update && apt-get install -y --no-install-recommends nodejs \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd -r vroomx && useradd -r -g vroomx -d /app vroomx
+
+WORKDIR /app
+
+RUN git clone --depth 1 --branch ${VROOM_EXPRESS_REF} \
+        https://github.com/VROOM-Project/vroom-express.git /tmp/vroom-express \
+    && cp -r /tmp/vroom-express/. /app/ \
+    && rm -rf /tmp/vroom-express \
+    && npm install --omit=dev --ignore-scripts \
+    && npm cache clean --force \
+    && chown -R vroomx:vroomx /app \
+    && mkdir -p /conf && chown -R vroomx:vroomx /conf
+
+USER vroomx
+
+ENV NODE_ENV=production \
+    VROOM_DOCKER=osrm \
+    VROOM_ROUTER=osrm
+
+EXPOSE 3000
+
+# vroom-express has no /health route; check that the TCP port is open.
+HEALTHCHECK --interval=15s --timeout=3s --start-period=10s --retries=3 \
+    CMD nc -z localhost 3000 || exit 1
+
+ENTRYPOINT ["dumb-init", "--"]
+CMD ["node", "src/index.js"]

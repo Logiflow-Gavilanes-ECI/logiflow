@@ -1,0 +1,1238 @@
+const grpc = require('@grpc/grpc-js');
+const protoLoader = require('@grpc/proto-loader');
+const { HealthImplementation } = require('grpc-health-check');
+const CircuitBreaker = require('opossum');
+const axios = require('axios');
+const fs = require('fs');
+const path = require('path');
+const { GoogleRoutesClient, profileToGoogleTravelMode } = require('./google-routes-client');
+const { logger, loggerFor } = require('./logger');
+const {
+  startMetricsServer,
+  optimizeRequestsTotal,
+  optimizeDurationMs,
+  vroomFailuresTotal,
+  aiPredictorFailuresTotal,
+  aiBreakerStateChanges,
+  redisFailuresTotal,
+  matrixSourceTotal,
+} = require('./metrics');
+
+const protoPathCandidates = [
+  process.env.OPTIMIZER_PROTO_PATH,
+  path.resolve(__dirname, '..', 'shared', 'proto', 'optimizer.proto'),
+  path.resolve(__dirname, '..', '..', '..', 'shared', 'proto', 'optimizer.proto'),
+].filter(Boolean);
+
+const PROTO_PATH = protoPathCandidates.find((candidate) => fs.existsSync(candidate));
+
+if (!PROTO_PATH) {
+  throw new Error(`optimizer.proto not found. Checked: ${protoPathCandidates.join(', ')}`);
+}
+
+const VROOM_URL = process.env.VROOM_URL || 'http://vroom:3000';
+const VROOM_OPTIMIZE_PATH = process.env.VROOM_OPTIMIZE_PATH || '/';
+const MATRIX_SOURCE = process.env.MATRIX_SOURCE || 'request';
+const OPTIMIZER_VALIDATE_MATRIX_ONLY = process.env.OPTIMIZER_VALIDATE_MATRIX_ONLY === 'true';
+const GOOGLE_ROUTES_ENABLED = process.env.GOOGLE_ROUTES_ENABLED === 'true';
+const GOOGLE_ROUTES_ALLOW_CALLS = process.env.GOOGLE_ROUTES_ALLOW_CALLS === 'true';
+const GOOGLE_ROUTES_MOCK = process.env.GOOGLE_ROUTES_MOCK === 'true';
+const MAX_GOOGLE_MATRIX_LOCATIONS = Number(process.env.MAX_GOOGLE_MATRIX_LOCATIONS || 10);
+const AI_PREDICTOR_ENABLED = process.env.AI_PREDICTOR_ENABLED === 'true';
+const AI_PREDICTOR_URL = process.env.AI_PREDICTOR_URL || 'http://ai-predictor:5001/adjust';
+const AI_PREDICTOR_TIMEOUT_MS = Number(process.env.AI_PREDICTOR_TIMEOUT_MS || 5000);
+const REDIS_URL = process.env.REDIS_URL;
+const REDIS_ROUTE_TTL_SECONDS = Number(process.env.REDIS_ROUTE_TTL_SECONDS || 3600);
+
+let redisClient;
+
+const googleRoutesClient = new GoogleRoutesClient({
+  apiKey: process.env.GOOGLE_MAPS_API_KEY,
+  endpoint: process.env.GOOGLE_ROUTES_ENDPOINT,
+  timeoutMs: Number(process.env.GOOGLE_ROUTES_TIMEOUT_MS || 20000),
+  allowLiveCalls: GOOGLE_ROUTES_ALLOW_CALLS,
+  mockMode: GOOGLE_ROUTES_MOCK,
+  cacheTtlMs: Number(process.env.GOOGLE_ROUTES_CACHE_TTL_MS || 300000),
+});
+
+const packageDefinition = protoLoader.loadSync(PROTO_PATH, {
+  keepCase: false,
+  longs: String,
+  enums: String,
+  defaults: true,
+  oneofs: true,
+});
+
+const proto = grpc.loadPackageDefinition(packageDefinition).logiflow;
+
+function getRedisClient() {
+  if (!REDIS_URL) {
+    return null;
+  }
+
+  if (redisClient) {
+    return redisClient;
+  }
+
+  const Redis = require('ioredis');
+  redisClient = new Redis(REDIS_URL, {
+    lazyConnect: true,
+    maxRetriesPerRequest: 1,
+    enableOfflineQueue: false,
+  });
+
+  redisClient.on('error', (error) => {
+    logger.warn({ err: error }, 'redis_client_error');
+  });
+
+  return redisClient;
+}
+
+function buildRouteRedisKey(vehicleId) {
+  return `route:vehicle:${vehicleId}`;
+}
+
+function getCorrelationId(call) {
+  const rawHeader = call?.metadata?.get?.('x-correlation-id')?.[0];
+  return rawHeader ? String(rawHeader) : 'unknown';
+}
+
+async function persistRoutesToRedis(grpcResponse, call, clientOverride) {
+  const routes = grpcResponse?.routes || [];
+  if (routes.length === 0) {
+    return;
+  }
+
+  const client = clientOverride || getRedisClient();
+  if (!client) {
+    return;
+  }
+
+  try {
+    if (client.status === 'wait' && typeof client.connect === 'function') {
+      await client.connect();
+    }
+
+    const correlationId = getCorrelationId(call);
+    const persistedAt = new Date().toISOString();
+
+    for (const route of routes) {
+      const vehicleId = String(route.vehicleId || '').trim();
+      if (!vehicleId) {
+        continue;
+      }
+
+      const key = buildRouteRedisKey(vehicleId);
+      const value = JSON.stringify(
+        {
+          vehicleId,
+          route,
+          correlationId,
+          persistedAt,
+        },
+        (_, rawValue) =>
+          typeof rawValue === 'bigint' ? rawValue.toString() : rawValue,
+      );
+      await client.set(key, value, 'EX', REDIS_ROUTE_TTL_SECONDS);
+    }
+  } catch (error) {
+    redisFailuresTotal.inc();
+    loggerFor(getCorrelationId(call)).warn(
+      { err: error },
+      'redis_persistence_skipped',
+    );
+  }
+}
+
+function mapProfile(profile) {
+  const profileMap = {
+    0: 'car',
+    1: 'bicycle',
+    2: 'foot',
+  };
+  return profileMap[profile] || 'car';
+}
+
+function createVroomIdMapper() {
+  let nextId = 1;
+  const toVroomMap = new Map();
+  const fromVroomMap = new Map();
+
+  return {
+    toVroomId(originalId) {
+      const safeOriginalId = String(originalId || '').trim();
+      if (toVroomMap.has(safeOriginalId)) {
+        return toVroomMap.get(safeOriginalId);
+      }
+
+      const assigned = nextId;
+      nextId += 1;
+      toVroomMap.set(safeOriginalId, assigned);
+      fromVroomMap.set(String(assigned), safeOriginalId);
+      return assigned;
+    },
+    fromVroomId(vroomId) {
+      return fromVroomMap.get(String(vroomId));
+    },
+  };
+}
+
+function buildTimeWindow(start, end) {
+  const startValue = Number.isFinite(Number(start)) ? Number(start) : undefined;
+  const endValue = Number.isFinite(Number(end)) ? Number(end) : undefined;
+
+  if (endValue === undefined || endValue <= 0) {
+    return undefined;
+  }
+
+  const safeStart = startValue !== undefined && startValue >= 0 ? startValue : 0;
+  if (endValue < safeStart) {
+    return undefined;
+  }
+
+  return [safeStart, endValue];
+}
+
+function reshapeSquareMatrix(flat) {
+  if (!Array.isArray(flat) || flat.length === 0) {
+    return null;
+  }
+
+  const n = Math.round(Math.sqrt(flat.length));
+  if (n * n !== flat.length) {
+    return null;
+  }
+
+  const out = [];
+  for (let i = 0; i < n; i += 1) {
+    out.push(flat.slice(i * n, (i + 1) * n).map(Number));
+  }
+  return out;
+}
+
+function buildVroomMatrices(matrix, profile) {
+  if (!matrix || !Array.isArray(matrix.durations) || matrix.durations.length === 0) {
+    return null;
+  }
+
+  const durations = Array.isArray(matrix.durations[0])
+    ? matrix.durations.map((row) => row.map(Number))
+    : reshapeSquareMatrix(matrix.durations);
+
+  if (!durations) {
+    return null;
+  }
+
+  const matrices = { [profile]: { durations } };
+  if (Array.isArray(matrix.distances) && matrix.distances.length > 0) {
+    const distances = Array.isArray(matrix.distances[0])
+      ? matrix.distances.map((row) => row.map(Number))
+      : reshapeSquareMatrix(matrix.distances);
+    if (distances) {
+      matrices[profile].distances = distances;
+    }
+  }
+
+  return matrices;
+}
+
+function buildLocationIndexMap(locations) {
+  if (!Array.isArray(locations) || locations.length === 0) {
+    return null;
+  }
+
+  const map = new Map();
+  locations.forEach((loc, idx) => {
+    if (!loc) return;
+    const lat = Number(loc.lat);
+    const lon = Number(loc.lon);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+    const key = `${lat.toFixed(6)},${lon.toFixed(6)}`;
+    if (!map.has(key)) map.set(key, idx);
+  });
+
+  return map;
+}
+
+function applyLocationIndexes(vroomRequest, locations) {
+  const indexMap = buildLocationIndexMap(locations);
+  if (!indexMap) {
+    return;
+  }
+
+  const resolveIndex = (coords) => {
+    if (!Array.isArray(coords) || coords.length < 2) return undefined;
+    const lon = Number(coords[0]);
+    const lat = Number(coords[1]);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return undefined;
+    const key = `${lat.toFixed(6)},${lon.toFixed(6)}`;
+    return indexMap.get(key);
+  };
+
+  for (const job of vroomRequest.jobs || []) {
+    if (job.location_index === undefined) {
+      job.location_index = resolveIndex(job.location);
+    }
+  }
+
+  for (const shipment of vroomRequest.shipments || []) {
+    if (shipment.pickup && shipment.pickup.location_index === undefined) {
+      shipment.pickup.location_index = resolveIndex(shipment.pickup.location);
+    }
+    if (shipment.delivery && shipment.delivery.location_index === undefined) {
+      shipment.delivery.location_index = resolveIndex(shipment.delivery.location);
+    }
+  }
+
+  for (const vehicle of vroomRequest.vehicles || []) {
+    if (vehicle.start && vehicle.start_index === undefined) {
+      vehicle.start_index = resolveIndex(vehicle.start);
+    }
+    if (vehicle.end && vehicle.end_index === undefined) {
+      vehicle.end_index = resolveIndex(vehicle.end);
+    }
+  }
+}
+
+function grpcToVroomRequest(req, idMapper) {
+  const vroomReq = {
+    jobs: [],
+    shipments: [],
+    vehicles: [],
+  };
+
+  // When the caller supplied a precomputed matrix, VROOM ignores raw
+  // coordinates and indexes everything against matrix.locations. Build
+  // a lat/lon → index lookup so we can stamp location_index on each
+  // job / vehicle / shipment task.
+  const locationToIndex = new Map();
+  const matrixLocations = req?.matrix?.locations || [];
+  if (matrixLocations.length > 0) {
+    matrixLocations.forEach((loc, idx) => {
+      if (loc && Number.isFinite(Number(loc.lat)) && Number.isFinite(Number(loc.lon))) {
+        const key = `${Number(loc.lat).toFixed(7)}|${Number(loc.lon).toFixed(7)}`;
+        if (!locationToIndex.has(key)) locationToIndex.set(key, idx);
+      }
+    });
+  }
+  const indexFor = (coord) => {
+    if (!coord || locationToIndex.size === 0) return undefined;
+    const key = `${Number(coord.lat).toFixed(7)}|${Number(coord.lon).toFixed(7)}`;
+    return locationToIndex.get(key);
+  };
+
+  if (req.jobs && req.jobs.length > 0) {
+    vroomReq.jobs = req.jobs.map((job) => {
+      const jobWindow = buildTimeWindow(job.timeWindowStart, job.timeWindowEnd);
+      return {
+      id: idMapper.toVroomId(job.id),
+      location: [job.location.lon, job.location.lat],
+      location_index: indexFor(job.location),
+      service: job.service || 0,
+      amount: job.amount ? [job.amount] : [0],
+      time_windows: jobWindow ? [jobWindow] : undefined,
+      skills: job.skills || [],
+      priority: job.priority || 0,
+      };
+    });
+  }
+
+  if (req.shipments && req.shipments.length > 0) {
+    vroomReq.shipments = req.shipments.map((shipment) => {
+      const pickupWindow = buildTimeWindow(
+        shipment.pickup.timeWindowStart,
+        shipment.pickup.timeWindowEnd,
+      );
+      const deliveryWindow = buildTimeWindow(
+        shipment.delivery.timeWindowStart,
+        shipment.delivery.timeWindowEnd,
+      );
+      return {
+      id: idMapper.toVroomId(shipment.id),
+      pickup: {
+        id: idMapper.toVroomId(shipment.pickup.id),
+        location: [shipment.pickup.location.lon, shipment.pickup.location.lat],
+        location_index: indexFor(shipment.pickup.location),
+        service: shipment.pickup.service || 0,
+        amount: shipment.pickup.amount ? [shipment.pickup.amount] : [0],
+        time_windows: pickupWindow ? [pickupWindow] : undefined,
+        skills: shipment.pickup.skills || [],
+      },
+      delivery: {
+        id: idMapper.toVroomId(shipment.delivery.id),
+        location: [shipment.delivery.location.lon, shipment.delivery.location.lat],
+        location_index: indexFor(shipment.delivery.location),
+        service: shipment.delivery.service || 0,
+        amount: shipment.delivery.amount ? [shipment.delivery.amount] : [0],
+        time_windows: deliveryWindow ? [deliveryWindow] : undefined,
+        skills: shipment.delivery.skills || [],
+      },
+      skills: shipment.skills || [],
+      priority: shipment.priority || 0,
+      };
+    });
+  }
+
+  if (req.vehicles && req.vehicles.length > 0) {
+    vroomReq.vehicles = req.vehicles.map((vehicle) => {
+      const startCoord = isValidCoordinate(vehicle.start) ? vehicle.start : undefined;
+      const endCoord = isValidCoordinate(vehicle.end) ? vehicle.end : undefined;
+      const vehicleWindow = buildTimeWindow(
+        vehicle.timeWindowStart,
+        vehicle.timeWindowEnd,
+      );
+      return {
+      id: idMapper.toVroomId(vehicle.id),
+      profile: mapProfile(vehicle.profile),
+      start: startCoord ? [startCoord.lon, startCoord.lat] : undefined,
+      start_index: startCoord ? indexFor(startCoord) : undefined,
+      end: endCoord ? [endCoord.lon, endCoord.lat] : undefined,
+      end_index: endCoord ? indexFor(endCoord) : undefined,
+      capacity: vehicle.capacity ? [vehicle.capacity] : [0],
+      skills: vehicle.skills || [],
+      time_window: vehicleWindow,
+      restrictions: vehicle.restrictions || [],
+      };
+    });
+  }
+
+  if (req.options) {
+    vroomReq.options = {
+      geometry: req.options.geometry || false,
+      metric: req.options.metric || 'duration',
+      optimize: req.options.optimize || true,
+      algorithm: req.options.algorithm || 'greedy',
+      max_jobs_per_route: req.options.maxJobsPerRoute || 0,
+    };
+  }
+
+  // Forward a caller-supplied matrix to VROOM. Proto sends durations /
+  // distances as flat int64 arrays of length N² (row-major); vroom-express
+  // expects matrices keyed by profile with N×N 2D arrays.
+  const flatDurations = req?.matrix?.durations;
+  if (Array.isArray(flatDurations) && flatDurations.length > 0) {
+    const n = Math.round(Math.sqrt(flatDurations.length));
+    if (n * n === flatDurations.length) {
+      const reshape = (flat) => {
+        const out = [];
+        for (let i = 0; i < n; i += 1) {
+          out.push(flat.slice(i * n, (i + 1) * n).map(Number));
+        }
+        return out;
+      };
+      const profile = mapProfile(req.vehicles?.[0]?.profile);
+      const matrices = { [profile]: { durations: reshape(flatDurations) } };
+      const flatDistances = req.matrix.distances;
+      if (Array.isArray(flatDistances) && flatDistances.length === flatDurations.length) {
+        matrices[profile].distances = reshape(flatDistances);
+      }
+      vroomReq.matrices = matrices;
+    }
+  }
+
+  return vroomReq;
+}
+
+function mapEntityId(value, idMapper) {
+  if (!idMapper) {
+    return String(value || '');
+  }
+
+  const originalId = idMapper.fromVroomId(value);
+  return originalId !== undefined ? originalId : String(value || '');
+}
+
+function firstNumeric(value, fallback = 0) {
+  const rawValue = Array.isArray(value) ? value[0] : value;
+  const numberValue = Number(rawValue);
+  return Number.isFinite(numberValue) ? numberValue : fallback;
+}
+
+function toBigIntValue(value) {
+  if (typeof value === 'bigint') {
+    return value;
+  }
+
+  const numberValue = firstNumeric(value, 0);
+  return BigInt(Math.max(0, Math.round(numberValue)));
+}
+
+function normalizeMatrixValues(values) {
+  if (!Array.isArray(values) || values.length === 0) {
+    return null;
+  }
+
+  if (Array.isArray(values[0])) {
+    return values.flat().map(Number);
+  }
+
+  return values.map(Number);
+}
+
+function matrixIndexForLocation(indexMap, location) {
+  if (!location) {
+    return undefined;
+  }
+
+  const lat = Number(location.lat);
+  const lon = Number(location.lon);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+    return undefined;
+  }
+
+  return indexMap.get(`${lat.toFixed(6)},${lon.toFixed(6)}`);
+}
+
+function estimateRouteMetricFromMatrix(route, matrixResult, field) {
+  const locations = matrixResult?.locations || [];
+  const values = normalizeMatrixValues(matrixResult?.[field]);
+  if (!Array.isArray(locations) || locations.length === 0 || !values) {
+    return BigInt(0);
+  }
+
+  const n = locations.length;
+  if (values.length !== n * n) {
+    return BigInt(0);
+  }
+
+  const indexMap = buildLocationIndexMap(locations);
+  if (!indexMap) {
+    return BigInt(0);
+  }
+
+  let total = 0;
+  const steps = route.steps || [];
+  for (let i = 1; i < steps.length; i += 1) {
+    const from = matrixIndexForLocation(indexMap, steps[i - 1]?.location);
+    const to = matrixIndexForLocation(indexMap, steps[i]?.location);
+    if (from === undefined || to === undefined) {
+      continue;
+    }
+
+    const value = Number(values[(from * n) + to]);
+    if (Number.isFinite(value) && value > 0) {
+      total += value;
+    }
+  }
+
+  return BigInt(Math.round(total));
+}
+
+function toRadians(value) {
+  return (value * Math.PI) / 180;
+}
+
+function haversineDistanceMeters(origin, destination) {
+  if (!origin || !destination) {
+    return 0;
+  }
+
+  const originLat = Number(origin.lat);
+  const originLon = Number(origin.lon);
+  const destinationLat = Number(destination.lat);
+  const destinationLon = Number(destination.lon);
+  if (
+    !Number.isFinite(originLat)
+    || !Number.isFinite(originLon)
+    || !Number.isFinite(destinationLat)
+    || !Number.isFinite(destinationLon)
+  ) {
+    return 0;
+  }
+
+  const earthRadiusMeters = 6371000;
+  const dLat = toRadians(destinationLat - originLat);
+  const dLon = toRadians(destinationLon - originLon);
+  const lat1 = toRadians(originLat);
+  const lat2 = toRadians(destinationLat);
+  const a = (Math.sin(dLat / 2) ** 2)
+    + (Math.cos(lat1) * Math.cos(lat2) * (Math.sin(dLon / 2) ** 2));
+
+  return Math.round(2 * earthRadiusMeters * Math.asin(Math.sqrt(a)));
+}
+
+function estimateRouteDistanceFromSteps(route) {
+  let total = 0;
+  const steps = route.steps || [];
+  for (let i = 1; i < steps.length; i += 1) {
+    total += haversineDistanceMeters(steps[i - 1]?.location, steps[i]?.location);
+  }
+  return BigInt(total);
+}
+
+function estimateRouteDistance(route, matrixResult) {
+  const matrixDistance = estimateRouteMetricFromMatrix(route, matrixResult, 'distances');
+  if (matrixDistance > BigInt(0)) {
+    return matrixDistance;
+  }
+
+  return estimateRouteDistanceFromSteps(route);
+}
+
+function enrichRouteMetrics(grpcResponse, matrixResult) {
+  if (!grpcResponse?.routes?.length) {
+    return false;
+  }
+
+  let updated = false;
+  let routingDistance = BigInt(0);
+
+  grpcResponse.routes = grpcResponse.routes.map((route) => {
+    const currentDistance = toBigIntValue(route.distance);
+    const estimatedDistance = currentDistance > BigInt(0)
+      ? currentDistance
+      : estimateRouteDistance(route, matrixResult);
+
+    if (currentDistance === BigInt(0) && estimatedDistance > BigInt(0)) {
+      updated = true;
+      return {
+        ...route,
+        distance: estimatedDistance,
+      };
+    }
+
+    return route;
+  });
+
+  for (const route of grpcResponse.routes) {
+    routingDistance += toBigIntValue(route.distance);
+  }
+
+  if (toBigIntValue(grpcResponse.routingDistance) === BigInt(0) && routingDistance > BigInt(0)) {
+    grpcResponse.routingDistance = routingDistance;
+    updated = true;
+  }
+
+  return updated;
+}
+
+function buildTaskDetailsById(req) {
+  const details = new Map();
+
+  for (const job of req?.jobs || []) {
+    details.set(String(job.id), {
+      amount: firstNumeric(job.amount, 0),
+      skills: job.skills || [],
+    });
+  }
+
+  for (const shipment of req?.shipments || []) {
+    if (shipment.pickup?.id) {
+      details.set(String(shipment.pickup.id), {
+        amount: firstNumeric(shipment.pickup.amount, 0),
+        skills: shipment.pickup.skills || shipment.skills || [],
+      });
+    }
+
+    if (shipment.delivery?.id) {
+      details.set(String(shipment.delivery.id), {
+        amount: firstNumeric(shipment.delivery.amount, 0),
+        skills: shipment.delivery.skills || shipment.skills || [],
+      });
+    }
+  }
+
+  return details;
+}
+
+function enrichRouteStepDetails(grpcResponse, req) {
+  if (!grpcResponse?.routes?.length) {
+    return false;
+  }
+
+  const detailsById = buildTaskDetailsById(req);
+  if (detailsById.size === 0) {
+    return false;
+  }
+
+  let updated = false;
+  grpcResponse.routes = grpcResponse.routes.map((route) => ({
+    ...route,
+    steps: (route.steps || []).map((step) => {
+      const details = detailsById.get(String(step.id));
+      if (!details) {
+        return step;
+      }
+
+      const next = { ...step };
+      if (firstNumeric(next.amount, 0) === 0 && details.amount > 0) {
+        next.amount = details.amount;
+        updated = true;
+      }
+
+      if ((!Array.isArray(next.skills) || next.skills.length === 0) && details.skills.length > 0) {
+        next.skills = details.skills;
+        updated = true;
+      }
+
+      return next;
+    }),
+  }));
+
+  return updated;
+}
+
+function enrichRouteLoadTotals(grpcResponse) {
+  if (!grpcResponse?.routes?.length) {
+    return false;
+  }
+
+  let updated = false;
+  grpcResponse.routes = grpcResponse.routes.map((route) => {
+    let pickup = firstNumeric(route.pickup, 0);
+    let delivery = firstNumeric(route.delivery, 0);
+
+    const pickupFromSteps = (route.steps || [])
+      .filter((step) => step.type === 'pickup')
+      .reduce((total, step) => total + firstNumeric(step.amount, 0), 0);
+    const deliveryFromSteps = (route.steps || [])
+      .filter((step) => step.type === 'delivery' || step.type === 'job')
+      .reduce((total, step) => total + firstNumeric(step.amount, 0), 0);
+
+    if (pickup === 0 && pickupFromSteps > 0) {
+      pickup = pickupFromSteps;
+      updated = true;
+    }
+
+    if (delivery === 0 && deliveryFromSteps > 0) {
+      delivery = deliveryFromSteps;
+      updated = true;
+    }
+
+    return {
+      ...route,
+      pickup,
+      delivery,
+    };
+  });
+
+  return updated;
+}
+
+function vroomToGrpcResponse(vroomRes, idMapper) {
+  const response = {
+    code: vroomRes.code || 0,
+    error: vroomRes.error || '',
+    routes: [],
+    unassigned: [],
+  };
+
+  if (vroomRes.routes && vroomRes.routes.length > 0) {
+    response.routes = vroomRes.routes.map((route) => ({
+      vehicleId: mapEntityId(route.vehicle_id ?? route.vehicle, idMapper),
+      cost: route.cost || 0,
+      distance: toBigIntValue(route.distance),
+      duration: toBigIntValue(route.duration),
+      steps: (route.steps || []).map((step) => {
+        const arrival = firstNumeric(step.arrival, 0);
+        const service = firstNumeric(step.service, 0);
+        const departure = firstNumeric(step.departure, NaN);
+
+        return {
+          type: step.type || '',
+          id: mapEntityId(step.id, idMapper),
+          location: {
+            lat: step.location ? step.location[1] : 0,
+            lon: step.location ? step.location[0] : 0,
+          },
+          service,
+          waitingTime: firstNumeric(step.waiting_time, 0),
+          arrival,
+          departure: Number.isFinite(departure) && departure > 0
+            ? departure
+            : arrival + service,
+          amount: firstNumeric(step.amount, 0),
+          skills: step.skills || [],
+        };
+      }),
+      delivery: firstNumeric(route.delivery, 0),
+      pickup: firstNumeric(route.pickup, 0),
+    }));
+  }
+
+  if (vroomRes.unassigned && vroomRes.unassigned.length > 0) {
+    response.unassigned = vroomRes.unassigned.map((unassigned) => ({
+      id: mapEntityId(unassigned.id, idMapper),
+      vehicleId: mapEntityId(unassigned.vehicle_id, idMapper),
+      steps: (unassigned.steps || []).map((step) => ({
+        type: step.type || '',
+        id: mapEntityId(step.id, idMapper),
+        location: {
+          lat: step.location ? step.location[1] : 0,
+          lon: step.location ? step.location[0] : 0,
+        },
+        service: step.service || 0,
+      })),
+    }));
+  }
+
+  if (vroomRes.matrix) {
+    response.matrix = {
+      distances: vroomRes.matrix.distances || [],
+      durations: vroomRes.matrix.durations || [],
+      locations: (vroomRes.matrix.locations || []).map((loc) => ({
+        lat: loc[1] || 0,
+        lon: loc[0] || 0,
+      })),
+    };
+  }
+
+  response.routingDistance = toBigIntValue(vroomRes.summary?.distance);
+  response.routingDuration = toBigIntValue(vroomRes.summary?.duration);
+
+  return response;
+}
+
+function shouldComputeGoogleMatrix(req) {
+  return MATRIX_SOURCE === 'google';
+}
+
+function resolveDepartureTime(req) {
+  return req?.departureTime || new Date().toISOString();
+}
+
+function isValidCoordinate(coordinate) {
+  if (!coordinate) {
+    return false;
+  }
+
+  const lat = Number(coordinate.lat);
+  const lon = Number(coordinate.lon);
+  return Number.isFinite(lat) && Number.isFinite(lon);
+}
+
+function buildMatrixLocations(req) {
+  const fromRequest = (req?.matrix?.locations || [])
+    .filter(isValidCoordinate)
+    .map((location) => ({ lat: Number(location.lat), lon: Number(location.lon) }));
+
+  if (fromRequest.length > 0) {
+    return fromRequest;
+  }
+
+  const dedupe = new Map();
+
+  const addCoordinate = (coordinate) => {
+    if (!isValidCoordinate(coordinate)) {
+      return;
+    }
+
+    const lat = Number(coordinate.lat);
+    const lon = Number(coordinate.lon);
+    const key = `${lat.toFixed(6)},${lon.toFixed(6)}`;
+
+    if (!dedupe.has(key)) {
+      dedupe.set(key, { lat, lon });
+    }
+  };
+
+  for (const vehicle of req?.vehicles || []) {
+    addCoordinate(vehicle.start);
+    addCoordinate(vehicle.end);
+  }
+
+  for (const job of req?.jobs || []) {
+    addCoordinate(job.location);
+  }
+
+  for (const shipment of req?.shipments || []) {
+    addCoordinate(shipment.pickup?.location);
+    addCoordinate(shipment.delivery?.location);
+  }
+
+  return Array.from(dedupe.values());
+}
+
+async function maybeAttachGoogleMatrix(req, vroomRequest) {
+  if (!shouldComputeGoogleMatrix(req)) {
+    return;
+  }
+
+  if (!GOOGLE_ROUTES_ENABLED) {
+    throw new Error('Google Routes is disabled. Set GOOGLE_ROUTES_ENABLED=true to enable matrix computation.');
+  }
+
+  const firstVehicleProfile = req.vehicles?.[0]?.profile;
+  const travelMode = profileToGoogleTravelMode(firstVehicleProfile);
+  const locations = buildMatrixLocations(req);
+
+  if (locations.length === 0) {
+    throw new Error(
+      'Unable to build matrix: provide matrix.locations or at least one valid location in vehicles/jobs/shipments.',
+    );
+  }
+
+  if (locations.length > MAX_GOOGLE_MATRIX_LOCATIONS) {
+    throw new Error(
+      `Google Routes guardrail triggered: locations=${locations.length}, max=${MAX_GOOGLE_MATRIX_LOCATIONS}.`,
+    );
+  }
+
+  if (!GOOGLE_ROUTES_ALLOW_CALLS && !GOOGLE_ROUTES_MOCK) {
+    throw new Error(
+      'Google Routes live calls are blocked. Set GOOGLE_ROUTES_ALLOW_CALLS=true or GOOGLE_ROUTES_MOCK=true.',
+    );
+  }
+
+  const matrixResult = await googleRoutesClient.computeRouteMatrix({
+    locations,
+    travelMode,
+    departureTime: resolveDepartureTime(req),
+  });
+
+  vroomRequest.matrix = {
+    distances: matrixResult.distances,
+    durations: matrixResult.durations,
+  };
+
+  return matrixResult;
+}
+
+async function callAIPredictor(matrix, departureTime, correlationId) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (correlationId) {
+    headers['X-Correlation-Id'] = correlationId;
+  }
+  if (process.env.AI_PREDICTOR_INTERNAL_TOKEN) {
+    headers['X-Internal-Token'] = process.env.AI_PREDICTOR_INTERNAL_TOKEN;
+  }
+
+  const response = await axios.post(
+    AI_PREDICTOR_URL,
+    {
+      matrix,
+      departure_time: departureTime,
+    },
+    {
+      timeout: AI_PREDICTOR_TIMEOUT_MS,
+      headers,
+    },
+  );
+
+  return response.data;
+}
+
+// Wrap the predictor call in a circuit breaker so a single bad period
+// does not slow every optimization down by AI_PREDICTOR_TIMEOUT_MS.
+// Once errorThreshold % of recent calls have failed, the breaker opens
+// and rejects calls immediately for resetTimeout ms; one trial call
+// then probes recovery (half-open).
+const aiPredictorBreaker = new CircuitBreaker(callAIPredictor, {
+  timeout: AI_PREDICTOR_TIMEOUT_MS,
+  errorThresholdPercentage: Number(process.env.AI_BREAKER_ERROR_PCT || 50),
+  resetTimeout: Number(process.env.AI_BREAKER_RESET_MS || 30000),
+  volumeThreshold: Number(process.env.AI_BREAKER_VOLUME || 5),
+  rollingCountTimeout: Number(process.env.AI_BREAKER_WINDOW_MS || 10000),
+  name: 'ai-predictor',
+});
+
+aiPredictorBreaker.on('open', () => {
+  aiBreakerStateChanges.inc({ state: 'open' });
+  logger.warn({ event: 'ai_breaker_open' }, 'ai_breaker_open');
+});
+aiPredictorBreaker.on('halfOpen', () => {
+  aiBreakerStateChanges.inc({ state: 'half_open' });
+  logger.info({ event: 'ai_breaker_half_open' }, 'ai_breaker_half_open');
+});
+aiPredictorBreaker.on('close', () => {
+  aiBreakerStateChanges.inc({ state: 'close' });
+  logger.info({ event: 'ai_breaker_close' }, 'ai_breaker_close');
+});
+aiPredictorBreaker.on('reject', () => {
+  aiPredictorFailuresTotal.inc({ reason: 'breaker_open' });
+  logger.warn({ event: 'ai_breaker_reject' }, 'ai_breaker_reject');
+});
+aiPredictorBreaker.on('timeout', () => {
+  aiPredictorFailuresTotal.inc({ reason: 'timeout' });
+});
+aiPredictorBreaker.on('failure', () => {
+  aiPredictorFailuresTotal.inc({ reason: 'error' });
+});
+
+async function optimizeRoutes(call, callback) {
+  const correlationId = getCorrelationId(call);
+  const log = loggerFor(correlationId);
+  const startedAt = process.hrtime.bigint();
+  log.info(
+    {
+      event: 'optimize_started',
+      vehicles: call.request?.vehicles?.length || 0,
+      jobs: call.request?.jobs?.length || 0,
+      shipments: call.request?.shipments?.length || 0,
+    },
+    'optimize_started',
+  );
+
+  try {
+    const idMapper = createVroomIdMapper();
+    const vroomRequest = grpcToVroomRequest(call.request, idMapper);
+    let matrixResult = await maybeAttachGoogleMatrix(call.request, vroomRequest);
+
+    if (matrixResult?.source === 'fallback') {
+      log.warn({ event: 'matrix_fallback_used' }, 'matrix_fallback_used');
+    }
+
+    if (AI_PREDICTOR_ENABLED && vroomRequest.matrix) {
+      try {
+        const aiResponse = await aiPredictorBreaker.fire(
+          {
+            distances: vroomRequest.matrix.distances,
+            durations: vroomRequest.matrix.durations,
+            locations: matrixResult?.locations || buildMatrixLocations(call.request),
+          },
+          resolveDepartureTime(call.request),
+          correlationId,
+        );
+
+        if (aiResponse?.matrix?.durations && aiResponse?.matrix?.distances) {
+          vroomRequest.matrix = {
+            distances: aiResponse.matrix.distances,
+            durations: aiResponse.matrix.durations,
+          };
+
+          matrixResult = {
+            distances: aiResponse.matrix.distances,
+            durations: aiResponse.matrix.durations,
+            locations: aiResponse.matrix.locations || matrixResult?.locations || buildMatrixLocations(call.request),
+            source: 'ai-adjusted',
+          };
+          log.info({ event: 'ai_predictor_applied' }, 'ai_predictor_applied');
+        }
+      } catch (error) {
+        log.warn(
+          { err: error, event: 'ai_predictor_unavailable' },
+          'ai_predictor_unavailable',
+        );
+      }
+    }
+
+    if (OPTIMIZER_VALIDATE_MATRIX_ONLY && matrixResult) {
+      const matrixSource = matrixResult.source || 'google';
+      const durationMs = Number((process.hrtime.bigint() - startedAt) / BigInt(1_000_000));
+      optimizeRequestsTotal.inc({ status: 'success' });
+      optimizeDurationMs.observe({ status: 'success', matrix_source: matrixSource }, durationMs);
+      matrixSourceTotal.inc({ source: matrixSource });
+      log.info(
+        {
+          event: 'optimize_completed',
+          durationMs,
+          routes: 0,
+          unassigned: 0,
+          matrixSource,
+          mode: 'validate_matrix_only',
+        },
+        'optimize_completed',
+      );
+      callback(null, {
+        code: 0,
+        error: '',
+        routes: [],
+        unassigned: [],
+        matrix: {
+          distances: matrixResult.distances,
+          durations: matrixResult.durations,
+          locations: matrixResult.locations,
+        },
+        matrixSource,
+        routingDistance: 0,
+        routingDuration: 0,
+      });
+      return;
+    }
+    const profile = mapProfile(call.request?.vehicles?.[0]?.profile);
+    const matrices = buildVroomMatrices(vroomRequest.matrix, profile);
+    if (matrices) {
+      vroomRequest.matrices = matrices;
+      delete vroomRequest.matrix;
+      applyLocationIndexes(vroomRequest, matrixResult?.locations);
+    }
+
+    const vroomTargetUrl = new URL(VROOM_OPTIMIZE_PATH, `${VROOM_URL.replace(/\/$/, '')}/`).toString();
+
+    const vroomRes = await axios.post(vroomTargetUrl, vroomRequest, {
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Correlation-Id': correlationId,
+      },
+      timeout: 30000,
+    });
+
+    const grpcResponse = vroomToGrpcResponse(vroomRes.data, idMapper);
+    const routeMetricsEnriched = enrichRouteMetrics(grpcResponse, matrixResult);
+    const routeStepDetailsEnriched = enrichRouteStepDetails(grpcResponse, call.request);
+    const routeLoadTotalsEnriched = enrichRouteLoadTotals(grpcResponse);
+    if (matrixResult?.source) {
+      grpcResponse.matrixSource = matrixResult.source;
+    }
+
+    await persistRoutesToRedis(grpcResponse, call);
+
+    const durationMs = Number((process.hrtime.bigint() - startedAt) / BigInt(1_000_000));
+    const matrixSource = grpcResponse.matrixSource || 'request';
+    optimizeRequestsTotal.inc({ status: 'success' });
+    optimizeDurationMs.observe({ status: 'success', matrix_source: matrixSource }, durationMs);
+    matrixSourceTotal.inc({ source: matrixSource });
+    log.info(
+      {
+        event: 'optimize_completed',
+        durationMs,
+        routes: grpcResponse.routes?.length || 0,
+        unassigned: grpcResponse.unassigned?.length || 0,
+        matrixSource,
+        routeMetricsEnriched,
+        routeStepDetailsEnriched,
+        routeLoadTotalsEnriched,
+        routingDistance: String(grpcResponse.routingDistance || 0),
+      },
+      'optimize_completed',
+    );
+    callback(null, grpcResponse);
+  } catch (error) {
+    const upstreamDetails = typeof error.response?.data === 'string'
+      ? error.response.data
+      : JSON.stringify(error.response?.data || {});
+    const durationMs = Number((process.hrtime.bigint() - startedAt) / BigInt(1_000_000));
+    optimizeRequestsTotal.inc({ status: 'error' });
+    optimizeDurationMs.observe({ status: 'error', matrix_source: 'unknown' }, durationMs);
+    if (error.response) {
+      vroomFailuresTotal.inc();
+    }
+    log.error(
+      {
+        err: error,
+        upstreamStatus: error.response?.status,
+        upstreamDetails,
+        durationMs,
+        event: 'optimize_failed',
+      },
+      'optimize_failed',
+    );
+    const errorResponse = {
+      code: error.response?.status || 500,
+      error: `${error.message || 'Internal server error'}${upstreamDetails && upstreamDetails !== '{}' ? ` | ${upstreamDetails}` : ''}`,
+      routes: [],
+      unassigned: [],
+      routingDistance: BigInt(0),
+      routingDuration: BigInt(0),
+    };
+    callback(null, errorResponse);
+  }
+}
+
+// gRPC standard health protocol (grpc.health.v1.Health). Probes:
+//   grpc_health_probe -addr=:50051                 -> overall server health
+//   grpc_health_probe -addr=:50051 -service=logiflow.RouteOptimizer
+const HEALTH_SERVICE = 'logiflow.RouteOptimizer';
+const healthImpl = new HealthImplementation({
+  '': 'NOT_SERVING',
+  [HEALTH_SERVICE]: 'NOT_SERVING',
+});
+
+function setHealth(status) {
+  healthImpl.setStatus('', status);
+  healthImpl.setStatus(HEALTH_SERVICE, status);
+}
+
+const SHUTDOWN_DEADLINE_MS = Number(process.env.SHUTDOWN_DEADLINE_MS || 25000);
+
+function installShutdownHandlers(server) {
+  let shuttingDown = false;
+
+  const shutdown = (signal) => {
+    if (shuttingDown) {
+      return;
+    }
+    shuttingDown = true;
+    logger.info({ signal, event: 'shutdown_started' }, 'shutdown_started');
+
+    // Stop reporting healthy so orchestrators stop sending new traffic.
+    setHealth('NOT_SERVING');
+
+    const forceTimer = setTimeout(() => {
+      logger.warn({ event: 'shutdown_force' }, 'shutdown_force');
+      try {
+        server.forceShutdown();
+      } catch (error) {
+        logger.error({ err: error }, 'force_shutdown_failed');
+      }
+      closeRedisAndExit(1);
+    }, SHUTDOWN_DEADLINE_MS);
+    forceTimer.unref();
+
+    server.tryShutdown((error) => {
+      clearTimeout(forceTimer);
+      if (error) {
+        logger.error({ err: error, event: 'graceful_shutdown_error' }, 'graceful_shutdown_error');
+        closeRedisAndExit(1);
+        return;
+      }
+      logger.info({ event: 'grpc_drained' }, 'grpc_drained');
+      closeRedisAndExit(0);
+    });
+  };
+
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
+  process.on('uncaughtException', (error) => {
+    logger.fatal({ err: error, event: 'uncaught_exception' }, 'uncaught_exception');
+    shutdown('uncaughtException');
+  });
+  process.on('unhandledRejection', (reason) => {
+    logger.error({ err: reason, event: 'unhandled_rejection' }, 'unhandled_rejection');
+  });
+}
+
+function closeRedisAndExit(code) {
+  if (!redisClient) {
+    process.exit(code);
+    return;
+  }
+  redisClient
+    .quit()
+    .catch((error) => logger.warn({ err: error }, 'redis_quit_failed'))
+    .finally(() => process.exit(code));
+}
+
+function main() {
+  const server = new grpc.Server();
+  server.addService(proto.RouteOptimizer.service, {
+    optimizeRoutes: optimizeRoutes,
+  });
+  healthImpl.addToServer(server);
+
+  const port = process.env.GRPC_PORT || '50051';
+  server.bindAsync(`0.0.0.0:${port}`, grpc.ServerCredentials.createInsecure(), (err, boundPort) => {
+    if (err) {
+      logger.error({ err }, 'grpc_bind_failed');
+      process.exit(1);
+    }
+    logger.info({ port: boundPort, event: 'grpc_listening' }, 'grpc_listening');
+    // bindAsync already starts the server; server.start() is deprecated.
+    setHealth('SERVING');
+    startMetricsServer();
+    installShutdownHandlers(server);
+  });
+}
+
+if (require.main === module) {
+  main();
+}
+
+module.exports = {
+  createVroomIdMapper,
+  grpcToVroomRequest,
+  vroomToGrpcResponse,
+  enrichRouteMetrics,
+  enrichRouteStepDetails,
+  enrichRouteLoadTotals,
+  buildMatrixLocations,
+  maybeAttachGoogleMatrix,
+  callAIPredictor,
+  aiPredictorBreaker,
+  buildRouteRedisKey,
+  persistRoutesToRedis,
+  optimizeRoutes,
+  healthImpl,
+  setHealth,
+  HEALTH_SERVICE,
+};

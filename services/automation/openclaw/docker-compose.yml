@@ -1,0 +1,26 @@
+networks:
+  logiflow-net:
+    external: true
+
+services:
+  openclaw:
+    image: alpine/openclaw:latest
+    env_file:
+      - .env
+    container_name: logiflow-openclaw
+    ports:
+      - "18789:18789"
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - OPENCLAW_GATEWAY_MODE=local
+      - OPENCLAW_CHANNEL=telegram
+    volumes:
+      - openclaw_data:/home/node/.openclaw
+      - ./skills:/home/node/.openclaw/skills
+    networks:
+      - logiflow-net
+    restart: unless-stopped
+
+volumes:
+  openclaw_data:

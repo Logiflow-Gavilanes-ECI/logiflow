@@ -1,0 +1,83 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  admin
+  conductor
+}
+
+model User {
+  id            String         @id @default(uuid())
+  email         String?        @unique
+  name          String?
+  passwordHash  String?
+  role          Role
+  vehicleId     String?
+  provider      String         @default("google")
+  googleId      String?        @unique
+  avatar        String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  refreshTokens RefreshToken[]
+  deviceTokens  DeviceToken[]
+
+  @@index([vehicleId])
+}
+
+model DeviceToken {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  platform  String
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model RefreshToken {
+  id         String    @id @default(uuid())
+  tokenHash  String    @unique
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt  DateTime
+  createdAt  DateTime  @default(now())
+  consumedAt DateTime?
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model Vehicle {
+  id        String   @id @default(uuid())
+  lat       Float
+  lng       Float
+  capacity  Int
+  plate     String?
+  model     String?
+  status    String   @default("online")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Stop {
+  id          String    @id @default(uuid())
+  address     String?
+  lat         Float
+  lng         Float
+  demand      Int
+  priority    Int       @default(0)
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
