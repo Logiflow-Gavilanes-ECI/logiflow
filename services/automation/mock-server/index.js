@@ -161,7 +161,9 @@ async function handleNotify(req, res) {
   try {
     const preview = buildMessage(payload);
     console.log(`${LOG_NOTIFY_PREFIX} Multi-channel dispatch:`);
-    console.log(preview);
+    // JSON.stringify escapes newlines and control chars, so user-controlled
+    // payload content can't inject fake log lines.
+    console.log(JSON.stringify(preview));
 
     const channelResults = await dispatchToAllChannels(req, preview, payload);
     const summary = summarizeResults(channelResults);
