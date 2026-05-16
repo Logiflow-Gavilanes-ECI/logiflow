@@ -130,7 +130,9 @@ export class VehiclesService {
     return fallbackVehicleId;
   }
 
-  private async resolveActiveRoute(vehicleId: string): Promise<DriverRoute | null> {
+  private async resolveActiveRoute(
+    vehicleId: string,
+  ): Promise<DriverRoute | null> {
     try {
       const activeRoute =
         await this.activeRouteRepository.findByVehicleId(vehicleId);
@@ -160,7 +162,9 @@ export class VehiclesService {
     }
   }
 
-  private async resolveStopMetadataById(): Promise<Map<string, RouteStopSource>> {
+  private async resolveStopMetadataById(): Promise<
+    Map<string, RouteStopSource>
+  > {
     try {
       const stops = await this.stopsService.findAll();
       return new Map(stops.map((stop) => [stop.id, stop]));

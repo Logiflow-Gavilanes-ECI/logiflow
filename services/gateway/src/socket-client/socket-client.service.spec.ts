@@ -1,18 +1,51 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
+import { io } from 'socket.io-client';
+import * as jwt from 'jsonwebtoken';
 import { SocketClientService } from './socket-client.service';
+
+jest.mock('socket.io-client', () => ({
+  io: jest.fn(),
+}));
+
+jest.mock('jsonwebtoken', () => ({
+  sign: jest.fn(),
+}));
 
 describe('SocketClientService', () => {
   let service: SocketClientService;
+  let configValues: Record<string, string | undefined>;
+  let socketHandlers: Record<string, (...args: any[]) => void>;
+  let socketMock: {
+    on: jest.Mock;
+    emit: jest.Mock;
+    disconnect: jest.Mock;
+  };
 
   beforeEach(async () => {
+    jest.clearAllMocks();
+    configValues = {};
+    socketHandlers = {};
+    socketMock = {
+      on: jest.fn((event: string, handler: (...args: any[]) => void) => {
+        socketHandlers[event] = handler;
+        return socketMock;
+      }),
+      emit: jest.fn(),
+      disconnect: jest.fn(),
+    };
+    (io as jest.Mock).mockReturnValue(socketMock);
+    (jwt.sign as jest.Mock).mockReturnValue('service-token');
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         SocketClientService,
         {
           provide: ConfigService,
           useValue: {
-            get: jest.fn((key: string, defaultValue: string) => defaultValue),
+            get: jest.fn((key: string, defaultValue?: string) => {
+              return configValues[key] ?? defaultValue;
+            }),
           },
         },
       ],
@@ -27,6 +60,64 @@ describe('SocketClientService', () => {
 
   it('should report disconnected before init', () => {
     expect(service.isConnected()).toBe(false);
+  });
+
+  it('initializes the socket client with a signed gateway service token', () => {
+    configValues.SOCKETIO_SERVER_HOST = 'realtime';
+    configValues.SOCKETIO_SERVER_PORT = '3001';
+    configValues.JWT_SECRET = 'jwt-secret';
+
+    service.onModuleInit();
+
+    expect(jwt.sign).toHaveBeenCalledWith(
+      {
+        sub: 'gateway-service',
+        role: 'admin',
+        username: 'gateway-service',
+      },
+      'jwt-secret',
+      { expiresIn: '1h' },
+    );
+    expect(io).toHaveBeenCalledWith(
+      'http://realtime:3001',
+      expect.objectContaining({
+        autoConnect: true,
+        reconnection: true,
+        reconnectionAttempts: 10,
+        reconnectionDelay: 2000,
+        auth: { token: 'service-token' },
+      }),
+    );
+
+    socketHandlers.connect();
+    expect(service.isConnected()).toBe(true);
+
+    socketHandlers.disconnect('transport close');
+    expect(service.isConnected()).toBe(false);
+
+    socketHandlers.connect();
+    socketHandlers.connect_error(new Error('ECONNREFUSED'));
+    expect(service.isConnected()).toBe(false);
+  });
+
+  it('omits auth when no JWT secret is configured', () => {
+    service.onModuleInit();
+
+    expect(jwt.sign).not.toHaveBeenCalled();
+    expect(io).toHaveBeenCalledWith(
+      'http://localhost:3001',
+      expect.objectContaining({
+        auth: undefined,
+      }),
+    );
+  });
+
+  it('disconnects the socket on module destroy', () => {
+    service.onModuleInit();
+
+    service.onModuleDestroy();
+
+    expect(socketMock.disconnect).toHaveBeenCalledTimes(1);
   });
 
   it('should throw when emitting while disconnected', () => {
@@ -101,10 +192,11 @@ describe('SocketClientService', () => {
             {
               type: 'job',
               id: 'j-001',
+              address: '  Calle 80 #11-22  ',
               location: { lat: 4.711, lon: -74.072 },
               service: 0,
               waitingTime: 0,
-              arrival: 2,
+              arrival: 0,
               departure: 2,
               amount: 1,
               skills: [],
@@ -132,11 +224,11 @@ describe('SocketClientService', () => {
               expect.objectContaining({
                 id: 'j-001',
                 stopId: 'j-001',
-                address: 'Cra 7 #45-12, Bogotá',
+                address: 'Calle 80 #11-22',
                 lat: 4.711,
                 lng: -74.072,
                 lon: -74.072,
-                arrivalOrder: 2,
+                arrivalOrder: 1,
                 status: 'pending',
               }),
             ],

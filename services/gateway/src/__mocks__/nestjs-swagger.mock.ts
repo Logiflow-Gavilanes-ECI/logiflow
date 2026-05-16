@@ -24,6 +24,10 @@ export function ApiBody(): GenericDecorator {
   return createNoopDecorator();
 }
 
+export function ApiQuery(): GenericDecorator {
+  return createNoopDecorator();
+}
+
 export function ApiProperty(): PropertyDecorator {
   return (() => undefined) as PropertyDecorator;
 }

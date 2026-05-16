@@ -387,7 +387,6 @@ describe('AuthService', () => {
 
     expect(prismaService.user.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         create: expect.objectContaining({
           avatar: null,
         }),

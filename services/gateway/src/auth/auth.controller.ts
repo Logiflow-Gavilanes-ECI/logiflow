@@ -18,6 +18,7 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
+import { OAuth2Client } from 'google-auth-library';
 import type { Request, Response } from 'express';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
@@ -246,7 +247,6 @@ export class AuthController {
   @Post('google/token')
   @HttpCode(HttpStatus.OK)
   async googleTokenExchange(@Body() body: { idToken: string }) {
-    const { OAuth2Client } = await import('google-auth-library');
     const clientId = this.configService.get<string>('GOOGLE_CLIENT_ID');
     const client = new OAuth2Client(clientId);
 

@@ -38,7 +38,9 @@ export class ActiveRouteRepository {
 
   constructor(private readonly configService: ConfigService) {}
 
-  async findByVehicleId(vehicleId: string): Promise<ActiveRouteSnapshot | null> {
+  async findByVehicleId(
+    vehicleId: string,
+  ): Promise<ActiveRouteSnapshot | null> {
     const redisUrl = this.configService.get<string>('REDIS_URL')?.trim();
     if (!redisUrl) return null;
 
@@ -101,7 +103,8 @@ function parseRedisUrl(rawUrl: string): ParsedRedisUrl {
     port: url.port ? Number(url.port) : 6379,
     username: url.username ? decodeURIComponent(url.username) : undefined,
     password: url.password ? decodeURIComponent(url.password) : undefined,
-    db: url.pathname && url.pathname !== '/' ? url.pathname.slice(1) : undefined,
+    db:
+      url.pathname && url.pathname !== '/' ? url.pathname.slice(1) : undefined,
   };
 }
 
@@ -181,7 +184,9 @@ function encodeCommand(args: string[]): string {
   ].join('\r\n');
 }
 
-function parseResp(buffer: Buffer):
+function parseResp(
+  buffer: Buffer,
+):
   | { complete: false }
   | { complete: true; value: RespValue; error?: undefined }
   | { complete: true; value?: undefined; error: Error } {
@@ -195,7 +200,10 @@ function parseResp(buffer: Buffer):
   if (type === ':') return { complete: true, value: Number(line) };
 
   if (type !== '$') {
-    return { complete: true, error: new Error(`Unsupported Redis reply: ${type}`) };
+    return {
+      complete: true,
+      error: new Error(`Unsupported Redis reply: ${type}`),
+    };
   }
 
   const length = Number(line);

@@ -1,6 +1,3 @@
-/* eslint-disable @typescript-eslint/unbound-method --
- * Jest mocks expose methods as bound jest.fn() instances; passing them to
- * expect(...) does not actually invoke them without `this`. */
 import { Test, TestingModule } from '@nestjs/testing';
 import { StopsService } from './stops.service';
 import { StopsRepository, StopRecord } from './stops.repository';
