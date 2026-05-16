@@ -46,6 +46,12 @@ jobs:
             npm install
           fi
 
+      - name: Generate Prisma client
+        # Only gateway uses Prisma. Without this, type-aware ESLint can't
+        # resolve `.upsert`, `.findMany`, etc. and the lint job blows up.
+        if: matrix.service == 'gateway'
+        run: npx prisma generate
+
       - name: Lint
         run: npm run lint
 
