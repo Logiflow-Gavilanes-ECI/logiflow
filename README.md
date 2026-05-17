@@ -1,549 +1,462 @@
-# 🚦 LogiFlow — Backend Services
+<div align="center">
 
-[![CI](https://img.shields.io/github/actions/workflow/status/Logiflow-Gavilanes-ECI/logiflow/ci.yml?branch=main&label=CI&logo=githubactions&logoColor=white)](https://github.com/Logiflow-Gavilanes-ECI/logiflow/actions/workflows/ci.yml)
-[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=Logiflow-Gavilanes-ECI_logiflow&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=Logiflow-Gavilanes-ECI_logiflow)
-[![Coverage](https://sonarcloud.io/api/project_badges/measure?project=Logiflow-Gavilanes-ECI_logiflow&metric=coverage)](https://sonarcloud.io/summary/new_code?id=Logiflow-Gavilanes-ECI_logiflow)
+# LogiFlow — Backend Monorepo
+
+**AI-powered real-time dynamic fleet routing platform**
+
+[![CI](https://github.com/Logiflow-Gavilanes-ECI/logiflow/actions/workflows/ci.yml/badge.svg)](https://github.com/Logiflow-Gavilanes-ECI/logiflow/actions/workflows/ci.yml)
+[![Deploy](https://github.com/Logiflow-Gavilanes-ECI/logiflow/actions/workflows/deploy-backend.yml/badge.svg)](https://github.com/Logiflow-Gavilanes-ECI/logiflow/actions/workflows/deploy-backend.yml)
+[![Node.js](https://img.shields.io/badge/Node.js-22-brightgreen?logo=nodedotjs)](https://nodejs.org)
+[![NestJS](https://img.shields.io/badge/NestJS-11-E0234E?logo=nestjs)](https://nestjs.com)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.7-3178C6?logo=typescript)](https://www.typescriptlang.org)
+[![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python)](https://python.org)
+[![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker)](https://docker.com)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Node.js 22](https://img.shields.io/badge/node-22-brightgreen?logo=nodedotjs&logoColor=white)](https://nodejs.org/)
-[![Python 3.12](https://img.shields.io/badge/python-3.12-blue?logo=python&logoColor=white)](https://www.python.org/)
-[![Docker](https://img.shields.io/badge/docker-ready-2496ED?logo=docker&logoColor=white)](https://www.docker.com/)
-[![PostgreSQL 16](https://img.shields.io/badge/postgres-16-336791?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
-[![Redis 7](https://img.shields.io/badge/redis-7-DC382D?logo=redis&logoColor=white)](https://redis.io/)
 
-```
-  ██╗      ██████╗  ██████╗ ██╗███████╗██╗      ██████╗ ██╗    ██╗
-  ██║     ██╔═══██╗██╔════╝ ██║██╔════╝██║     ██╔═══██╗██║    ██║
-  ██║     ██║   ██║██║  ███╗██║█████╗  ██║     ██║   ██║██║ █╗ ██║
-  ██║     ██║   ██║██║   ██║██║██╔══╝  ██║     ██║   ██║██║███╗██║
-  ███████╗╚██████╔╝╚██████╔╝██║██║     ███████╗╚██████╔╝╚███╔███╔╝
-  ╚══════╝ ╚═════╝  ╚═════╝ ╚═╝╚═╝     ╚══════╝ ╚═════╝  ╚══╝╚══╝
-```
+[**Live API**](https://logiflow-api.eastus2.cloudapp.azure.com/api/v1/health) · [**API Docs**](https://logiflow-api.eastus2.cloudapp.azure.com/api/v1/docs) · [**Web Admin**](https://logiflowapp.z13.web.core.windows.net)
 
-> **AI-powered real-time fleet routing — solving the Vehicle Routing Problem, one traffic jam at a time.**
+</div>
 
 ---
 
-## 🗺️ What is LogiFlow?
+## Overview
 
-LogiFlow is a scalable, real-time fleet routing platform built for the Colombian logistics landscape. It continuously solves the **Vehicle Routing Problem (VRP)** across multiple vehicles and delivery points — optimizing routes on the fly whenever traffic, weather, or a new urgent order changes the picture.
+LogiFlow is a microservices platform that receives real-time traffic events (via n8n webhooks), computes optimal delivery routes (VROOM + AI travel-time predictor), and pushes updates to drivers and dispatchers in real time (Socket.io + Firebase Cloud Messaging).
 
-Every reroute is calculated in **under 4 seconds** and pushed instantly to drivers via WebSockets + Firebase Push Notifications. No polling. No stale routes. No missed windows.
-
----
-
-## 🏗️ System Architecture
-
-```mermaid
-graph TD
-    A["🔔 n8n Automation\nWebhook + OpenClaw"] -->|webhook POST| B["⚙️ NestJS Gateway\nREST + Prisma + Auth"]
-    B -->|gRPC| C["🧮 Route Optimizer\nVROOM VRP Engine"]
-    H["🤖 AI Traffic Predictor\nFlask + Corridor Model"] -->|adjusted matrix| C
-    C -->|optimized routes| B
-    B -->|Socket.io client| D["📡 Realtime Server\nSocket.io + Redis"]
-    B -->|FCM push| J["🔥 Firebase Cloud Messaging"]
-    D -->|WebSocket push| E["📱 Driver Mobile App\nIonic Angular"]
-    D -->|WebSocket push| F["🖥️ Admin Dashboard\nAngular Web App"]
-    J -->|push notification| E
-    G[("🐘 PostgreSQL 16\nUsers · Vehicles · Stops\nDeviceTokens · Auth")] --- B
-    I[("⚡ Redis 7\nSocket Adapter + Cache")] --- D
-    I --- C
-    K["🔐 Google OAuth 2.0\nIdentity Provider"] -->|SSO| B
-
-    style A fill:#ff6b35,color:#fff,stroke:#ff6b35
-    style B fill:#00e5ff,color:#000,stroke:#00e5ff
-    style C fill:#229ED9,color:#fff,stroke:#229ED9
-    style D fill:#7c3aed,color:#fff,stroke:#7c3aed
-    style E fill:#22c55e,color:#fff,stroke:#22c55e
-    style F fill:#22c55e,color:#fff,stroke:#22c55e
-    style G fill:#336791,color:#fff,stroke:#336791
-    style H fill:#a78bfa,color:#fff,stroke:#a78bfa
-    style I fill:#DC382D,color:#fff,stroke:#DC382D
-    style J fill:#FFCA28,color:#000,stroke:#FFCA28
-    style K fill:#4285F4,color:#fff,stroke:#4285F4
 ```
-
-### Data Flow
-
-```mermaid
-sequenceDiagram
-    participant N8N as n8n Automation
-    participant GW as Gateway NestJS
-    participant GRPC as Optimizer gRPC
-    participant AI as AI Predictor
-    participant RT as Realtime Socket.io
-    participant FCM as Firebase Push
-    participant APP as Mobile / Web
-
-    N8N->>GW: POST /api/v1/webhook/optimize
-    GW->>GRPC: gRPC OptimizeRoutes
-    GRPC->>AI: POST /adjust (duration matrix)
-    AI-->>GRPC: AI-adjusted durations
-    GRPC-->>GW: Optimized routes
-    GW->>RT: Socket.io emit route update
-    GW->>FCM: Multicast push notification
-    RT-->>APP: WebSocket route:update
-    FCM-->>APP: Push notification
-```
-
-### Notification Flow (Multi-Channel via OpenClaw)
-
-```mermaid
-graph LR
-    E["⚡ Event Trigger\nn8n / Webhook"] --> OC["🐾 OpenClaw\nSkill Engine"]
-    OC --> TG["💬 Telegram Bot"]
-    OC --> DC["🎮 Discord Webhook"]
-    OC --> SL["📢 Slack Webhook"]
-    OC --> EM["📧 Email SMTP"]
-    OC --> FB["🔥 Firebase Push"]
-
-    style E fill:#ff6b35,color:#fff,stroke:#ff6b35
-    style OC fill:#00e5ff,color:#000,stroke:#00e5ff
-    style TG fill:#229ED9,color:#fff,stroke:#229ED9
-    style DC fill:#5865F2,color:#fff,stroke:#5865F2
-    style SL fill:#4A154B,color:#fff,stroke:#4A154B
-    style EM fill:#22c55e,color:#fff,stroke:#22c55e
-    style FB fill:#FFCA28,color:#000,stroke:#FFCA28
+Traffic Event (n8n webhook)
+        │
+        ▼
+  ┌─────────────┐   gRPC    ┌─────────────────┐   HTTP   ┌───────────────┐
+  │   Gateway   │ ────────► │    Optimizer     │ ───────► │     VROOM     │
+  │  (NestJS)   │           │  (Node + gRPC)   │          │  (VRP engine) │
+  └──────┬──────┘           └────────┬─────────┘          └───────────────┘
+         │                           │ HTTP
+         │ Socket.io              ┌──┴─────────────┐
+         │                        │  AI Predictor  │
+         ▼                        │  (Python/Flask)│
+  ┌─────────────┐                 └────────────────┘
+  │   Realtime  │   Redis
+  │ (Socket.io) │ ◄──────► Redis (pub/sub + route cache)
+  └─────────────┘
+         │
+         ├─── fleet room  → Web Admin dashboard
+         └─── vehicle:*   → Driver mobile app
 ```
 
 ---
 
-## 📦 Monorepo Structure
+## Table of Contents
 
-```
-logiflow/
-├── services/
-│   ├── gateway/            ← NestJS REST API, Prisma ORM, JWT + Google OAuth, Firebase Push
-│   ├── optimizer/          ← gRPC Server + VROOM VRP Engine + Google Routes
-│   ├── realtime/           ← Socket.io Server + Redis Adapter
-│   ├── automation/         ← n8n Webhook Mock Server + OpenClaw Multi-Channel Notifications
-│   └── ai-predictor/       ← Python Flask Traffic Prediction Service
-├── shared/
-│   └── proto/
-│       └── optimizer.proto ← gRPC contract (single source of truth)
-├── infra/
-│   ├── terraform/          ← Infrastructure as Code (DuckDNS + TLS + Nginx)
-│   ├── nginx/              ← Reverse proxy configs
-│   └── scripts/            ← Deployment scripts
-├── docker-compose.yml      ← Full system orchestration (7 containers)
-└── .github/
-    └── workflows/          ← CI/CD pipelines + SonarCloud
-```
+- [Services](#services)
+- [Quick Start](#quick-start)
+- [Environment Variables](#environment-variables)
+- [CI/CD](#cicd)
+- [Infrastructure](#infrastructure)
+- [API Reference](#api-reference)
+- [Testing](#testing)
+- [Documentation](#documentation)
+- [Team](#team)
 
 ---
 
-## 🧩 Service Details
+## Documentation
 
-| Service | Tech Stack | Port | Purpose |
-|---------|-----------|------|---------|
-| **Gateway** | NestJS · TypeScript · Prisma · PostgreSQL | `3002` | REST API, JWT + Google OAuth, vehicle/stop CRUD, gRPC client, Firebase push |
-| **Optimizer** | Node.js · gRPC · VROOM · Axios | `50051` | VRP solver, Google Routes integration, Redis caching |
-| **Realtime** | Socket.io · Redis Adapter · Express | `3001` | WebSocket rooms, position broadcast, heartbeat monitoring |
-| **Automation** | Express · n8n · OpenClaw | `5678` | Event triggers, multi-channel alerts (Telegram, Discord, Slack, Email, Firebase) |
-| **AI-Predictor** | Python · Flask | `5001` | Traffic corridor model, peak-hour duration adjustments |
-| **PostgreSQL** | PostgreSQL 16 Alpine | `5432` | Users, vehicles, stops, refresh tokens, device tokens |
-| **Redis** | Redis 7 Alpine | `6379` | Socket.io adapter, route cache, pub/sub |
+Architecture deliverables for the Release 2 final submission live under [`docs/`](docs/):
+
+| Document | File | Description |
+|---|---|---|
+| **Slides** | [`docs/LogiFlow-presentation.pptx`](docs/LogiFlow-presentation.pptx) | 18-slide presentation deck (Spanish) covering problem, architecture, quality attributes, demo, Scrum recap |
+| **Architecture document** | [`docs/LogiFlow-architecture.tex`](docs/LogiFlow-architecture.tex) | Full LaTeX architecture document (Spanish) — methodology, quality attributes, UML diagrams, sprint logbook |
+| **Backend demo runbook** | [`docs/backend-demo-runbook.md`](docs/backend-demo-runbook.md) | Step-by-step VM demo guide for stakeholder presentations |
+| **UML diagrams (sources)** | [`docs/diagrams/`](docs/diagrams/) | Eraser AI prompts and exported PNG/SVG diagrams |
 
 ---
 
-## 🚀 Quick Start
+## Services
+
+| Service | Tech | Port | Description |
+|---|---|---|---|
+| **gateway** | NestJS 11, Prisma 7, PostgreSQL | `3002` | REST API, Google OAuth, JWT, webhooks, FCM |
+| **realtime** | Node.js, Socket.io 4, Redis Adapter | `3001` | WebSocket server for live fleet tracking |
+| **optimizer** | Node.js, gRPC, VROOM, Redis | `50051` | VRP route optimization over gRPC |
+| **ai-predictor** | Python 3.12, Flask 3.1, gunicorn | `5001` | Traffic-aware travel time adjustments |
+| **vroom** | C++ VRP engine | `3000` | Internal only — called by optimizer |
+| **postgres** | PostgreSQL 16 | `5432` | Primary database (users, vehicles, stops, routes) |
+| **redis** | Redis 7 | `6379` | Pub/sub, Socket.io adapter, route cache |
+| **n8n** *(automation profile)* | n8n 1.66.0 | `5678` | Workflow automation — ingest traffic events |
+| **openclaw** *(automation profile)* | OpenClaw 2026.5.12, Claude Sonnet 4 | `18789` | AI-powered multi-channel notifications |
+
+### gateway
+
+NestJS REST API — the single public entry point for all clients.
+
+**Key responsibilities:**
+- Google OAuth 2.0 — sole authentication method (no email/password in production)
+- JWT access tokens (1h) + rotated refresh tokens (7-day default TTL, stored hashed)
+- Role-based access: `admin` (dispatchers) and `conductor` (drivers)
+- Receives traffic webhooks, calls the optimizer over gRPC, broadcasts results via Socket.io, sends FCM push notifications
+- Vehicle and stop CRUD (admin only)
+
+**Notable endpoints:**
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| `GET` | `/api/v1/health` | Public | Health check |
+| `GET` | `/api/v1/auth/google` | Public | Initiate Google OAuth (`?app=admin\|mobile\|web`) |
+| `GET` | `/api/v1/auth/google/callback` | Public | OAuth redirect handler |
+| `POST` | `/api/v1/auth/google/token` | Public | Exchange Google ID token (mobile) |
+| `POST` | `/api/v1/auth/refresh` | Public | Rotate refresh token |
+| `POST` | `/api/v1/webhook` | JWT (admin) | Receive traffic event, trigger optimization |
+| `GET/POST/PATCH/DELETE` | `/api/v1/vehicles` | JWT | Fleet management |
+| `GET/POST/PATCH/DELETE` | `/api/v1/stops` | JWT | Stop management |
+| `POST` | `/api/v1/notifications/register-device` | JWT (conductor) | Register FCM device token |
+| `GET` | `/api/v1/docs` | Public | Swagger UI |
+
+**Tech stack:** NestJS 11 · Prisma 7 · `@grpc/grpc-js` · `passport-google-oauth20` · `passport-jwt` · `firebase-admin` · `socket.io-client` · bcrypt · Swagger
+
+### optimizer
+
+gRPC server that takes a Vehicle Routing Problem (VRP) payload, optionally adjusts travel times with the AI Predictor, calls VROOM, and persists route summaries to Redis.
+
+**Environment flags:**
+
+| Variable | Dev default | Description |
+|---|---|---|
+| `MATRIX_SOURCE` | `request` | `request` = use matrix from payload; `google` = call Google Routes API |
+| `GOOGLE_ROUTES_ALLOW_CALLS` | `false` | Gate for live Google Routes API calls |
+| `GOOGLE_ROUTES_MOCK` | `true` | Return mock matrix instead of real API |
+| `AI_PREDICTOR_ENABLED` | `false` | Toggle AI travel-time adjustments |
+| `REDIS_ROUTE_TTL_SECONDS` | `3600` | Route cache TTL in Redis |
+
+**Metrics (Prometheus on port `9090` in prod):**
+`optimize_requests_total` · `optimize_duration_ms` · `vroom_failures_total` · `ai_predictor_failures_total` · `ai_breaker_state_changes` · `redis_failures_total` · `matrix_source_total`
+
+**AI circuit breaker (opossum):** 50% error threshold · 30s reset · min 5 volume.
+
+### realtime
+
+Socket.io server with Redis pub/sub adapter for multi-instance support.
+
+**Rooms:**
+
+| Room | Clients | Events received |
+|---|---|---|
+| `fleet` | Web admin dashboard | All fleet events |
+| `vehicle:<id>` | Driver mobile app | `route:update` for that vehicle |
+
+**Events emitted:**
+
+| Event | Payload | Direction |
+|---|---|---|
+| `vehicle:position` | `{ vehicleId, lat, lng, speed }` | Realtime → clients |
+| `route:update` | `{ vehicleId, stops[], polyline[], estimatedTime, totalDistance, eventType }` | Gateway → realtime → clients |
+| `vehicle:offline` | `{ vehicleId }` | Realtime → clients |
+| `vehicle:online` | `{ vehicleId }` | Realtime → clients |
+| `vehicle:status` | `{ vehicleId, status }` | Driver → realtime → fleet room |
+
+### ai-predictor
+
+Flask service that applies traffic multipliers to a duration matrix based on time-of-day and road corridor.
+
+**Modeled corridors (Bogotá):**
+
+| Corridor | Peak hours | Multiplier |
+|---|---|---|
+| `autopista_norte` | 07–09, 17–19 | 1.8× |
+| `calle_80` | 07–09 | 1.6× |
+| `carrera_7` | 12–14, 17–19 | 1.5× |
+
+Weekends: no adjustment (1.0×). Skips silently when `AI_PREDICTOR_ENABLED=false`.
+
+### n8n + OpenClaw *(automation profile)*
+
+**n8n** auto-imports and activates workflow `logiflow-traffic-event-trigger` on startup. The workflow accepts a public webhook at `POST /webhook/logiflow/traffic-event`, authenticates with the gateway, and forwards the normalized payload to `POST /api/v1/webhook`.
+
+**OpenClaw** runs a `logiflow-notify` skill that dispatches AI-generated alerts (Claude Sonnet 4) across 5 channels simultaneously:
+
+| Channel | Required env var(s) |
+|---|---|
+| Telegram | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` |
+| Discord | `DISCORD_WEBHOOK_URL` |
+| Slack | `SLACK_WEBHOOK_URL` |
+| Email | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_TO` |
+| Firebase Push | `LOGIFLOW_GATEWAY_URL`, `LOGIFLOW_GATEWAY_TOKEN` |
+
+Each channel skips silently when its env var is not set.
+
+---
+
+## Quick Start
 
 ### Prerequisites
 
-| Tool | Version |
-|------|---------|
-| [Docker + Docker Compose](https://docs.docker.com/compose/) | 24+ |
-| [Node.js](https://nodejs.org/) | 22+ |
-| [Python](https://www.python.org/) | 3.12+ (for AI service only) |
+- Docker 24+ and Docker Compose v2
+- Ports free: `3000`, `3001`, `3002`, `5001`, `5432`, `6379`, `50051`
 
-### Run the full system
+### 1. Clone and configure
 
 ```bash
 git clone https://github.com/Logiflow-Gavilanes-ECI/logiflow.git
 cd logiflow
-docker compose up -d
+cp .env.example .env
+# Edit .env — Google OAuth, Firebase, and Google Maps keys are optional for local dev
 ```
 
-All 7 containers start and wire up automatically. Wait ~60 seconds for the gateway to compile and run migrations.
-
-### Verify services
+### 2. Start the base stack
 
 ```bash
-# Check all containers are running
+docker compose up -d --build
 docker compose ps
-
-# Test Gateway API
-curl http://localhost:3002/api/v1/vehicles
-
-# Test AI Predictor health
-curl http://localhost:5001/health
-
-# Check Gateway logs
-docker logs logiflow-gateway --tail 20
 ```
 
-### Run a single service
+The gateway runs Prisma migrations and seeds the database on first boot.
+
+**Seed credentials (dev only):**
+
+| Email | Password | Role | Vehicle |
+|---|---|---|---|
+| `admin@logiflow.app` | `Admin2026!` | `admin` | — |
+| `conductor@logiflow.app` | `Driver2026!` | `conductor` | `v-001` |
+| `conductor2@logiflow.app` | `Driver2026!` | `conductor` | `v-002` |
+
+### 3. Optional — start automation profile
 
 ```bash
-cd services/optimizer
-docker compose up
+docker compose --profile automation up -d
 ```
 
-See each service's own `README.md` for environment variables and test instructions.
+Adds n8n (`:5678`) and OpenClaw (`:18789`) to the running stack.
+
+### 4. Verify
+
+```bash
+curl http://localhost:3002/api/v1/health
+# → {"status":"ok"}
+```
+
+Full API docs: [http://localhost:3002/api/v1/docs](http://localhost:3002/api/v1/docs)
 
 ---
 
-## 🔌 API Endpoints
+## Environment Variables
 
-### Gateway REST API (`localhost:3002/api/v1`)
+### Gateway (`services/gateway`)
 
-| Method | Endpoint | Auth | Description |
-|--------|----------|------|-------------|
-| `POST` | `/auth/login` | ❌ | Login with email + password |
-| `POST` | `/auth/register` | ❌ | Register new user (admin / conductor) |
-| `POST` | `/auth/refresh` | ❌ | Refresh access token (rotation) |
-| `GET` | `/auth/google` | ❌ | Initiate Google OAuth redirect |
-| `GET` | `/auth/google/callback` | ❌ | Google OAuth callback (redirect with tokens) |
-| `POST` | `/auth/google/token` | ❌ | Mobile: exchange Google ID token for JWT |
-| `GET` | `/vehicles` | ✅ | List all vehicles |
-| `POST` | `/vehicles` | ✅ | Create vehicle |
-| `GET` | `/vehicles/:id` | ✅ | Get vehicle by ID |
-| `PUT` | `/vehicles/:id` | ✅ | Update vehicle |
-| `DELETE` | `/vehicles/:id` | ✅ | Delete vehicle |
-| `GET` | `/stops` | ✅ | List all stops |
-| `POST` | `/stops` | ✅ | Create stop |
-| `PUT` | `/stops/:id` | ✅ | Update stop |
-| `DELETE` | `/stops/:id` | ✅ | Delete stop |
-| `POST` | `/webhook/optimize` | ✅ | Trigger route optimization |
-| `POST` | `/notifications/register-device` | ✅ | Register FCM device token |
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `PORT` | No | `3002` | HTTP port |
+| `DATABASE_URL` | Yes | — | PostgreSQL connection string |
+| `JWT_SECRET` | Yes | — | JWT signing secret |
+| `JWT_EXPIRES_IN` | No | `1h` | Access token TTL |
+| `REFRESH_TOKEN_TTL_MINUTES` | No | `10080` | Refresh token TTL (7 days) |
+| `GRPC_OPTIMIZER_HOST` | Yes | — | Optimizer hostname |
+| `GRPC_OPTIMIZER_PORT` | No | `50051` | Optimizer gRPC port |
+| `SOCKETIO_SERVER_HOST` | Yes | — | Realtime hostname |
+| `SOCKETIO_SERVER_PORT` | No | `3001` | Realtime port |
+| `CORS_ORIGINS` | No | `*` | Comma-separated allowed origins |
+| `GOOGLE_CLIENT_ID` | No* | — | Google OAuth client ID |
+| `GOOGLE_CLIENT_SECRET` | No* | — | Google OAuth client secret |
+| `GOOGLE_CALLBACK_URL` | No | `http://localhost:3002/api/v1/auth/google/callback` | OAuth redirect URI |
+| `GOOGLE_REDIRECT_FRONTEND` | No | `http://localhost:4200` | Web app redirect after OAuth |
+| `GOOGLE_REDIRECT_FRONTEND_ADMIN` | No | — | Admin app redirect after OAuth |
+| `GOOGLE_REDIRECT_FRONTEND_MOBILE` | No | `http://localhost:8100` | Mobile app redirect after OAuth |
+| `GOOGLE_ADMIN_EMAILS` | No | — | Comma-separated emails auto-assigned `admin` role |
+| `FIREBASE_PROJECT_ID` | No* | — | Firebase project ID (FCM push) |
+| `FIREBASE_CLIENT_EMAIL` | No* | — | Firebase service account email |
+| `FIREBASE_PRIVATE_KEY` | No* | — | Firebase private key (newlines as `\n`) |
+
+*Required only when the relevant feature is used. The gateway starts normally without them — Google OAuth returns 501 if not configured; FCM push is skipped silently.
+
+### Optimizer (`services/optimizer`)
+
+| Variable | Default | Description |
+|---|---|---|
+| `GRPC_PORT` | `50051` | gRPC listen port |
+| `VROOM_URL` | — | VROOM HTTP endpoint |
+| `REDIS_URL` | — | Redis connection URL |
+| `MATRIX_SOURCE` | `request` | `request` or `google` |
+| `GOOGLE_ROUTES_ENABLED` | `false` | Enable Google Routes integration |
+| `GOOGLE_ROUTES_ALLOW_CALLS` | `false` | Allow live API calls |
+| `GOOGLE_ROUTES_MOCK` | `true` | Use mock matrix response |
+| `AI_PREDICTOR_ENABLED` | `false` | Enable AI travel-time adjustment |
+| `AI_PREDICTOR_URL` | — | AI Predictor endpoint |
+| `AI_PREDICTOR_TIMEOUT_MS` | `3000` | Per-request timeout |
+| `AI_BREAKER_ERROR_PCT` | `50` | Circuit breaker error % threshold |
+| `AI_BREAKER_RESET_MS` | `30000` | Circuit breaker reset timeout |
+| `AI_BREAKER_VOLUME` | `5` | Minimum call volume for breaker |
+| `REDIS_ROUTE_TTL_SECONDS` | `3600` | Route cache TTL |
+| `METRICS_PORT` | — | Prometheus metrics port (prod: `9090`) |
+| `SHUTDOWN_DEADLINE_MS` | `25000` | Graceful shutdown deadline |
+
+### Automation (n8n / OpenClaw)
+
+| Variable | Description |
+|---|---|
+| `WEBHOOK_TARGET` | Gateway webhook URL |
+| `GATEWAY_AUTH_EMAIL` | Gateway admin login email |
+| `GATEWAY_AUTH_PASSWORD` | Gateway admin login password |
+| `GOOGLE_MAPS_API_KEY` | Google Maps API key for route display |
+| `ANTHROPIC_API_KEY` | Anthropic API key (OpenClaw AI) |
+| `TELEGRAM_BOT_TOKEN` | Telegram bot token |
+| `TELEGRAM_CHAT_ID` | Telegram target chat ID |
+| `DISCORD_WEBHOOK_URL` | Discord incoming webhook URL |
+| `SLACK_WEBHOOK_URL` | Slack incoming webhook URL |
+| `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` | Email SMTP config |
+| `SMTP_FROM` | Sender address (`LogiFlow Alerts <alerts@logiflow.app>`) |
+| `SMTP_TO` | Recipient address |
+| `OPENCLAW_WEBHOOK_URL` | OpenClaw skill endpoint |
+
+---
+
+## CI/CD
+
+### Continuous Integration
+
+GitHub Actions runs on every push and pull request to `main` and `develop`.
+
+The pipeline runs four parallel service jobs:
+
+```
+[automation] [gateway] [realtime] [optimizer]
+      └── npm ci
+      └── prisma generate   (gateway only)
+      └── npm run lint
+      └── npm test --coverage
+      └── SonarQube scan    (if sonar-project.properties present)
+```
+
+### Continuous Deployment
+
+On every merge to `main` (after CI passes):
+
+```
+Checkout → rsync to Azure VM → docker compose up -d --build → smoke test
+```
+
+- **Target:** Azure VM at `logiflow-api.eastus2.cloudapp.azure.com`
+- **Smoke test:** polls `GET /api/v1/health` up to 8 times (15s intervals)
+- **Required secrets:** `SSH_PRIVATE_KEY`, `SERVER_IP`, `SSH_USER`
+
+---
+
+## Infrastructure
+
+The production environment runs on an **Azure Virtual Machine** behind **Nginx** with **Let's Encrypt TLS**.
+
+```
+Internet
+   │ HTTPS
+   ▼
+ Nginx (TLS termination)
+   ├── /api/*           → gateway:3002
+   ├── /socket.io/*     → realtime:3001
+   └── /webhook/*       → n8n:5678
+```
+
+- **IaC:** Terraform (`infra/terraform/`) — provisions VM, DNS, and generates `docker-compose.prod.yml` and `nginx.conf` from templates
+- **Frontend static site:** Azure Blob Storage static website (`$web` container)
+- **Deploy script:** `infra/scripts/deploy.sh`
+- **Prod FQDN:** `logiflow-api.eastus2.cloudapp.azure.com`
+
+**Prod-only differences vs dev:**
+- Redis requires password auth (`--requirepass`)
+- Resource limits (CPU/memory) on all containers
+- JSON-file log rotation
+- Prometheus metrics endpoint on optimizer (`:9090`)
+- `AI_PREDICTOR_ENABLED=true`, `GOOGLE_ROUTES_ALLOW_CALLS=true`
+
+---
+
+## API Reference
+
+Full Swagger UI available at:
+- **Local:** [http://localhost:3002/api/v1/docs](http://localhost:3002/api/v1/docs)
+- **Production:** [https://logiflow-api.eastus2.cloudapp.azure.com/api/v1/docs](https://logiflow-api.eastus2.cloudapp.azure.com/api/v1/docs)
 
 ### gRPC Contract
 
+The optimizer exposes a single RPC defined in [`shared/proto/optimizer.proto`](shared/proto/optimizer.proto):
+
 ```protobuf
 service RouteOptimizer {
-  rpc OptimizeRoutes (OptimizeRequest) returns (OptimizeResponse);
+  rpc OptimizeRoutes(OptimizeRequest) returns (OptimizeResponse);
 }
 ```
 
-### Socket.io Events
+Key message fields:
 
-| Event | Direction | Payload |
-|-------|-----------|---------|
-| `vehicle:position` | Client → Server | `{ vehicleId, lat, lng, speed }` |
-| `route:update` | Server → Client | `{ vehicleId, stops, polyline, estimatedTime }` |
-| `vehicle:offline` | Server → Client | `{ vehicleId }` |
-| `vehicle:online` | Server → Client | `{ vehicleId }` |
-
----
-
-## 🔐 Authentication
-
-### JWT + Refresh Token Rotation
-
-1. **Register** -> `POST /auth/register` creates demo users with `{ email, password, role }`
-2. **Login** -> `POST /auth/login` returns `{ accessToken, role }`
-3. **Access token** expires in 1 hour (configurable via `JWT_EXPIRES_IN`)
-4. **Refresh token** stored hashed in PostgreSQL, 7-day TTL
-5. **Token rotation** — each refresh consumes the old token and issues a new pair
-6. **Password hashing** — bcrypt hashes for registered users
-
-The gateway seed creates `admin@logiflow.app` / `Admin2026!`, `conductor@logiflow.app` / `Driver2026!`, and `conductor2@logiflow.app` / `Driver2026!`. The demo conductors use `id = v-001` and `id = v-002`, so their JWTs resolve to different vehicle IDs with distinct plates (`ABC-123` and `DEF-456`).
-
-### Google OAuth 2.0 (Identity Provider)
-
-```mermaid
-sequenceDiagram
-    participant U as User
-    participant FE as Frontend
-    participant GW as Gateway
-    participant G as Google
-
-    U->>FE: Click "Sign in with Google"
-    FE->>GW: GET /auth/google
-    GW->>G: Redirect to Google consent
-    G-->>GW: Callback with auth code
-    GW->>G: Exchange code for profile
-    GW->>GW: Upsert user (googleId)
-    GW-->>FE: Redirect /auth/callback?accessToken=...&role=...
-    FE->>FE: Store token, redirect by role
-```
-
-The Google OAuth flow supports both **web redirect** (for web-admin and mobile browser) and **ID token exchange** (for native mobile via `POST /auth/google/token`).
-
-For multi-frontend deployments, start login with `GET /auth/google?app=admin` to redirect the callback to `GOOGLE_REDIRECT_FRONTEND_ADMIN`. Without `app`, the gateway redirects to `GOOGLE_REDIRECT_FRONTEND`.
-
-> **Graceful degradation:** If `GOOGLE_CLIENT_ID` is not set, the `/auth/google` endpoint returns a 501 with a helpful message. The gateway starts normally without Google credentials.
->
-> **Default role:** Users created through Google OAuth are provisioned as `conductor` by default; emails in `GOOGLE_ADMIN_EMAILS` are promoted to `admin`.
->
-> **Mobile token exchange note:** `POST /auth/google/token` verifies the incoming `idToken` against the configured `GOOGLE_CLIENT_ID` audience.
+| Message | Fields |
+|---|---|
+| `OptimizeRequest` | `vehicles[]`, `jobs[]`, `shipments[]`, `matrix`, `options`, `departureTime`, `correlationId` |
+| `OptimizeResponse` | `routes[]`, `code`, `summary`, `matrixSource`, `aiAdjusted`, `correlationId` |
+| `Vehicle` | `id` (string, e.g. `v-001`), `startCoord`, `capacity`, `profile` |
+| `Job` | `id`, `location`, `service`, `amount[]`, `priority`, `timeWindows[]` |
 
 ---
 
-## 🔔 Push Notifications (Firebase Cloud Messaging)
-
-The gateway sends **multicast push notifications** to driver mobile devices via Firebase Cloud Messaging (FCM):
-
-- **Device registration** — Mobile app registers FCM token via `POST /notifications/register-device`
-- **Route updates** — When a webhook triggers route optimization, push notifications are sent to affected drivers
-- **Token cleanup** — Expired/invalid device tokens are automatically removed
-- **Platform support** — Android (high priority channel), iOS (sound + badge), Web
-
-> **Graceful degradation:** If Firebase credentials are not set, the service logs a warning and continues without push notifications.
-
----
-
-## 🐾 Multi-Channel Notifications (OpenClaw)
-
-The automation service uses [OpenClaw](https://openclaw.dev) for multi-channel alert dispatch. When a traffic event or risk alert fires, the `logiflow-notify` skill broadcasts to **all configured channels simultaneously**:
-
-| Channel | Transport | Config Variable |
-|---------|-----------|-----------------|
-| 💬 **Telegram** | Bot API | `TELEGRAM_BOT_TOKEN` |
-| 🎮 **Discord** | Webhook | `DISCORD_WEBHOOK_URL` |
-| 📢 **Slack** | Webhook | `SLACK_WEBHOOK_URL` |
-| 📧 **Email** | SMTP/Webhook | `EMAIL_WEBHOOK_URL` + `EMAIL_RECIPIENTS` |
-| 🔥 **Firebase Push** | Gateway API | `GATEWAY_URL` + `GATEWAY_INTERNAL_KEY` |
-
-Each channel degrades gracefully — unconfigured channels are silently skipped, and failures in one channel don't block the others.
-
----
-
-## 🌿 Git Workflow
-
-```
-main          ← stable, demo-ready. Protected.
-└── develop   ← sprint integration target. Protected.
-    ├── feat/optimizer-grpc
-    ├── feat/nestjs-core
-    ├── feat/socket-gateway
-    └── feat/n8n-ci
-```
-
-**Commit convention** — [Conventional Commits](https://www.conventionalcommits.org/):
+## Testing
 
 ```bash
-feat(optimizer): add gRPC server with VROOM proxy
-fix(gateway): correct proto import path
-chore: add root docker-compose integration file
+# Run all tests for a service
+cd services/gateway && npm test
+cd services/optimizer && npm test
+cd services/realtime && npm test
+cd services/automation && npm test
+
+# With coverage
+npm test -- --coverage
+
+# Gateway only — run in band (DB tests)
+npm test -- --runInBand
+```
+
+**Current status:** 13 test suites · 70 tests passing
+
+Test files are co-located with source (`*.spec.ts`). The gateway uses a full Prisma mock (`__mocks__/prisma-client.mock.ts`) — no real DB required for unit tests.
+
+---
+
+## Project Structure
+
+```
+logiflow/
+├── .github/workflows/       CI + deploy pipelines
+├── docs/                    Runbooks and guides
+├── infra/
+│   ├── nginx/               Nginx config template
+│   ├── scripts/             Deploy script
+│   └── terraform/           IaC (VM, DNS, TLS, compose generation)
+├── services/
+│   ├── ai-predictor/        Python Flask traffic predictor
+│   ├── automation/
+│   │   ├── n8n/             Workflow JSON + entrypoint
+│   │   └── openclaw/        AI notification skill
+│   ├── gateway/             NestJS REST API
+│   ├── optimizer/           gRPC + VROOM wrapper
+│   └── realtime/            Socket.io server
+├── shared/
+│   └── proto/               optimizer.proto (gRPC contract)
+├── docker-compose.yml       Dev stack
+├── docker-compose.prod.yml  Production stack
+└── .env.example             All variables documented
 ```
 
 ---
 
-## 🧪 Testing
+## Team
 
-Each service runs its own test suite:
-
-```bash
-cd services/gateway
-npm test              # Jest + coverage
-npm run test:watch    # watch mode
-npm run lint          # ESLint
-```
-
-CI runs on every push to `main`, `develop`, and `feat/**`:
-
-```mermaid
-graph LR
-    A[Push] --> B[Checkout]
-    B --> C[Node 22 Setup]
-    C --> D[npm ci]
-    D --> E[ESLint]
-    E --> F[Jest + Coverage]
-    F --> G[SonarCloud Analysis]
-
-    style A fill:#ff6b35,color:#fff
-    style G fill:#00e5ff,color:#000
-```
-
----
-
-## ⚙️ Environment Variables
-
-### Gateway
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `PORT` | `3002` | HTTP listen port |
-| `DATABASE_URL` | — | PostgreSQL connection string |
-| `JWT_SECRET` | — | JWT signing secret (**required**) |
-| `JWT_EXPIRES_IN` | `1h` | Access token TTL |
-| `GRPC_OPTIMIZER_HOST` | `optimizer` | Optimizer service hostname |
-| `GRPC_OPTIMIZER_PORT` | `50051` | Optimizer gRPC port |
-| `SOCKETIO_SERVER_HOST` | `realtime` | Realtime service hostname |
-| `SOCKETIO_SERVER_PORT` | `3001` | Realtime service port |
-| `GOOGLE_CLIENT_ID` | — | Google OAuth client ID (optional) |
-| `GOOGLE_CLIENT_SECRET` | — | Google OAuth client secret (optional) |
-| `GOOGLE_CALLBACK_URL` | `http://localhost:3002/api/v1/auth/google/callback` | OAuth callback URL |
-| `GOOGLE_REDIRECT_FRONTEND` | `http://localhost:4200` | Frontend URL for OAuth redirect |
-| `GOOGLE_REDIRECT_FRONTEND_ADMIN` | — | Optional admin frontend URL for OAuth redirect (`/auth/google?app=admin`) |
-| `FIREBASE_PROJECT_ID` | — | Firebase project ID (optional) |
-| `FIREBASE_CLIENT_EMAIL` | — | Firebase service account email (optional) |
-| `FIREBASE_PRIVATE_KEY` | — | Firebase service account private key (optional) |
-
-### Optimizer
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `GRPC_PORT` | `50051` | gRPC listen port |
-| `VROOM_URL` | `http://vroom:3000` | VROOM engine URL |
-| `REDIS_URL` | `redis://redis:6379` | Redis connection |
-| `AI_PREDICTOR_URL` | `http://ai-predictor:5001/adjust` | AI service endpoint |
-
-### Realtime
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `PORT` | `3001` | HTTP/WS listen port |
-| `REDIS_URL` | `redis://redis:6379` | Redis connection for adapter |
-
-### Automation (OpenClaw Channels)
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `TELEGRAM_BOT_TOKEN` | — | Telegram Bot API token |
-| `DISCORD_WEBHOOK_URL` | — | Discord webhook URL |
-| `SLACK_WEBHOOK_URL` | — | Slack incoming webhook URL |
-| `EMAIL_WEBHOOK_URL` | — | Email/SMTP relay endpoint |
-| `EMAIL_RECIPIENTS` | — | Comma-separated recipient list |
-
----
-
-## 🔑 Obtaining API Credentials
-
-### Google OAuth (GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET)
-
-1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-2. Create a new project or select an existing one
-3. Navigate to **APIs & Services → Credentials**
-4. Click **Create Credentials → OAuth client ID**
-5. Select **Web application** as the application type
-6. Add authorized redirect URI: `http://localhost:3002/api/v1/auth/google/callback`
-7. Copy the **Client ID** and **Client Secret**
-8. Add to your `.env` file or docker-compose environment
-
-### Firebase (FIREBASE_PROJECT_ID / FIREBASE_CLIENT_EMAIL / FIREBASE_PRIVATE_KEY)
-
-1. Go to [Firebase Console](https://console.firebase.google.com/)
-2. Create a new project or select an existing one
-3. Navigate to **Project Settings → Service accounts**
-4. Click **Generate new private key** — this downloads a JSON file
-5. From the JSON file, extract:
-   - `project_id` → `FIREBASE_PROJECT_ID`
-   - `client_email` → `FIREBASE_CLIENT_EMAIL`
-   - `private_key` → `FIREBASE_PRIVATE_KEY` (include the full `-----BEGIN PRIVATE KEY-----...` string)
-6. Enable **Cloud Messaging API** in Google Cloud Console for the same project
-
-### Discord Webhook (DISCORD_WEBHOOK_URL)
-
-1. Open your Discord server → **Server Settings → Integrations → Webhooks**
-2. Click **New Webhook**, name it "LogiFlow Alerts"
-3. Select the channel for alerts and copy the **Webhook URL**
-
-### Slack Webhook (SLACK_WEBHOOK_URL)
-
-1. Go to [Slack API → Incoming Webhooks](https://api.slack.com/messaging/webhooks)
-2. Create a new app or select existing → **Incoming Webhooks → Activate**
-3. Click **Add New Webhook to Workspace** and select the channel
-4. Copy the **Webhook URL**
-
-### Telegram Bot (TELEGRAM_BOT_TOKEN)
-
-1. Open Telegram and search for **@BotFather**
-2. Send `/newbot` and follow the prompts to create a bot
-3. Copy the **HTTP API token** provided
-
-### Where to add credentials
-
-Create a `.env` file at the project root:
-
-```env
-# Google OAuth (optional — gateway starts without these)
-GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
-GOOGLE_CLIENT_SECRET=your-client-secret
-GOOGLE_CALLBACK_URL=http://localhost:3002/api/v1/auth/google/callback
-GOOGLE_REDIRECT_FRONTEND=http://localhost:4200
-GOOGLE_REDIRECT_FRONTEND_ADMIN=http://localhost:4300
-
-# Firebase Push Notifications (optional — gateway starts without these)
-FIREBASE_PROJECT_ID=your-project-id
-FIREBASE_CLIENT_EMAIL=firebase-adminsdk-xxx@your-project.iam.gserviceaccount.com
-FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nMIIEvQ...\n-----END PRIVATE KEY-----\n"
-
-# OpenClaw Notification Channels (optional — each channel degrades independently)
-TELEGRAM_BOT_TOKEN=123456789:ABCdef...
-DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
-SLACK_WEBHOOK_URL=https://hooks.slack.com/services/...
-EMAIL_WEBHOOK_URL=https://your-smtp-relay.com/send
-EMAIL_RECIPIENTS=admin@company.com,ops@company.com
-```
-
-Docker Compose automatically reads `.env` from the project root via variable interpolation (`${GOOGLE_CLIENT_ID:-}`).
-
----
-
-## 🗄️ Database Schema
-
-```mermaid
-erDiagram
-    User ||--o{ RefreshToken : has
-    User ||--o{ DeviceToken : has
-
-    User {
-        uuid id PK
-        string email UK
-        string name
-        enum role "admin | conductor"
-        string passwordHash
-        enum provider "local | google"
-        string googleId UK
-        string avatar
-        datetime createdAt
-        datetime updatedAt
-    }
-
-    RefreshToken {
-        uuid id PK
-        uuid userId FK
-        string tokenHash UK
-        datetime expiresAt
-        datetime createdAt
-    }
-
-    DeviceToken {
-        uuid id PK
-        uuid userId FK
-        string token UK
-        string platform
-        datetime createdAt
-    }
-```
-
----
-
-## 🎬 Backend-Only Demo
-
-For a full manual backend demo flow (without frontend), including:
-
-- service bring-up
-- authenticated webhook execution
-- optimizer/realtime validation
-- Redis route persistence checks
-
-See: [docs/backend-demo-runbook.md](docs/backend-demo-runbook.md)
-
----
-
-## 👥 Team
+**Los Gavilanes del Codigo — ARSW, Escuela Colombiana de Ingenieria Julio Garavito**
 
 | Name | Handle | Service Ownership |
 |------|--------|-------------------|
-| **Andersson David Sánchez Méndez** | @AnderssonProgramming | `automation` — n8n + CI |
-| **Cristian Santiago Pedraza Rodríguez** | @cris-eci | `optimizer` — gRPC + VROOM |
-| **Elizabeth Correa Suárez** | @Eliza-05 | `realtime` — Socket.io + Redis |
-| **Juan Sebastian Ortega Muñoz** | @Juanseom | `gateway` — NestJS + Prisma |
+| **Andersson David Sanchez Mendez** | [@AnderssonProgramming](https://github.com/AnderssonProgramming) | `automation` — n8n, OpenClaw, CI/CD |
+| **Cristian Santiago Pedraza Rodriguez** | [@cris-eci](https://github.com/cris-eci) | `optimizer` — gRPC, VROOM, AI predictor |
+| **Elizabeth Correa Suarez** | [@Eliza-05](https://github.com/Eliza-05) | `realtime` — Socket.io, Redis |
+| **Juan Sebastian Ortega Munoz** | [@Juanseom](https://github.com/Juanseom) | `gateway` — NestJS, Prisma, Auth |
 
 ---
 
-## 📄 License
+## License
 
 MIT © 2026 LogiFlow — Escuela Colombiana de Ingenieria Julio Garavito
