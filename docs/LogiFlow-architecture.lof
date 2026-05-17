@@ -1,0 +1,8 @@
+\babel@toc {spanish}{}\relax 
+\contentsline {figure}{\numberline {1}{\ignorespaces Diagrama de Contexto --- LogiFlow Backend Platform y sus actores externos}}{17}{figure.caption.42}%
+\contentsline {figure}{\numberline {2}{\ignorespaces Diagrama de Componentes --- 5 servicios backend agrupados con sus componentes internos}}{18}{figure.caption.43}%
+\contentsline {figure}{\numberline {3}{\ignorespaces Diagrama de Clases UML --- Controllers, Services, Repositories, DTOs, Entidades del Gateway}}{19}{figure.caption.44}%
+\contentsline {figure}{\numberline {4}{\ignorespaces Diagrama ER --- Modelo PostgreSQL gestionado por Prisma}}{20}{figure.caption.45}%
+\contentsline {figure}{\numberline {5}{\ignorespaces Diagrama de Secuencia --- Flujo end-to-end de reoptimizaci\'on disparada por evento externo}}{21}{figure.caption.46}%
+\contentsline {figure}{\numberline {6}{\ignorespaces Diagrama de Despliegue --- Azure Subscription, Resource Group, VM y Docker Compose stack}}{22}{figure.caption.47}%
+\contentsline {figure}{\numberline {7}{\ignorespaces Diagrama de Actividades --- Procesamiento de evento de tr\'afico con swimlanes por responsable}}{23}{figure.caption.48}%
