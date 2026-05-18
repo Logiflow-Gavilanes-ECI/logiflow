@@ -67,9 +67,10 @@ Architecture deliverables for the Release 2 final submission live under [`docs/`
 | Document | File | Description |
 |---|---|---|
 | **Slides** | [`docs/LogiFlow-presentation.pptx`](docs/LogiFlow-presentation.pptx) | 18-slide presentation deck (Spanish) covering problem, architecture, quality attributes, demo, Scrum recap |
-| **Architecture document** | [`docs/LogiFlow-architecture.tex`](docs/LogiFlow-architecture.tex) | Full LaTeX architecture document (Spanish) — methodology, quality attributes, UML diagrams, sprint logbook |
+| **Architecture document** | [`docs/LogiFlow-architecture.tex`](docs/LogiFlow-architecture.tex) | Full LaTeX architecture document (Spanish, normal style) — methodology, quality attributes, UML diagrams, sprint logbook. Compile with `pdflatex` (run twice for ToC) |
+| **IEEE article** | [`docs/LogiFlow-article.tex`](docs/LogiFlow-article.tex) | IEEEtran conference-style article (Spanish, 4-6 pages) — abstract, methodology, architecture, technical achievements, results |
 | **Backend demo runbook** | [`docs/backend-demo-runbook.md`](docs/backend-demo-runbook.md) | Step-by-step VM demo guide for stakeholder presentations |
-| **UML diagrams (sources)** | [`docs/diagrams/`](docs/diagrams/) | Eraser AI prompts and exported PNG/SVG diagrams |
+| **UML diagrams** | [`docs/diagrams/`](docs/diagrams/) | Seven PNG diagrams referenced by the LaTeX architecture document (Context, Components, Classes, ER, Sequence, Deployment, Activity) |
 
 ---
 
