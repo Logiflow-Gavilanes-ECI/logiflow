@@ -153,7 +153,7 @@ El documento tambi\'en busca servir como artefacto t\'ecnico de referencia para 
 El alcance cubre la totalidad de los dos monorepos del proyecto:
 
 \begin{itemize}[leftmargin=*]
-  \item \textbf{Backend} (\repobackend) --- ocho servicios contenedorizados: \texttt{gateway} (NestJS), \texttt{realtime} (Socket.io), \texttt{optimizer} (gRPC + VROOM), \texttt{ai-predictor} (Python/Flask), \texttt{vroom} (motor VRP), \texttt{n8n} (automatizaci\'on), \texttt{openclaw} (notificaciones multicanal), \texttt{postgres} (base de datos) y \texttt{redis} (cach\'e y broker pub/sub).
+  \item \textbf{Backend} (\repobackend) --- nueve servicios contenedorizados: \texttt{gateway} (NestJS), \texttt{realtime} (Socket.io), \texttt{optimizer} (gRPC + VROOM), \texttt{ai-predictor} (Python/Flask), \texttt{vroom} (motor VRP), \texttt{n8n} (automatizaci\'on), \texttt{openclaw} (notificaciones multicanal), \texttt{postgres} (base de datos) y \texttt{redis} (cach\'e y broker pub/sub). En \texttt{docker-compose.yml}, \texttt{n8n} y \texttt{openclaw} est\'an bajo el \emph{profile} \texttt{automation}; en \texttt{docker-compose.prod.yml} corren siempre.
   \item \textbf{Frontend} (\repofrontend) --- dos aplicaciones Angular: \texttt{web-admin} (PWA para despachadores) y \texttt{mobile} (Ionic + Capacitor para conductores), y cuatro librer\'ias TypeScript compartidas en \texttt{shared/}.
   \item \textbf{Infraestructura} --- definida con Terraform sobre Azure (M\'aquina Virtual Linux + Storage Account Static Website + redes asociadas), con despliegue automatizado v\'ia GitHub Actions.
 \end{itemize}
@@ -584,7 +584,7 @@ Backend (NestJS Gateway) & Jest + Istanbul  & \textbf{83.36\%} (867/1049) & 70 &
 LogiFlow combina varios estilos arquitect\'onicos cl\'asicos:
 
 \begin{enumerate}[leftmargin=*]
-  \item \textbf{Microservicios} --- 8 servicios contenedorizados independientes, cada uno con responsabilidad \'unica, ciclo de vida propio y posibilidad de despliegue independiente.
+  \item \textbf{Microservicios} --- nueve servicios contenedorizados independientes, cada uno con responsabilidad \'unica, ciclo de vida propio y posibilidad de despliegue independiente.
   \item \textbf{API Gateway} --- el \texttt{gateway} (NestJS) act\'ua como punto \'unico de entrada para REST, orquestando llamadas a servicios internos (gRPC al Optimizer, Socket.io al Realtime, Firebase al cliente m\'ovil) y centralizando autenticaci\'on.
   \item \textbf{Event-Driven (publish/subscribe)} --- el Realtime Service usa Redis Pub/Sub como bus de eventos, permitiendo desacoplar productores (Gateway, conductores) de consumidores (despachadores web).
   \item \textbf{Capas (layered architecture)} dentro de cada microservicio --- por ejemplo el Gateway sigue el patr\'on Controller \textrightarrow{} Service \textrightarrow{} Repository de NestJS.
@@ -778,7 +778,7 @@ mobile & TypeScript 5.x & Angular 20, Ionic 8, Capacitor 8 (\texttt{@capacitor/g
 
 GitHub Actions con estrategia matrix para los cuatro servicios principales:
 
-\begin{lstlisting}[language=yaml,caption={Workflow CI del backend (.github/workflows/ci.yml)}]
+\begin{lstlisting}[caption={Workflow CI del backend (.github/workflows/ci.yml)}]
 strategy:
   matrix:
     service: [automation, gateway, realtime, optimizer]
@@ -952,7 +952,7 @@ Migraci\'on completa de auth local a Google OAuth 2.0 (m\'etodo \'unico). Soport
     \item Portabilidad: \textbf{0 l\'ineas de c\'odigo} cambian para migrar de Azure a cualquier otro proveedor.
   \end{itemize}
   \item \textbf{Rendimiento medido en producci\'on real:} 20.98 TPS sostenibles con P95 de 2.8 segundos.
-  \item \textbf{Stack distribuido cloud-native} con 8 servicios contenedorizados, IaC completa con Terraform, CI/CD autom\'atico v\'ia GitHub Actions.
+  \item \textbf{Stack distribuido cloud-native} con nueve servicios contenedorizados, IaC completa con Terraform, CI/CD autom\'atico v\'ia GitHub Actions.
   \item \textbf{245 puntos de historia} entregados en 10 sprints reales con cobertura DONE estricta.
 \end{enumerate}
 
